@@ -1,6 +1,5 @@
 import AppKit
 import CodexBarCore
-import CodexBarMacroSupport
 import Foundation
 
 struct OpenAIAPIProviderImplementation: ProviderImplementation {

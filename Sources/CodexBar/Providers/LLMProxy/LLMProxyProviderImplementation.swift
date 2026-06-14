@@ -1,5 +1,4 @@
 import CodexBarCore
-import CodexBarMacroSupport
 import Foundation
 
 struct LLMProxyProviderImplementation: ProviderImplementation {

@@ -1,6 +1,5 @@
 import AppKit
 import CodexBarCore
-import CodexBarMacroSupport
 import SwiftUI
 
 struct CopilotProviderImplementation: ProviderImplementation {

@@ -1,4 +1,3 @@
-import CodexBarMacroSupport
 import Foundation
 
 public enum WindsurfProviderDescriptor {

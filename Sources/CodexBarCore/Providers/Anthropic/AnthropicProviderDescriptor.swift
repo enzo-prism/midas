@@ -1,10 +1,9 @@
-import CodexBarMacroSupport
 import Foundation
 
 /// Anthropic API Platform organization spend (Claude Console), separate from Claude subscription limits.
-@ProviderDescriptorRegistration
-@ProviderDescriptorDefinition
 public enum AnthropicProviderDescriptor {
+    public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .anthropic,

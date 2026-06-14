@@ -1,5 +1,4 @@
 import CodexBarCore
-import CodexBarMacroSupport
 import SwiftUI
 
 struct ClaudeProviderImplementation: ProviderImplementation {
