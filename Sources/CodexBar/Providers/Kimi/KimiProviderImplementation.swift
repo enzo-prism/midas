@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct KimiProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .kimi
 

@@ -2,7 +2,6 @@ import CodexBarCore
 import CodexBarMacroSupport
 import Foundation
 
-@ProviderImplementationRegistration
 struct DeepgramProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .deepgram
 

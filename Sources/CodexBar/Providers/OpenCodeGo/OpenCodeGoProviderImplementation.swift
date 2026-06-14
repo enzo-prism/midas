@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct OpenCodeGoProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .opencodego
 

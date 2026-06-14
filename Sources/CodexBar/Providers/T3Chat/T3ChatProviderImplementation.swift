@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct T3ChatProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .t3chat
 

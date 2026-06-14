@@ -3,7 +3,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct KiroProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .kiro
 

@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct KiloProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .kilo
 

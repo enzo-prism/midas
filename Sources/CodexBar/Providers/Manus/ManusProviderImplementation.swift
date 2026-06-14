@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct ManusProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .manus
     let supportsLoginFlow: Bool = true

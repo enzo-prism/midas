@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct PerplexityProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .perplexity
     let supportsLoginFlow: Bool = true

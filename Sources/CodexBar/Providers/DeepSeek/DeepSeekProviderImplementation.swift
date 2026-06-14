@@ -2,7 +2,6 @@ import CodexBarCore
 import CodexBarMacroSupport
 import Foundation
 
-@ProviderImplementationRegistration
 struct DeepSeekProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .deepseek
 

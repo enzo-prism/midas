@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct MiMoProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .mimo
     let supportsLoginFlow: Bool = true

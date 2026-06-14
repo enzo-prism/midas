@@ -3,7 +3,6 @@ import CodexBarCore
 import CodexBarMacroSupport
 import Foundation
 
-@ProviderImplementationRegistration
 struct KimiK2ProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .kimik2
 

@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct MistralProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .mistral
 

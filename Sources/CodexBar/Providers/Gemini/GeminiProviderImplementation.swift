@@ -2,7 +2,6 @@ import CodexBarCore
 import CodexBarMacroSupport
 import Foundation
 
-@ProviderImplementationRegistration
 struct GeminiProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .gemini
     let supportsLoginFlow: Bool = true

@@ -2,7 +2,6 @@ import CodexBarCore
 import CodexBarMacroSupport
 import Foundation
 
-@ProviderImplementationRegistration
 struct AzureOpenAIProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .azureopenai
 

@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct MoonshotProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .moonshot
 

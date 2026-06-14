@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct StepFunProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .stepfun
 

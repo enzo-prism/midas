@@ -4,7 +4,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct AmpProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .amp
 

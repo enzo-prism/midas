@@ -2,7 +2,6 @@ import CodexBarCore
 import CodexBarMacroSupport
 import Foundation
 
-@ProviderImplementationRegistration
 struct GroqProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .groq
 

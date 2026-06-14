@@ -3,7 +3,6 @@ import CodexBarMacroSupport
 import Foundation
 import SwiftUI
 
-@ProviderImplementationRegistration
 struct FactoryProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .factory
     let supportsLoginFlow: Bool = true

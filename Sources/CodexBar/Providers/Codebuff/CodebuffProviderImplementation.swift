@@ -3,7 +3,6 @@ import CodexBarCore
 import CodexBarMacroSupport
 import Foundation
 
-@ProviderImplementationRegistration
 struct CodebuffProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .codebuff
 
