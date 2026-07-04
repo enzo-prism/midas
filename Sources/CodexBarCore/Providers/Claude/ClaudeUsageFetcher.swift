@@ -1061,7 +1061,7 @@ extension ClaudeUsageFetcher {
         if let routinesKey = usage.sevenDayRoutinesSourceKey {
             Self.log.debug("Claude OAuth extra usage key matched: routines=\(routinesKey)")
         }
-        return definitions.compactMap { definition in
+        let routineWindows: [NamedRateWindow] = definitions.compactMap { definition in
             let utilization: Double
             let resetDate: Date?
             if let window = definition.window, let parsedUtilization = window.utilization {
@@ -1084,6 +1084,23 @@ extension ClaudeUsageFetcher {
                     resetsAt: resetDate,
                     resetDescription: resetDescription))
         }
+        return routineWindows + Self.oauthScopedWeeklyLimitWindows(from: usage)
+    }
+
+    private static func oauthScopedWeeklyLimitWindows(from usage: OAuthUsageResponse) -> [NamedRateWindow] {
+        let limits = usage.limits?.map { entry in
+            ClaudeScopedWeeklyLimitMapper.Limit(
+                kind: entry.kind,
+                group: entry.group,
+                percent: entry.percent,
+                resetsAt: ClaudeOAuthUsageFetcher.parseISO8601Date(entry.resetsAt),
+                modelID: entry.scope?.model?.id,
+                modelName: entry.scope?.model?.displayName)
+        }
+        // `is_active` is intentionally not a filter: observed enforceable scoped limits report false.
+        return ClaudeScopedWeeklyLimitMapper.extraRateWindows(
+            from: limits,
+            resetDescription: Self.formatResetDate)
     }
 
     // MARK: - Web API path (uses browser cookies)
