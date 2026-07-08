@@ -4,6 +4,7 @@ public struct ClaudeStatusSnapshot: Sendable {
     public let sessionPercentLeft: Int?
     public let weeklyPercentLeft: Int?
     public let opusPercentLeft: Int?
+    public let extraRateWindows: [NamedRateWindow]
     public let accountEmail: String?
     public let accountOrganization: String?
     public let loginMethod: String?
@@ -11,6 +12,32 @@ public struct ClaudeStatusSnapshot: Sendable {
     public let secondaryResetDescription: String?
     public let opusResetDescription: String?
     public let rawText: String
+
+    public init(
+        sessionPercentLeft: Int?,
+        weeklyPercentLeft: Int?,
+        opusPercentLeft: Int?,
+        accountEmail: String?,
+        accountOrganization: String?,
+        loginMethod: String?,
+        primaryResetDescription: String?,
+        secondaryResetDescription: String?,
+        opusResetDescription: String?,
+        rawText: String,
+        extraRateWindows: [NamedRateWindow] = [])
+    {
+        self.sessionPercentLeft = sessionPercentLeft
+        self.weeklyPercentLeft = weeklyPercentLeft
+        self.opusPercentLeft = opusPercentLeft
+        self.extraRateWindows = extraRateWindows
+        self.accountEmail = accountEmail
+        self.accountOrganization = accountOrganization
+        self.loginMethod = loginMethod
+        self.primaryResetDescription = primaryResetDescription
+        self.secondaryResetDescription = secondaryResetDescription
+        self.opusResetDescription = opusResetDescription
+        self.rawText = rawText
+    }
 }
 
 public struct ClaudeAccountIdentity: Sendable {
@@ -238,6 +265,10 @@ public struct ClaudeStatusProbe: Sendable {
                 ],
                 context: labelContext)
             : nil
+        let scopedWeeklyUsages = self.extractScopedWeeklyUsages(context: labelContext)
+        let extraRateWindows = self.extraRateWindows(
+            fromScopedWeeklyUsages: scopedWeeklyUsages,
+            fallbackResetDescription: weeklyReset)
 
         return ClaudeStatusSnapshot(
             sessionPercentLeft: sessionPct,
@@ -249,7 +280,8 @@ public struct ClaudeStatusProbe: Sendable {
             primaryResetDescription: sessionReset,
             secondaryResetDescription: weeklyReset,
             opusResetDescription: opusReset,
-            rawText: text + (statusText ?? ""))
+            rawText: text + (statusText ?? ""),
+            extraRateWindows: extraRateWindows)
     }
 
     public static func parseIdentity(usageText: String?, statusText: String?) -> ClaudeAccountIdentity {
@@ -332,6 +364,96 @@ public struct ClaudeStatusProbe: Sendable {
             if let value = self.extractPercent(labelSubstring: label, context: context) { return value }
         }
         return nil
+    }
+
+    private struct ScopedWeeklyUsage {
+        let modelName: String
+        let percentLeft: Int
+        let resetDescription: String?
+    }
+
+    private static func extractScopedWeeklyUsages(context: LabelSearchContext) -> [ScopedWeeklyUsage] {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"current\s+week\s*\(([^)]+)\)"#,
+            options: [.caseInsensitive])
+        else { return [] }
+
+        var seenModels: Set<String> = []
+        var usages: [ScopedWeeklyUsage] = []
+        for (index, line) in context.lines.enumerated() {
+            let range = NSRange(line.startIndex..<line.endIndex, in: line)
+            guard let match = regex.firstMatch(in: line, options: [], range: range),
+                  match.numberOfRanges >= 2,
+                  let modelRange = Range(match.range(at: 1), in: line)
+            else { continue }
+
+            let modelName = String(line[modelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedModel = self.normalizedForLabelSearch(modelName)
+            guard normalizedModel != "allmodels", !normalizedModel.isEmpty else { continue }
+            guard seenModels.insert(normalizedModel).inserted else { continue }
+
+            let window = context.lines.dropFirst(index).prefix(14)
+            var percentLeft: Int?
+            var resetDescription: String?
+            for candidate in window {
+                let normalized = self.normalizedForLabelSearch(candidate)
+                if normalized.hasPrefix("currentweek"), !normalized.contains(normalizedModel) { break }
+                if percentLeft == nil {
+                    percentLeft = self.percentFromLine(candidate)
+                }
+                if resetDescription == nil {
+                    resetDescription = self.resetFromLine(candidate)
+                }
+            }
+            guard let percentLeft else { continue }
+            usages.append(ScopedWeeklyUsage(
+                modelName: modelName,
+                percentLeft: percentLeft,
+                resetDescription: resetDescription))
+        }
+        return usages
+    }
+
+    private static func extraRateWindows(
+        fromScopedWeeklyUsages usages: [ScopedWeeklyUsage],
+        fallbackResetDescription: String?) -> [NamedRateWindow]
+    {
+        usages.compactMap { usage in
+            let normalizedModel = self.normalizedForLabelSearch(usage.modelName)
+            guard normalizedModel != "opus",
+                  normalizedModel != "sonnet",
+                  normalizedModel != "sonnetonly"
+            else { return nil }
+
+            let usedPercent = max(0, min(100, 100 - Double(usage.percentLeft)))
+            let modelTitle = normalizedModel.hasSuffix("only")
+                ? usage.modelName
+                : "\(usage.modelName) only"
+            let resetDescription = usage.resetDescription ?? fallbackResetDescription
+            return NamedRateWindow(
+                id: "claude-weekly-scoped-\(self.slug(usage.modelName))",
+                title: modelTitle,
+                window: RateWindow(
+                    usedPercent: usedPercent,
+                    windowMinutes: 7 * 24 * 60,
+                    resetsAt: self.parseResetDate(from: resetDescription),
+                    resetDescription: resetDescription))
+        }
+    }
+
+    private static func slug(_ value: String) -> String {
+        var result = ""
+        var lastWasDash = false
+        for scalar in value.lowercased().unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                result.unicodeScalars.append(scalar)
+                lastWasDash = false
+            } else if !lastWasDash {
+                result.append("-")
+                lastWasDash = true
+            }
+        }
+        return result.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
     private static func percentFromLine(_ line: String, assumeRemainingWhenUnclear: Bool = false) -> Int? {
@@ -556,7 +678,7 @@ public struct ClaudeStatusProbe: Sendable {
     }
 
     private static func resetFromLine(_ line: String) -> String? {
-        guard let range = line.range(of: "Resets", options: [.caseInsensitive]) else { return nil }
+        guard let range = line.range(of: #"(?i)\bresets?\b"#, options: .regularExpression) else { return nil }
         let raw = String(line[range.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         return self.cleanResetLine(raw)
     }
@@ -565,9 +687,9 @@ public struct ClaudeStatusProbe: Sendable {
         String(text.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains))
     }
 
-    /// Capture all "Resets ..." strings to surface in the menu.
+    /// Capture all "Reset"/"Resets" strings to surface in the menu.
     private static func allResets(_ text: String) -> [String] {
-        let pat = #"Resets[^\r\n]*"#
+        let pat = #"\bResets?\b[^\r\n]*"#
         guard let regex = try? NSRegularExpression(pattern: pat, options: [.caseInsensitive]) else { return [] }
         let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
         var results: [String] = []
@@ -584,6 +706,10 @@ public struct ClaudeStatusProbe: Sendable {
         // TTY capture sometimes appends a stray ")" at line ends; trim it to keep snapshots stable.
         var cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         cleaned = cleaned.trimmingCharacters(in: CharacterSet(charactersIn: " )"))
+        cleaned = cleaned.replacingOccurrences(
+            of: #"(?i)\b([A-Za-z]{3}\s+\d{1,2})\s+t\s+(\d)"#,
+            with: "$1 at $2",
+            options: .regularExpression)
         let openCount = cleaned.count(where: { $0 == "(" })
         let closeCount = cleaned.count(where: { $0 == ")" })
         if openCount > closeCount { cleaned.append(")") }
