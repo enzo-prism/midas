@@ -139,7 +139,7 @@ extension UsageMenuCardView.Model {
         {
             return Self.deepseekInlineDashboard(usage)
         }
-        if [.codex, .claude, .vertexai, .bedrock].contains(input.provider),
+        if [.codex, .claude, .vertexai, .bedrock, .zai, .meta, .cursor].contains(input.provider),
            input.tokenCostUsageEnabled,
            let tokenSnapshot = input.tokenSnapshot,
            !tokenSnapshot.daily.isEmpty
@@ -207,6 +207,13 @@ extension UsageMenuCardView.Model {
         var details: [String] = []
         if let topModel = Self.topCostModel(from: snapshot.daily) {
             details.append("\(L("Top model")): \(Self.shortModelName(topModel))")
+        }
+        if provider == .meta,
+           let equivalent = snapshot.last30DaysAPIEquivalentCostUSD
+        {
+            details.append(
+                "\(L("At standard API rates")): " +
+                    "\(Self.costString(equivalent, currencyCode: snapshot.currencyCode))")
         }
         if let requestCount = snapshot.last30DaysRequests {
             details.append("\(requestHistoryTitle): \(UsageFormatter.tokenCountString(requestCount)) \(L("requests"))")

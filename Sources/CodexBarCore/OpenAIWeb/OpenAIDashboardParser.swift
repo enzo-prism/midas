@@ -99,12 +99,12 @@ public enum OpenAIDashboardParser {
         let primary = self.parseRateWindow(
             lines: lines,
             match: self.isFiveHourLimitLine,
-            windowMinutes: 5 * 60,
+            windowMinutes: CodexRateWindowDurations.sessionMinutes,
             now: now)
         let secondary = self.parseRateWindow(
             lines: lines,
             match: self.isWeeklyLimitLine,
-            windowMinutes: 7 * 24 * 60,
+            windowMinutes: CodexRateWindowDurations.weeklyMinutes,
             now: now)
         return (primary, secondary)
     }

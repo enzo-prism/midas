@@ -25,6 +25,22 @@ public struct WidgetSnapshot: Codable, Sendable {
         public let tokenUsage: TokenUsageSummary?
         public let dailyUsage: [DailyUsagePoint]
 
+        /// Compares everything the widget renders except the `updatedAt` freshness stamp,
+        /// which advances on every fetch even when the data itself is unchanged.
+        /// Keep in sync when adding fields; a missed field only delays widget updates
+        /// until the periodic re-persist interval in `UsageStore.persistWidgetSnapshot`.
+        public func hasSameRenderedContent(as other: ProviderEntry) -> Bool {
+            self.provider == other.provider &&
+                self.primary == other.primary &&
+                self.secondary == other.secondary &&
+                self.tertiary == other.tertiary &&
+                self.usageRows == other.usageRows &&
+                self.creditsRemaining == other.creditsRemaining &&
+                self.codeReviewRemainingPercent == other.codeReviewRemainingPercent &&
+                self.tokenUsage == other.tokenUsage &&
+                self.dailyUsage == other.dailyUsage
+        }
+
         public init(
             provider: UsageProvider,
             updatedAt: Date,
@@ -50,7 +66,7 @@ public struct WidgetSnapshot: Codable, Sendable {
         }
     }
 
-    public struct TokenUsageSummary: Codable, Sendable {
+    public struct TokenUsageSummary: Codable, Equatable, Sendable {
         public let sessionCostUSD: Double?
         public let sessionTokens: Int?
         public let last30DaysCostUSD: Double?
@@ -106,7 +122,7 @@ public struct WidgetSnapshot: Codable, Sendable {
         }
     }
 
-    public struct DailyUsagePoint: Codable, Sendable {
+    public struct DailyUsagePoint: Codable, Equatable, Sendable {
         public let dayKey: String
         public let totalTokens: Int?
         public let costUSD: Double?
@@ -148,9 +164,52 @@ public struct WidgetSnapshot: Codable, Sendable {
         try container.encode(self.enabledProviders, forKey: .enabledProviders)
         try container.encode(self.generatedAt, forKey: .generatedAt)
     }
+
+    /// True when the widget would render identically from both snapshots.
+    /// Ignores `generatedAt` and per-entry `updatedAt` so unchanged usage data
+    /// doesn't force a widget timeline reload on every refresh cycle.
+    public func hasSameRenderedContent(as other: WidgetSnapshot) -> Bool {
+        guard self.enabledProviders == other.enabledProviders,
+              self.entries.count == other.entries.count
+        else { return false }
+        return zip(self.entries, other.entries).allSatisfy { lhs, rhs in
+            lhs.hasSameRenderedContent(as: rhs)
+        }
+    }
 }
 
 public enum WidgetSnapshotStore {
+    public enum SaveResult: Equatable, Sendable {
+        case saved(path: String)
+        case failed(path: String, message: String)
+
+        public var didSave: Bool {
+            switch self {
+            case .saved:
+                true
+            case .failed:
+                false
+            }
+        }
+
+        public var path: String {
+            switch self {
+            case let .saved(path),
+                 let .failed(path, _):
+                path
+            }
+        }
+
+        public var message: String? {
+            switch self {
+            case .saved:
+                nil
+            case let .failed(_, message):
+                message
+            }
+        }
+    }
+
     private static let filename = AppGroupSupport.widgetSnapshotFilename
 
     public static func load(bundleID: String? = Bundle.main.bundleIdentifier) -> WidgetSnapshot? {
@@ -159,13 +218,18 @@ public enum WidgetSnapshotStore {
         return try? self.decoder.decode(WidgetSnapshot.self, from: data)
     }
 
-    public static func save(_ snapshot: WidgetSnapshot, bundleID: String? = Bundle.main.bundleIdentifier) {
+    @discardableResult
+    public static func save(
+        _ snapshot: WidgetSnapshot,
+        bundleID: String? = Bundle.main.bundleIdentifier) -> SaveResult
+    {
         let url = self.snapshotURL(bundleID: bundleID)
         do {
             let data = try self.encoder.encode(snapshot)
             try data.write(to: url, options: [.atomic])
+            return .saved(path: url.path)
         } catch {
-            return
+            return .failed(path: url.path, message: error.localizedDescription)
         }
     }
 

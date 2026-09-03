@@ -590,3 +590,102 @@ struct CostUsagePricingTests {
         return root
     }
 }
+
+// MARK: - z.ai estimated cost
+
+struct CostUsagePricingZaiTests {
+    /// Empty temp dir so `zaiCostUSD` misses the models.dev cache and uses built-in rates,
+    /// keeping these tests deterministic regardless of the host's cached catalog.
+    private static func emptyCacheRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-zai-pricing-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    @Test
+    func `normalizes zai model variants`() throws {
+        let root = try Self.emptyCacheRoot()
+        #expect(CostUsagePricing.normalizeZaiModel("glm-4.6") == "glm-4.6")
+        #expect(CostUsagePricing.normalizeZaiModel("glm-4-6") == "glm-4-6")
+        // dot↔dash fallback resolves either form to a priced key
+        #expect(CostUsagePricing.zaiCostUSD(model: "glm-4.6", totalTokens: 1, modelsDevCacheRoot: root) != nil)
+        #expect(CostUsagePricing.zaiCostUSD(model: "glm-4-6", totalTokens: 1, modelsDevCacheRoot: root) != nil)
+        #expect(CostUsagePricing.zaiCostUSD(model: "glm-4-5", totalTokens: 1, modelsDevCacheRoot: root) != nil)
+        #expect(CostUsagePricing.zaiCostUSD(model: "glm-4.5-air", totalTokens: 1, modelsDevCacheRoot: root) != nil)
+    }
+
+    @Test
+    func `strips zai and zhipu prefixes`() {
+        #expect(CostUsagePricing.normalizeZaiModel("zhipu/glm-4.6") == "glm-4.6")
+        #expect(CostUsagePricing.normalizeZaiModel("zai/glm-4.6") == "glm-4.6")
+    }
+
+    @Test
+    func `strips dated snapshot suffix`() {
+        #expect(CostUsagePricing.normalizeZaiModel("glm-4.6-2026-01-01") == "glm-4.6")
+    }
+
+    @Test
+    func `zai cost prices known flagship model`() throws {
+        // glm-4.6 built-in blended rate is 1.0e-6 USD/token.
+        let root = try Self.emptyCacheRoot()
+        let cost = CostUsagePricing.zaiCostUSD(model: "glm-4.6", totalTokens: 1_000_000, modelsDevCacheRoot: root)
+        #expect(cost == 1.0)
+    }
+
+    @Test
+    func `zai cost accepts dot and dash variants`() throws {
+        let root = try Self.emptyCacheRoot()
+        #expect(CostUsagePricing.zaiCostUSD(model: "glm-4.6", totalTokens: 500_000, modelsDevCacheRoot: root) == 0.5)
+        #expect(CostUsagePricing.zaiCostUSD(model: "glm-4-6", totalTokens: 500_000, modelsDevCacheRoot: root) == 0.5)
+    }
+
+    @Test
+    func `zai free models cost zero`() throws {
+        let root = try Self.emptyCacheRoot()
+        let cost = CostUsagePricing.zaiCostUSD(model: "glm-4-flash", totalTokens: 5_000_000, modelsDevCacheRoot: root)
+        #expect(cost == 0)
+    }
+
+    @Test
+    func `zai unknown model returns nil`() throws {
+        let root = try Self.emptyCacheRoot()
+        #expect(CostUsagePricing
+            .zaiCostUSD(model: "some-future-glm-99", totalTokens: 100, modelsDevCacheRoot: root) == nil)
+    }
+
+    @Test
+    func `zai cost prefers models dev catalog when present`() throws {
+        // When a catalog with a `zai` provider is supplied, its input/output rates drive a 50/50
+        // blend instead of the built-in table.
+        let json = """
+        {
+          "providers": {
+            "zai": {
+              "id": "zai",
+              "name": "Z.AI",
+              "models": {
+                "glm-4.6": {
+                  "id": "glm-4.6",
+                  "cost": { "input": 0.6, "output": 2.2 }
+                }
+              }
+            }
+          }
+        }
+        """
+        let catalog = try JSONDecoder().decode(ModelsDevCatalog.self, from: Data(json.utf8))
+        // (0.6 + 2.2) / 2 per 1M tokens → 1.4e-6/token; 1M tokens → $1.4
+        let cost = CostUsagePricing.zaiCostUSD(model: "glm-4.6", totalTokens: 1_000_000, modelsDevCatalog: catalog)
+        #expect(cost != nil)
+        #expect(abs((cost ?? 0) - 1.4) < 1e-6, "expected blended cost ≈ $1.4")
+    }
+
+    @Test
+    func `zai built in pricing fingerprint is stable and non empty`() {
+        let fingerprint = CostUsagePricing.zaiBuiltInPricingFingerprint()
+        #expect(!fingerprint.isEmpty)
+        #expect(fingerprint.contains("model=glm-4.6"))
+    }
+}

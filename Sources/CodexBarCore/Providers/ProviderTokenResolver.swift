@@ -143,6 +143,10 @@ public enum ProviderTokenResolver {
         self.doubaoResolution(environment: environment)?.token
     }
 
+    public static func metaToken(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        self.metaResolution(environment: environment)?.token
+    }
+
     public static func bedrockAccessKeyID(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> String?
     {
@@ -196,6 +200,12 @@ public enum ProviderTokenResolver {
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
         self.resolveEnv(DoubaoSettingsReader.apiKey(environment: environment))
+    }
+
+    public static func metaResolution(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
+    {
+        self.resolveEnv(MetaSettingsReader.apiKey(environment: environment))
     }
 
     public static func zaiResolution(

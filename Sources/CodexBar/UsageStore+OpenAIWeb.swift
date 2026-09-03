@@ -1252,6 +1252,29 @@ extension UsageStore {
         if self.openAIWebDebugLines.count > 240 {
             self.openAIWebDebugLines.removeFirst(self.openAIWebDebugLines.count - 240)
         }
+        // Coalesce the published debug log so we don't fire an observation tick (and rebuild the
+        // debug pane) for every log line. The Debug pane is rarely visible; flush on a timer.
+        self.scheduleOpenAIDashboardDebugLogFlush()
+    }
+
+    /// Debounce helper for `scheduleOpenAIDashboardDebugLogFlush` (stored on UsageStore itself
+    /// because extensions can't add stored properties).
+    func scheduleOpenAIDashboardDebugLogFlush() {
+        // Already-pending flush will pick up the latest lines.
+        if self.openAIDashboardDebugLogFlushTask != nil { return }
+        self.openAIDashboardDebugLogFlushTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000) // 250ms debounce.
+            guard let self else { return }
+            self.openAIDashboardDebugLogFlushTask = nil
+            self.openAIDashboardCookieImportDebugLog = self.openAIWebDebugLines.joined(separator: "\n")
+        }
+    }
+
+    /// Forces an immediate flush of the debug log (used by `resetOpenAIWebState` and any caller
+    /// that needs the freshest log before destruction).
+    func flushOpenAIDashboardDebugLogNow() {
+        self.openAIDashboardDebugLogFlushTask?.cancel()
+        self.openAIDashboardDebugLogFlushTask = nil
         self.openAIDashboardCookieImportDebugLog = self.openAIWebDebugLines.joined(separator: "\n")
     }
 
@@ -1267,6 +1290,9 @@ extension UsageStore {
         self.lastOpenAIDashboardAttemptAt = nil
         self.openAIDashboardRequiresLogin = false
         self.openAIDashboardCookieImportStatus = nil
+        // Flush any pending debug log writes before clearing so the Debug pane shows the final
+        // state from this session.
+        self.flushOpenAIDashboardDebugLogNow()
         self.openAIDashboardCookieImportDebugLog = nil
         self.lastOpenAIDashboardCookieImportAttemptAt = nil
         self.lastOpenAIDashboardCookieImportEmail = nil

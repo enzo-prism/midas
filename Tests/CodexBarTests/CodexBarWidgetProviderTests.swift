@@ -23,6 +23,12 @@ struct CodexBarWidgetProviderTests {
     }
 
     @Test
+    func `provider choice supports meta`() {
+        #expect(ProviderChoice(provider: .meta) == .meta)
+        #expect(ProviderChoice.meta.provider == .meta)
+    }
+
+    @Test
     func `supported providers fall back to codex when snapshot is empty`() {
         let snapshot = WidgetSnapshot(entries: [], enabledProviders: [], generatedAt: Date())
 

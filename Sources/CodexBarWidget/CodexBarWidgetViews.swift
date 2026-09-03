@@ -312,6 +312,7 @@ private struct ProviderSwitchChip: View {
         case .groq: "Groq"
         case .llmproxy: "LLM Proxy"
         case .deepgram: "Deepgram"
+        case .meta: "Meta"
         }
     }
 }
@@ -744,6 +745,8 @@ enum WidgetColors {
             Color(red: 36 / 255, green: 180 / 255, blue: 126 / 255)
         case .deepgram:
             Color(red: 10 / 255, green: 18 / 255, blue: 27 / 255)
+        case .meta:
+            Color(red: 0 / 255, green: 100 / 255, blue: 255 / 255)
         }
     }
 }

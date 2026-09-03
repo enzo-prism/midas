@@ -54,7 +54,7 @@ extension SettingsStore {
     var debugLogLevel: CodexBarLog.Level {
         get {
             let raw = self.defaultsState.debugLogLevelRaw
-            return CodexBarLog.parseLevel(raw) ?? .verbose
+            return CodexBarLog.parseLevel(raw) ?? .info
         }
         set {
             self.defaultsState.debugLogLevelRaw = newValue.rawValue
@@ -302,6 +302,16 @@ extension SettingsStore {
             let clamped = max(1, min(365, newValue))
             self.defaultsState.costUsageHistoryDays = clamped
             self.userDefaults.set(clamped, forKey: "tokenCostUsageHistoryDays")
+        }
+    }
+
+    /// z.ai cost is an estimate (priced from token counts × public GLM rates), so it is gated
+    /// behind its own opt-in toggle independent of the global cost-usage switch.
+    var zaiEstimatedCostEnabled: Bool {
+        get { self.defaultsState.zaiEstimatedCostEnabled }
+        set {
+            self.defaultsState.zaiEstimatedCostEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "zaiEstimatedCostEnabled")
         }
     }
 

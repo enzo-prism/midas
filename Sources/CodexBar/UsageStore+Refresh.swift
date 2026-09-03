@@ -278,6 +278,12 @@ extension UsageStore {
                 self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
                 self.lastKnownResetSnapshots[provider] = backfilled
                 self.snapshots[provider] = backfilled
+                if provider == .zai {
+                    // Persist the z.ai quota snapshot so the card renders instantly on cold launch
+                    // (the in-memory dictionary is rebuilt on each app start). modelUsage inside
+                    // ZaiUsageSnapshot is dropped at encode time to keep the cache compact.
+                    self.zaiSnapshotStore?.store(backfilled)
+                }
                 if let tokenSnapshot = self.tokenSnapshot(fromProviderSnapshot: backfilled, provider: provider) {
                     self.tokenSnapshots[provider] = tokenSnapshot
                     self.tokenErrors[provider] = nil

@@ -6,10 +6,18 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
     public let sessionRequests: Int?
     public let last30DaysTokens: Int?
     public let last30DaysCostUSD: Double?
+    public let last30DaysAPIEquivalentCostUSD: Double?
     public let last30DaysRequests: Int?
     public let currencyCode: String
     public let historyDays: Int
     public let historyLabel: String?
+    /// Provider-metered spend over the same window as `last30DaysCostUSD` — what the plan
+    /// actually deducts, as opposed to the API-rate estimate. Only some providers (e.g. Cursor)
+    /// report this; `nil` when unknown.
+    public let meteredCostUSD: Double?
+    /// How this snapshot's costs were produced. Never infer this solely from whether a
+    /// cost figure exists — Bedrock and OpenAI Admin costs are vendor-reported.
+    public let costProvenance: CostProvenance
     public let daily: [CostUsageDailyReport.Entry]
     public let updatedAt: Date
 
@@ -19,10 +27,13 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         sessionRequests: Int? = nil,
         last30DaysTokens: Int?,
         last30DaysCostUSD: Double?,
+        last30DaysAPIEquivalentCostUSD: Double? = nil,
         last30DaysRequests: Int? = nil,
         currencyCode: String = "USD",
         historyDays: Int = 30,
         historyLabel: String? = nil,
+        meteredCostUSD: Double? = nil,
+        costProvenance: CostProvenance = .unknown,
         daily: [CostUsageDailyReport.Entry],
         updatedAt: Date)
     {
@@ -31,12 +42,15 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         self.sessionRequests = sessionRequests
         self.last30DaysTokens = last30DaysTokens
         self.last30DaysCostUSD = last30DaysCostUSD
+        self.last30DaysAPIEquivalentCostUSD = last30DaysAPIEquivalentCostUSD
         self.last30DaysRequests = last30DaysRequests
         self.currencyCode = currencyCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "USD"
             : currencyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         self.historyDays = historyDays
         self.historyLabel = historyLabel
+        self.meteredCostUSD = meteredCostUSD
+        self.costProvenance = costProvenance
         self.daily = daily
         self.updatedAt = updatedAt
     }
@@ -48,6 +62,11 @@ public struct CostUsageDailyReport: Sendable, Decodable {
         public let costUSD: Double?
         public let totalTokens: Int?
         public let requestCount: Int?
+        public let inputTokens: Int?
+        public let outputTokens: Int?
+        public let cacheReadTokens: Int?
+        public let cacheCreationTokens: Int?
+        public let reasoningTokens: Int?
         public let standardCostUSD: Double?
         public let priorityCostUSD: Double?
         public let standardTokens: Int?
@@ -60,6 +79,11 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             case totalTokens
             case requestCount
             case requests
+            case inputTokens
+            case outputTokens
+            case cacheReadTokens
+            case cacheCreationTokens
+            case reasoningTokens
             case standardCostUSD
             case priorityCostUSD
             case standardTokens
@@ -76,6 +100,11 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             self.requestCount =
                 try container.decodeIfPresent(Int.self, forKey: .requestCount)
                 ?? container.decodeIfPresent(Int.self, forKey: .requests)
+            self.inputTokens = try container.decodeIfPresent(Int.self, forKey: .inputTokens)
+            self.outputTokens = try container.decodeIfPresent(Int.self, forKey: .outputTokens)
+            self.cacheReadTokens = try container.decodeIfPresent(Int.self, forKey: .cacheReadTokens)
+            self.cacheCreationTokens = try container.decodeIfPresent(Int.self, forKey: .cacheCreationTokens)
+            self.reasoningTokens = try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
             self.standardCostUSD = try container.decodeIfPresent(Double.self, forKey: .standardCostUSD)
             self.priorityCostUSD = try container.decodeIfPresent(Double.self, forKey: .priorityCostUSD)
             self.standardTokens = try container.decodeIfPresent(Int.self, forKey: .standardTokens)
@@ -87,6 +116,11 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             costUSD: Double?,
             totalTokens: Int? = nil,
             requestCount: Int? = nil,
+            inputTokens: Int? = nil,
+            outputTokens: Int? = nil,
+            cacheReadTokens: Int? = nil,
+            cacheCreationTokens: Int? = nil,
+            reasoningTokens: Int? = nil,
             standardCostUSD: Double? = nil,
             priorityCostUSD: Double? = nil,
             standardTokens: Int? = nil,
@@ -96,6 +130,11 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             self.costUSD = costUSD
             self.totalTokens = totalTokens
             self.requestCount = requestCount
+            self.inputTokens = inputTokens
+            self.outputTokens = outputTokens
+            self.cacheReadTokens = cacheReadTokens
+            self.cacheCreationTokens = cacheCreationTokens
+            self.reasoningTokens = reasoningTokens
             self.standardCostUSD = standardCostUSD
             self.priorityCostUSD = priorityCostUSD
             self.standardTokens = standardTokens
@@ -109,11 +148,63 @@ public struct CostUsageDailyReport: Sendable, Decodable {
         public let cacheReadTokens: Int?
         public let cacheCreationTokens: Int?
         public let outputTokens: Int?
+        public let reasoningTokens: Int?
         public let totalTokens: Int?
         public let requestCount: Int?
         public let costUSD: Double?
+        public let apiEquivalentCostUSD: Double?
         public let modelsUsed: [String]?
         public let modelBreakdowns: [ModelBreakdown]?
+        public let unpricedRequestCount: Int?
+        /// Per-event count of requests with valid vendor costs. Unlike the aggregate
+        /// "costUSD != nil" check, this survives fail-closed aggregation when an invalid
+        /// cost from the same model poisons the summed amount.
+        public let pricedRequestCount: Int?
+        public let unmeteredRequestCount: Int?
+        public let estimatedRequestCount: Int?
+
+        public var coverageCounts: CostUsageCoverageCounts {
+            self.coverageCounts(detail: .exact)
+        }
+
+        package func coverageCounts(detail: CostUsageCoverageDetail) -> CostUsageCoverageCounts {
+            let unpriced = detail == .exact ? max(0, self.unpricedRequestCount ?? 0) : 0
+            let unmetered = detail == .exact ? max(0, self.unmeteredRequestCount ?? 0) : 0
+            let estimated = detail == .exact ? max(0, self.estimatedRequestCount ?? 0) : 0
+            if detail == .exact, let priced = self.pricedRequestCount {
+                return CostUsageCoverageCounts(
+                    priced: max(0, priced),
+                    unpriced: unpriced,
+                    unmetered: unmetered,
+                    estimated: estimated)
+            }
+            if detail != .rows, let requests = self.requestCount, requests > 0 {
+                let priced = if self.costUSD != nil {
+                    max(0, requests - unpriced - unmetered - estimated)
+                } else {
+                    0
+                }
+                return CostUsageCoverageCounts(
+                    priced: priced,
+                    unpriced: unpriced,
+                    unmetered: unmetered,
+                    estimated: estimated)
+            }
+            if unpriced + unmetered + estimated > 0 {
+                return CostUsageCoverageCounts(
+                    priced: 0,
+                    unpriced: unpriced,
+                    unmetered: unmetered,
+                    estimated: estimated)
+            }
+            if self.costUSD != nil {
+                return CostUsageCoverageCounts(priced: 1)
+            }
+            if (self.totalTokens ?? 0) > 0 {
+                return CostUsageCoverageCounts(unpriced: 1)
+            }
+            return CostUsageCoverageCounts()
+        }
 
         private enum CodingKeys: String, CodingKey {
             case date
@@ -123,14 +214,21 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             case cacheReadInputTokens
             case cacheCreationInputTokens
             case outputTokens
+            case reasoningTokens
+            case reasoningOutputTokens
             case totalTokens
             case requestCount
             case requests
             case costUSD
             case totalCost
+            case apiEquivalentCostUSD
             case modelsUsed
             case models
             case modelBreakdowns
+            case unpricedRequestCount
+            case pricedRequestCount
+            case unmeteredRequestCount
+            case estimatedRequestCount
         }
 
         public init(from decoder: Decoder) throws {
@@ -144,6 +242,9 @@ public struct CostUsageDailyReport: Sendable, Decodable {
                 try container.decodeIfPresent(Int.self, forKey: .cacheCreationTokens)
                 ?? container.decodeIfPresent(Int.self, forKey: .cacheCreationInputTokens)
             self.outputTokens = try container.decodeIfPresent(Int.self, forKey: .outputTokens)
+            self.reasoningTokens =
+                try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
+                ?? container.decodeIfPresent(Int.self, forKey: .reasoningOutputTokens)
             self.totalTokens = try container.decodeIfPresent(Int.self, forKey: .totalTokens)
             self.requestCount =
                 try container.decodeIfPresent(Int.self, forKey: .requestCount)
@@ -151,8 +252,15 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             self.costUSD =
                 try container.decodeIfPresent(Double.self, forKey: .costUSD)
                 ?? container.decodeIfPresent(Double.self, forKey: .totalCost)
+            self.apiEquivalentCostUSD = try container.decodeIfPresent(
+                Double.self,
+                forKey: .apiEquivalentCostUSD)
             self.modelsUsed = Self.decodeModelsUsed(from: container)
             self.modelBreakdowns = try container.decodeIfPresent([ModelBreakdown].self, forKey: .modelBreakdowns)
+            self.unpricedRequestCount = try container.decodeIfPresent(Int.self, forKey: .unpricedRequestCount)
+            self.pricedRequestCount = try container.decodeIfPresent(Int.self, forKey: .pricedRequestCount)
+            self.unmeteredRequestCount = try container.decodeIfPresent(Int.self, forKey: .unmeteredRequestCount)
+            self.estimatedRequestCount = try container.decodeIfPresent(Int.self, forKey: .estimatedRequestCount)
         }
 
         public init(
@@ -161,22 +269,34 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             outputTokens: Int?,
             cacheReadTokens: Int? = nil,
             cacheCreationTokens: Int? = nil,
+            reasoningTokens: Int? = nil,
             totalTokens: Int?,
             requestCount: Int? = nil,
             costUSD: Double?,
+            apiEquivalentCostUSD: Double? = nil,
             modelsUsed: [String]?,
-            modelBreakdowns: [ModelBreakdown]?)
+            modelBreakdowns: [ModelBreakdown]?,
+            unpricedRequestCount: Int? = nil,
+            unmeteredRequestCount: Int? = nil,
+            estimatedRequestCount: Int? = nil,
+            pricedRequestCount: Int? = nil)
         {
             self.date = date
             self.inputTokens = inputTokens
             self.outputTokens = outputTokens
             self.cacheReadTokens = cacheReadTokens
             self.cacheCreationTokens = cacheCreationTokens
+            self.reasoningTokens = reasoningTokens
             self.totalTokens = totalTokens
             self.requestCount = requestCount
             self.costUSD = costUSD
+            self.apiEquivalentCostUSD = apiEquivalentCostUSD
             self.modelsUsed = modelsUsed
             self.modelBreakdowns = modelBreakdowns
+            self.unpricedRequestCount = unpricedRequestCount
+            self.unmeteredRequestCount = unmeteredRequestCount
+            self.estimatedRequestCount = estimatedRequestCount
+            self.pricedRequestCount = pricedRequestCount
         }
 
         private static func decodeModelsUsed(from container: KeyedDecodingContainer<CodingKeys>) -> [String]? {
@@ -202,6 +322,7 @@ public struct CostUsageDailyReport: Sendable, Decodable {
         public let totalOutputTokens: Int?
         public let cacheReadTokens: Int?
         public let cacheCreationTokens: Int?
+        public let reasoningTokens: Int?
         public let totalTokens: Int?
         public let totalCostUSD: Double?
 
@@ -212,6 +333,7 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             case cacheCreationTokens
             case totalCacheReadTokens
             case totalCacheCreationTokens
+            case reasoningTokens
             case totalTokens
             case totalCostUSD
             case totalCost
@@ -222,6 +344,7 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             totalOutputTokens: Int?,
             cacheReadTokens: Int? = nil,
             cacheCreationTokens: Int? = nil,
+            reasoningTokens: Int? = nil,
             totalTokens: Int?,
             totalCostUSD: Double?)
         {
@@ -229,6 +352,7 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             self.totalOutputTokens = totalOutputTokens
             self.cacheReadTokens = cacheReadTokens
             self.cacheCreationTokens = cacheCreationTokens
+            self.reasoningTokens = reasoningTokens
             self.totalTokens = totalTokens
             self.totalCostUSD = totalCostUSD
         }
@@ -243,6 +367,7 @@ public struct CostUsageDailyReport: Sendable, Decodable {
             self.cacheCreationTokens =
                 try container.decodeIfPresent(Int.self, forKey: .cacheCreationTokens)
                 ?? container.decodeIfPresent(Int.self, forKey: .totalCacheCreationTokens)
+            self.reasoningTokens = try container.decodeIfPresent(Int.self, forKey: .reasoningTokens)
             self.totalTokens = try container.decodeIfPresent(Int.self, forKey: .totalTokens)
             self.totalCostUSD =
                 try container.decodeIfPresent(Double.self, forKey: .totalCostUSD)
@@ -298,6 +423,16 @@ extension CostUsageDailyReport {
         var sawTotalTokens = false
         var costUSD: Double = 0
         var sawCost = false
+        var inputTokens: Int = 0
+        var sawInputTokens = false
+        var outputTokens: Int = 0
+        var sawOutputTokens = false
+        var cacheReadTokens: Int = 0
+        var sawCacheReadTokens = false
+        var cacheCreationTokens: Int = 0
+        var sawCacheCreationTokens = false
+        var reasoningTokens: Int = 0
+        var sawReasoningTokens = false
         var standardCostUSD: Double = 0
         var sawStandardCost = false
         var priorityCostUSD: Double = 0
@@ -311,6 +446,26 @@ extension CostUsageDailyReport {
             if let totalTokens = breakdown.totalTokens {
                 self.totalTokens += totalTokens
                 self.sawTotalTokens = true
+            }
+            if let inputTokens = breakdown.inputTokens {
+                self.inputTokens += inputTokens
+                self.sawInputTokens = true
+            }
+            if let outputTokens = breakdown.outputTokens {
+                self.outputTokens += outputTokens
+                self.sawOutputTokens = true
+            }
+            if let cacheReadTokens = breakdown.cacheReadTokens {
+                self.cacheReadTokens += cacheReadTokens
+                self.sawCacheReadTokens = true
+            }
+            if let cacheCreationTokens = breakdown.cacheCreationTokens {
+                self.cacheCreationTokens += cacheCreationTokens
+                self.sawCacheCreationTokens = true
+            }
+            if let reasoningTokens = breakdown.reasoningTokens {
+                self.reasoningTokens += reasoningTokens
+                self.sawReasoningTokens = true
             }
             if let costUSD = breakdown.costUSD {
                 self.costUSD += costUSD
@@ -339,6 +494,11 @@ extension CostUsageDailyReport {
                 modelName: modelName,
                 costUSD: self.sawCost ? self.costUSD : nil,
                 totalTokens: self.sawTotalTokens ? self.totalTokens : nil,
+                inputTokens: self.sawInputTokens ? self.inputTokens : nil,
+                outputTokens: self.sawOutputTokens ? self.outputTokens : nil,
+                cacheReadTokens: self.sawCacheReadTokens ? self.cacheReadTokens : nil,
+                cacheCreationTokens: self.sawCacheCreationTokens ? self.cacheCreationTokens : nil,
+                reasoningTokens: self.sawReasoningTokens ? self.reasoningTokens : nil,
                 standardCostUSD: self.sawStandardCost ? self.standardCostUSD : nil,
                 priorityCostUSD: self.sawPriorityCost ? self.priorityCostUSD : nil,
                 standardTokens: self.sawStandardTokens ? self.standardTokens : nil,
@@ -360,6 +520,11 @@ extension CostUsageDailyReport {
         var derivedTotalTokensWithoutExplicitTotal: Int = 0
         var costUSD: Double = 0
         var sawCost = false
+        var reasoningTokens: Int = 0
+        var sawReasoningTokens = false
+        // Explicit per-request coverage survives the merge only when at least one input
+        // carried it; entries without coverage merge to nil so legacy rows are unchanged.
+        var coverage: CostUsageCoverageCounts?
         var modelsUsed: Set<String> = []
         var breakdowns: [String: BreakdownAccumulator] = [:]
 
@@ -393,6 +558,21 @@ extension CostUsageDailyReport {
             if let costUSD = entry.costUSD {
                 self.costUSD += costUSD
                 self.sawCost = true
+            }
+            if let reasoningTokens = entry.reasoningTokens {
+                self.reasoningTokens += reasoningTokens
+                self.sawReasoningTokens = true
+            }
+            if entry.pricedRequestCount != nil || entry.unpricedRequestCount != nil
+                || entry.unmeteredRequestCount != nil || entry.estimatedRequestCount != nil
+            {
+                let incoming = CostUsageCoverageCounts(
+                    priced: entry.pricedRequestCount ?? 0,
+                    unpriced: entry.unpricedRequestCount ?? 0,
+                    unmetered: entry.unmeteredRequestCount ?? 0,
+                    estimated: entry.estimatedRequestCount ?? 0)
+                // Fail closed on overflow rather than publishing a wrapped total.
+                self.coverage = Self.addingCoverage(self.coverage ?? CostUsageCoverageCounts(), incoming)
             }
             if let modelsUsed = entry.modelsUsed {
                 self.modelsUsed.formUnion(modelsUsed)
@@ -434,10 +614,31 @@ extension CostUsageDailyReport {
                 outputTokens: self.sawOutputTokens ? self.outputTokens : nil,
                 cacheReadTokens: self.sawCacheReadTokens ? self.cacheReadTokens : nil,
                 cacheCreationTokens: self.sawCacheCreationTokens ? self.cacheCreationTokens : nil,
+                reasoningTokens: self.sawReasoningTokens ? self.reasoningTokens : nil,
                 totalTokens: totalTokens,
                 costUSD: self.sawCost ? self.costUSD : nil,
                 modelsUsed: modelsUsed,
-                modelBreakdowns: modelBreakdowns)
+                modelBreakdowns: modelBreakdowns,
+                unpricedRequestCount: self.coverage?.unpriced,
+                unmeteredRequestCount: self.coverage?.unmetered,
+                estimatedRequestCount: self.coverage?.estimated,
+                pricedRequestCount: self.coverage?.priced)
+        }
+
+        private static func addingCoverage(
+            _ lhs: CostUsageCoverageCounts,
+            _ rhs: CostUsageCoverageCounts) -> CostUsageCoverageCounts?
+        {
+            let priced = lhs.priced.addingReportingOverflow(rhs.priced)
+            let unpriced = lhs.unpriced.addingReportingOverflow(rhs.unpriced)
+            let unmetered = lhs.unmetered.addingReportingOverflow(rhs.unmetered)
+            let estimated = lhs.estimated.addingReportingOverflow(rhs.estimated)
+            guard !priced.overflow, !unpriced.overflow, !unmetered.overflow, !estimated.overflow else { return nil }
+            return CostUsageCoverageCounts(
+                priced: priced.partialValue,
+                unpriced: unpriced.partialValue,
+                unmetered: unmetered.partialValue,
+                estimated: estimated.partialValue)
         }
     }
 
@@ -478,6 +679,8 @@ extension CostUsageDailyReport {
         var sawTotalCacheReadTokens = false
         var totalCacheCreationTokens = 0
         var sawTotalCacheCreationTokens = false
+        var totalReasoningTokens = 0
+        var sawTotalReasoningTokens = false
         var totalTokens = 0
         var sawTotalTokens = false
         var totalCostUSD = 0.0
@@ -500,6 +703,10 @@ extension CostUsageDailyReport {
                 totalCacheCreationTokens += cacheCreationTokens
                 sawTotalCacheCreationTokens = true
             }
+            if let reasoningTokens = entry.reasoningTokens {
+                totalReasoningTokens += reasoningTokens
+                sawTotalReasoningTokens = true
+            }
             if let entryTotalTokens = entry.totalTokens {
                 totalTokens += entryTotalTokens
                 sawTotalTokens = true
@@ -515,6 +722,7 @@ extension CostUsageDailyReport {
             totalOutputTokens: sawTotalOutputTokens ? totalOutputTokens : nil,
             cacheReadTokens: sawTotalCacheReadTokens ? totalCacheReadTokens : nil,
             cacheCreationTokens: sawTotalCacheCreationTokens ? totalCacheCreationTokens : nil,
+            reasoningTokens: sawTotalReasoningTokens ? totalReasoningTokens : nil,
             totalTokens: sawTotalTokens ? totalTokens : nil,
             totalCostUSD: sawTotalCostUSD ? totalCostUSD : nil)
     }
@@ -715,6 +923,23 @@ private struct CostUsageLegacyTotals: Decodable {
             ?? container.decodeIfPresent(Int.self, forKey: .totalCacheCreationTokens)
         self.totalTokens = try container.decodeIfPresent(Int.self, forKey: .totalTokens)
         self.totalCost = try container.decodeIfPresent(Double.self, forKey: .totalCost)
+    }
+}
+
+enum CostUsageLocalDay {
+    static func gregorianCalendar(matching calendar: Calendar = .current) -> Calendar {
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        return gregorian
+    }
+
+    static func key(from date: Date, calendar: Calendar = .current) -> String {
+        let calendar = Self.gregorianCalendar(matching: calendar)
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 }
 

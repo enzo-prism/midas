@@ -110,6 +110,8 @@ public enum ProviderConfigEnvironment {
             GroqSettingsReader.apiKeyEnvironmentKey
         case .llmproxy:
             LLMProxySettingsReader.apiKeyEnvironmentKey
+        case .meta:
+            MetaSettingsReader.apiKeyEnvironmentKeys.first
         default:
             nil
         }

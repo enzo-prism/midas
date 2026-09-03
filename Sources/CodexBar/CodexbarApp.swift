@@ -18,7 +18,9 @@ struct CodexBarApp: App {
 
     init() {
         let env = ProcessInfo.processInfo.environment
-        let storedLevel = CodexBarLog.parseLevel(UserDefaults.standard.string(forKey: "debugLogLevel")) ?? .verbose
+        // Default to .info: verbose logging eagerly formats every message/metadata string on hot
+        // paths (fetch pipeline, icon passes, webview events) even though OSLog drops most of it.
+        let storedLevel = CodexBarLog.parseLevel(UserDefaults.standard.string(forKey: "debugLogLevel")) ?? .info
         let level = CodexBarLog.parseLevel(env["CODEXBAR_LOG_LEVEL"]) ?? storedLevel
         CodexBarLog.bootstrapIfNeeded(.init(
             destination: .oslog(subsystem: "com.steipete.codexbar"),

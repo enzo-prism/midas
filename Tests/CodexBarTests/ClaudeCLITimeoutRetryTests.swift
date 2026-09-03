@@ -103,7 +103,7 @@ struct ClaudeCLITimeoutRetryTests {
 
         let recorded = await attempts.snapshot()
         #expect(recorded.count == 1)
-        #expect(recorded.timeouts == [12])
+        #expect(recorded.timeouts == [24])
     }
 
     @Test
@@ -149,7 +149,7 @@ struct ClaudeCLITimeoutRetryTests {
 
         let recorded = await attempts.snapshot()
         #expect(recorded.count == 2)
-        #expect(recorded.timeouts == [12, 60])
+        #expect(recorded.timeouts == [24, 60])
         #expect(webRequests.snapshot().isEmpty)
         #expect(snapshot.primary.usedPercent == 5)
         #expect(snapshot.secondary?.usedPercent == 7)
@@ -193,7 +193,7 @@ struct ClaudeCLITimeoutRetryTests {
 
         let recorded = await attempts.snapshot()
         #expect(recorded.count == 2)
-        #expect(recorded.timeouts == [12, 60])
+        #expect(recorded.timeouts == [24, 60])
         #expect(snapshot.primary.usedPercent == 28)
         #expect(snapshot.secondary?.usedPercent == 36)
         #expect(snapshot.accountEmail == "auto-cli@example.com")

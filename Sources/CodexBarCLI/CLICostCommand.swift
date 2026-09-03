@@ -3,7 +3,7 @@ import Commander
 import Foundation
 
 extension CodexBarCLI {
-    private static let costSupportedProviders: Set<UsageProvider> = [.claude, .codex]
+    private static let costSupportedProviders: Set<UsageProvider> = [.claude, .codex, .zai, .meta, .openai, .cursor]
 
     static func runCost(_ values: ParsedValues) async {
         let output = CLIOutputPreferences.from(values: values)
@@ -23,7 +23,7 @@ extension CodexBarCLI {
         guard !providers.isEmpty else {
             Self.exit(
                 code: .failure,
-                message: "Error: cost is only supported for Claude and Codex.",
+                message: "Error: cost is only supported for Claude, Codex, z.ai, Meta, OpenAI, and Cursor.",
                 output: output,
                 kind: .args)
         }
@@ -36,16 +36,34 @@ extension CodexBarCLI {
         let fetcher = CostUsageFetcher()
         var sections: [String] = []
         var payload: [CostPayload] = []
+        var successes: [(provider: UsageProvider, snapshot: CostUsageTokenSnapshot)] = []
         var exitCode: ExitCode = .success
+
+        // Merge config-stored API keys into the environment so key-backed cost paths
+        // (OpenAI Admin API, z.ai) work the same as `config set-api-key` promises.
+        let tokenSelection = TokenAccountCLISelection(label: nil, index: nil, allAccounts: false)
+        let tokenContext = try? TokenAccountCLIContext(
+            selection: tokenSelection,
+            config: config,
+            verbose: false)
 
         for provider in providers {
             do {
-                // Cost usage is local-only; it does not require web/CLI provider fetches.
+                let environment = tokenContext?.environment(
+                    base: ProcessInfo.processInfo.environment,
+                    provider: provider,
+                    account: nil) ?? ProcessInfo.processInfo.environment
+                let cursorSettings = tokenContext?.settingsSnapshot(for: provider, account: nil)?.cursor
+                // Cost usage is local-only, except key-backed providers (OpenAI, z.ai)
+                // and the Cursor web session, which use the merged environment above.
                 let snapshot = try await fetcher.loadTokenSnapshot(
                     provider: provider,
+                    environment: environment,
                     forceRefresh: forceRefresh,
                     historyDays: historyDays,
-                    refreshPricingInBackground: false)
+                    refreshPricingInBackground: false,
+                    cursorSettings: cursorSettings)
+                successes.append((provider, snapshot))
                 switch format {
                 case .text:
                     sections.append(Self.renderCostText(provider: provider, snapshot: snapshot, useColor: useColor))
@@ -67,6 +85,9 @@ extension CodexBarCLI {
             if !sections.isEmpty {
                 print(sections.joined(separator: "\n\n"))
             }
+            if successes.count > 1, let total = Self.renderTotalSection(successes, useColor: useColor) {
+                print("\n\(total)")
+            }
         case .json:
             if !payload.isEmpty {
                 Self.printJSON(payload, pretty: output.pretty)
@@ -74,6 +95,43 @@ extension CodexBarCLI {
         }
 
         Self.exit(code: exitCode, output: output, kind: exitCode == .success ? .runtime : .provider)
+    }
+
+    /// Combined 30-day $ + token line across providers, priced as if every token were
+    /// billed at full public API rates (Meta counts at standard-API equivalent).
+    static func renderTotalSection(
+        _ successes: [(provider: UsageProvider, snapshot: CostUsageTokenSnapshot)],
+        useColor: Bool) -> String?
+    {
+        let tokens = successes.compactMap(\.snapshot.last30DaysTokens).reduce(0, +)
+        var dollars = 0.0
+        var priced: [String] = []
+        var unpriced: [String] = []
+        for success in successes {
+            let name = ProviderDescriptorRegistry.descriptor(for: success.provider).metadata.displayName
+            if let cost = CostUsageFetcher.listPriceCostUSD(
+                provider: success.provider,
+                snapshot: success.snapshot)
+            {
+                dollars += cost
+                priced.append(name)
+            } else {
+                unpriced.append(name)
+            }
+        }
+        guard !priced.isEmpty else { return nil }
+        let code = successes.first?.snapshot.currencyCode ?? "USD"
+        let header = Self.costHeaderLine("Total — 30d at list API rates", useColor: useColor)
+        var line = "Total: \(UsageFormatter.currencyString(dollars, currencyCode: code))"
+        if tokens > 0 {
+            line += " · \(UsageFormatter.tokenCountString(tokens)) tokens"
+        }
+        line += " (\(priced.sorted().joined(separator: ", "))"
+        if !unpriced.isEmpty {
+            line += "; no $ data: \(unpriced.sorted().joined(separator: ", "))"
+        }
+        line += ")"
+        return "\(header)\n\(line)"
     }
 
     static func renderCostText(
@@ -86,8 +144,12 @@ extension CodexBarCLI {
 
         let todayCost = snapshot.sessionCostUSD
             .map { UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode) } ?? "—"
+        // The legacy Cursor billing-cycle figure is not a daily one; event-backed Cursor
+        // snapshots (which carry metered spend) report a real Today line instead.
+        let todayLabel = provider == .cursor && snapshot.meteredCostUSD == nil ? "Billing cycle" : "Today"
         let todayTokens = snapshot.sessionTokens.map { UsageFormatter.tokenCountString($0) }
-        let todayLine = todayTokens.map { "Today: \(todayCost) · \($0) tokens" } ?? "Today: \(todayCost)"
+        let todayLine = todayTokens.map { "\(todayLabel): \(todayCost) · \($0) tokens" }
+            ?? "\(todayLabel): \(todayCost)"
 
         let monthCost = snapshot.last30DaysCostUSD
             .map { UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode) } ?? "—"
@@ -98,8 +160,42 @@ extension CodexBarCLI {
             "\(historyLabel): \(monthCost) · \($0) tokens"
         } ?? "\(historyLabel): \(monthCost)"
 
-        let hintLine = UsageFormatter.costEstimateHint(provider: provider)
-        return [header, todayLine, monthLine, hintLine].joined(separator: "\n")
+        // Plan-metered spend over the same window (what Cursor actually deducts), shown
+        // alongside the API-rate estimate. Only providers like Cursor report it.
+        let meteredLine: String? = snapshot.meteredCostUSD.map {
+            let amount = UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode)
+            return "Cursor-metered: \(amount) (\(historyLabel.lowercased()))"
+        }
+
+        // Meta skips the Today line: the card is 30-day API tokens + both dollar
+        // figures, and a daily figure duplicates that story with less context.
+        var lines = provider == .meta ? [header, monthLine] : [header, todayLine, monthLine]
+        if let meteredLine {
+            lines.append(meteredLine)
+        }
+        if provider == .meta {
+            if let sparkline = Self.tokenSparkline(from: snapshot) {
+                lines.append("Daily tokens: \(sparkline)")
+            }
+            if let equivalent = snapshot.last30DaysAPIEquivalentCostUSD {
+                lines.append(
+                    "At standard API rates: " +
+                        "\(UsageFormatter.currencyString(equivalent, currencyCode: snapshot.currencyCode))")
+            }
+        }
+        lines.append(UsageFormatter.costEstimateHint(provider: provider))
+        return lines.joined(separator: "\n")
+    }
+
+    /// Compact 30-day token graphic (▁▂▃▄▅▆▇█ per day, oldest first).
+    static func tokenSparkline(from snapshot: CostUsageTokenSnapshot) -> String? {
+        let blocks = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+        let values = snapshot.daily.suffix(max(1, snapshot.historyDays)).map { $0.totalTokens ?? 0 }
+        guard let maxValue = values.max(), maxValue > 0 else { return nil }
+        return values.map { value in
+            let index = min(blocks.count - 1, (value * blocks.count) / (maxValue + 1))
+            return blocks[index]
+        }.joined()
     }
 
     private static func costHeaderLine(_ header: String, useColor: Bool) -> String {
@@ -125,6 +221,7 @@ extension CodexBarCLI {
                 cacheCreationTokens: entry.cacheCreationTokens,
                 totalTokens: entry.totalTokens,
                 costUSD: entry.costUSD,
+                apiEquivalentCostUSD: entry.apiEquivalentCostUSD,
                 modelsUsed: entry.modelsUsed,
                 modelBreakdowns: entry.modelBreakdowns?.map { breakdown in
                     CostModelBreakdownPayload(
@@ -136,7 +233,7 @@ extension CodexBarCLI {
 
         return CostPayload(
             provider: provider.rawValue,
-            source: "local",
+            source: provider == .zai ? "estimated" : "local",
             updatedAt: snapshot?.updatedAt ?? (error == nil ? nil : Date()),
             currencyCode: snapshot?.currencyCode,
             sessionTokens: snapshot?.sessionTokens,
@@ -144,6 +241,9 @@ extension CodexBarCLI {
             historyDays: snapshot?.historyDays,
             last30DaysTokens: snapshot?.last30DaysTokens,
             last30DaysCostUSD: snapshot?.last30DaysCostUSD,
+            last30DaysAPIEquivalentCostUSD: snapshot?.last30DaysAPIEquivalentCostUSD,
+            meteredCostUSD: snapshot?.meteredCostUSD,
+            provenance: snapshot.map(\.costProvenance.rawValue),
             daily: daily,
             totals: snapshot.flatMap(Self.costTotals(from:)),
             error: error.map { Self.makeErrorPayload($0) })
@@ -267,6 +367,12 @@ struct CostPayload: Encodable {
     let historyDays: Int?
     let last30DaysTokens: Int?
     let last30DaysCostUSD: Double?
+    let last30DaysAPIEquivalentCostUSD: Double?
+    /// Provider-metered spend over the same window (what Cursor actually deducts, as
+    /// opposed to the API-rate estimate). Only some providers report this.
+    let meteredCostUSD: Double?
+    /// How the payload costs were produced (`listPriceEstimate`, `vendorMetered`, `mixed`, `unknown`).
+    let provenance: String?
     let daily: [CostDailyEntryPayload]
     let totals: CostTotalsPayload?
     let error: ProviderErrorPayload?
@@ -281,6 +387,9 @@ struct CostPayload: Encodable {
         historyDays: Int?,
         last30DaysTokens: Int?,
         last30DaysCostUSD: Double?,
+        last30DaysAPIEquivalentCostUSD: Double? = nil,
+        meteredCostUSD: Double? = nil,
+        provenance: String? = nil,
         daily: [CostDailyEntryPayload],
         totals: CostTotalsPayload?,
         error: ProviderErrorPayload?)
@@ -294,6 +403,9 @@ struct CostPayload: Encodable {
         self.historyDays = historyDays
         self.last30DaysTokens = last30DaysTokens
         self.last30DaysCostUSD = last30DaysCostUSD
+        self.last30DaysAPIEquivalentCostUSD = last30DaysAPIEquivalentCostUSD
+        self.meteredCostUSD = meteredCostUSD
+        self.provenance = provenance
         self.daily = daily
         self.totals = totals
         self.error = error
@@ -308,8 +420,33 @@ struct CostDailyEntryPayload: Encodable {
     let cacheCreationTokens: Int?
     let totalTokens: Int?
     let costUSD: Double?
+    let apiEquivalentCostUSD: Double?
     let modelsUsed: [String]?
     let modelBreakdowns: [CostModelBreakdownPayload]?
+
+    init(
+        date: String,
+        inputTokens: Int?,
+        outputTokens: Int?,
+        cacheReadTokens: Int?,
+        cacheCreationTokens: Int?,
+        totalTokens: Int?,
+        costUSD: Double?,
+        apiEquivalentCostUSD: Double? = nil,
+        modelsUsed: [String]?,
+        modelBreakdowns: [CostModelBreakdownPayload]?)
+    {
+        self.date = date
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheReadTokens = cacheReadTokens
+        self.cacheCreationTokens = cacheCreationTokens
+        self.totalTokens = totalTokens
+        self.costUSD = costUSD
+        self.apiEquivalentCostUSD = apiEquivalentCostUSD
+        self.modelsUsed = modelsUsed
+        self.modelBreakdowns = modelBreakdowns
+    }
 
     private enum CodingKeys: String, CodingKey {
         case date
@@ -319,6 +456,7 @@ struct CostDailyEntryPayload: Encodable {
         case cacheCreationTokens
         case totalTokens
         case costUSD = "totalCost"
+        case apiEquivalentCostUSD
         case modelsUsed
         case modelBreakdowns
     }

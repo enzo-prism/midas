@@ -8,7 +8,7 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 49 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
+CodexBar currently registers 50 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
 OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
@@ -70,6 +70,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | GroqCloud | API key → Prometheus metrics API for request/token/cache-hit rates (`api`). |
 | LLM Proxy | API key + base URL → `/v1/quota-stats` aggregate proxy usage (`api`). |
 | Deepgram | API key → project discovery and usage breakdown API (`api`). |
+| Meta | Local Muse `session.jsonl` token scan (`local`); optional `META_API_KEY` for the Meta Model API. |
 
 ## Codex
 - App Auto: OAuth API first; falls back to CLI only when OAuth credentials are missing or auth/refresh is invalid.

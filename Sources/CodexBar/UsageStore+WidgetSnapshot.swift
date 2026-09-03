@@ -5,24 +5,60 @@ import WidgetKit
 #endif
 
 extension UsageStore {
+    /// Most refresh cycles produce a widget snapshot whose rendered content is identical to the
+    /// previous one (only freshness stamps move). Re-persist anyway after this interval so the
+    /// widget's relative "updated" label can't drift unboundedly while usage is idle.
+    private static let widgetSnapshotMaxSkipInterval: TimeInterval = 15 * 60
+
     func persistWidgetSnapshot(reason: String) {
         let snapshot = self.makeWidgetSnapshot()
+        if let last = self.lastScheduledWidgetSnapshot,
+           snapshot.generatedAt.timeIntervalSince(last.generatedAt) < Self.widgetSnapshotMaxSkipInterval,
+           snapshot.hasSameRenderedContent(as: last)
+        {
+            return
+        }
         let previousTask = self.widgetSnapshotPersistTask
         self.widgetSnapshotPersistTask = Task { @MainActor in
             _ = await previousTask?.result
 
-            if let override = self._test_widgetSnapshotSaveOverride {
+            let result: WidgetSnapshotStore.SaveResult
+            if let override = self._test_widgetSnapshotSaveResultOverride {
+                result = await override(snapshot)
+            } else if let override = self._test_widgetSnapshotSaveOverride {
                 await override(snapshot)
+                result = .saved(path: "test-widget-snapshot-override")
+            } else {
+                result = await Task.detached(priority: .utility) {
+                    WidgetSnapshotStore.save(snapshot)
+                }.value
+            }
+
+            guard result.didSave else {
+                CodexBarLog.logger(LogCategories.app).warning(
+                    "Failed to persist widget snapshot",
+                    metadata: [
+                        "reason": reason,
+                        "path": result.path,
+                        "error": result.message ?? "unknown",
+                    ])
                 return
             }
 
-            await Task.detached(priority: .utility) {
-                WidgetSnapshotStore.save(snapshot)
-            }.value
-            #if canImport(WidgetKit)
-            WidgetCenter.shared.reloadAllTimelines()
-            #endif
+            self.lastScheduledWidgetSnapshot = snapshot
+            self.reloadWidgetTimelinesAfterSnapshotPersist()
         }
+    }
+
+    private func reloadWidgetTimelinesAfterSnapshotPersist() {
+        if let override = self._test_widgetTimelineReloadOverride {
+            override()
+            return
+        }
+
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
     }
 
     private func makeWidgetSnapshot() -> WidgetSnapshot {

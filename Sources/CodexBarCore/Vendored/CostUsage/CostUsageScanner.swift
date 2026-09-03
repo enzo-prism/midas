@@ -452,7 +452,7 @@ enum CostUsageScanner {
              .copilot, .devin, .minimax, .manus, .kilo, .kiro, .kimi, .kimik2, .moonshot, .augment, .jetbrains, .amp,
              .ollama, .t3chat, .synthetic, .openrouter, .elevenlabs, .warp, .perplexity, .mimo, .doubao, .abacus,
              .mistral, .deepseek, .codebuff, .crof, .windsurf, .venice, .commandcode, .stepfun, .bedrock, .grok,
-             .groq, .llmproxy, .deepgram:
+             .groq, .llmproxy, .deepgram, .meta:
             return emptyReport
         }
     }
@@ -2400,7 +2400,7 @@ enum CostUsageScanner {
             }
             cache.lastScanUnixMs = nowMs
             try checkCancellation?()
-            CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: options.cacheRoot)
+            Self.persistCodexCacheLoggingFailures(cache, cacheRoot: options.cacheRoot)
         }
 
         return Self.buildCodexReportFromCache(
@@ -2409,6 +2409,19 @@ enum CostUsageScanner {
             modelsDevCatalog: plan.modelsDevCatalog,
             modelsDevCacheRoot: options.cacheRoot,
             priorityTurns: plan.priorityTurns)
+    }
+
+    /// Persists the Codex cost cache, logging (without throwing) when the atomic write fails so a
+    /// transient disk error degrades to a stale-cache warning instead of a silent no-op.
+    private static func persistCodexCacheLoggingFailures(_ cache: CostUsageCache, cacheRoot: URL?) {
+        let saveResult = CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: cacheRoot)
+        guard !saveResult.didSave else { return }
+        Self.log.warning(
+            "Failed to persist Codex cost usage cache",
+            metadata: [
+                "path": saveResult.path,
+                "error": saveResult.message ?? "unknown",
+            ])
     }
 }
 

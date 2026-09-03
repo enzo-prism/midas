@@ -6,9 +6,67 @@ public struct CodexBarConfig: Codable, Sendable {
     public var version: Int
     public var providers: [ProviderConfig]
 
-    public init(version: Int = Self.currentVersion, providers: [ProviderConfig]) {
+    /// Provider entries whose `id` is unknown to this build (written by a newer release).
+    /// Carried opaquely through load/normalize/save so older builds never delete settings
+    /// (including secrets) they don't understand. Unknown entries are appended after known
+    /// providers when saving.
+    public var unknownProviders: [UnknownProviderEntry] = []
+
+    public init(
+        version: Int = Self.currentVersion,
+        providers: [ProviderConfig],
+        unknownProviders: [UnknownProviderEntry] = [])
+    {
         self.version = version
         self.providers = providers
+        self.unknownProviders = unknownProviders
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case providers
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.version = try container.decodeIfPresent(Int.self, forKey: .version) ?? Self.currentVersion
+        // Decode providers lossily: entries for providers this build doesn't know are
+        // preserved as unknown entries instead of failing the whole config.
+        let rawProviders = try container.decodeIfPresent([UnknownProviderEntry.Value].self, forKey: .providers)
+            ?? []
+        let encoder = JSONEncoder()
+        let valueDecoder = JSONDecoder()
+        var providers: [ProviderConfig] = []
+        var unknownProviders: [UnknownProviderEntry] = []
+        for raw in rawProviders {
+            guard case let .object(fields) = raw,
+                  fields["id"] != nil,
+                  let data = try? encoder.encode(raw),
+                  let entry = try? valueDecoder.decode(ProviderConfig.self, from: data)
+            else {
+                if let data = try? encoder.encode(raw),
+                   let entry = try? valueDecoder.decode(UnknownProviderEntry.self, from: data)
+                {
+                    unknownProviders.append(entry)
+                }
+                continue
+            }
+            providers.append(entry)
+        }
+        self.providers = providers
+        self.unknownProviders = unknownProviders
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.version, forKey: .version)
+        var nested = container.nestedUnkeyedContainer(forKey: .providers)
+        for provider in self.providers {
+            try nested.encode(provider)
+        }
+        for entry in self.unknownProviders {
+            try nested.encode(entry)
+        }
     }
 
     public static func makeDefault(
@@ -43,7 +101,8 @@ public struct CodexBarConfig: Codable, Sendable {
 
         return CodexBarConfig(
             version: Self.currentVersion,
-            providers: normalized)
+            providers: normalized,
+            unknownProviders: self.unknownProviders)
     }
 
     public func orderedProviders() -> [UsageProvider] {
@@ -175,6 +234,125 @@ public struct ProviderConfig: Codable, Sendable, Identifiable {
         }
         value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+}
+
+/// A provider entry whose `id` is unknown to this build (written by a newer release).
+/// All other fields are carried opaquely so they round-trip byte-for-byte semantically.
+public struct UnknownProviderEntry: Codable, Sendable, Equatable {
+    public var id: String
+    public var fields: [String: Value]
+
+    public init(id: String, fields: [String: Value] = [:]) {
+        self.id = id
+        self.fields = fields
+    }
+
+    private struct AnyKey: CodingKey {
+        var stringValue: String
+        var intValue: Int?
+
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+            self.intValue = nil
+        }
+
+        init?(intValue: Int) {
+            self.stringValue = "\(intValue)"
+            self.intValue = intValue
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: AnyKey.self)
+        guard let idKey = AnyKey(stringValue: "id") else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Missing provider id."))
+        }
+        self.id = try container.decode(String.self, forKey: idKey)
+        var fields: [String: Value] = [:]
+        for key in container.allKeys where key.stringValue != "id" {
+            fields[key.stringValue] = try container.decode(Value.self, forKey: key)
+        }
+        self.fields = fields
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: AnyKey.self)
+        guard let idKey = AnyKey(stringValue: "id") else { return }
+        try container.encode(self.id, forKey: idKey)
+        for (key, value) in self.fields {
+            guard let codingKey = AnyKey(stringValue: key) else { continue }
+            try container.encode(value, forKey: codingKey)
+        }
+    }
+
+    /// Any JSON value, for losslessly carrying unknown provider fields.
+    public enum Value: Codable, Sendable, Equatable {
+        case null
+        case bool(Bool)
+        case int(Int)
+        case double(Double)
+        case string(String)
+        case array([Value])
+        case object([String: Value])
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if container.decodeNil() {
+                self = .null
+                return
+            }
+            if let value = try? container.decode(Bool.self) {
+                self = .bool(value)
+                return
+            }
+            if let value = try? container.decode(Int.self) {
+                self = .int(value)
+                return
+            }
+            if let value = try? container.decode(Double.self) {
+                self = .double(value)
+                return
+            }
+            if let value = try? container.decode(String.self) {
+                self = .string(value)
+                return
+            }
+            if let value = try? container.decode([Value].self) {
+                self = .array(value)
+                return
+            }
+            if let value = try? container.decode([String: Value].self) {
+                self = .object(value)
+                return
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported JSON value.")
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .null:
+                try container.encodeNil()
+            case let .bool(value):
+                try container.encode(value)
+            case let .int(value):
+                try container.encode(value)
+            case let .double(value):
+                try container.encode(value)
+            case let .string(value):
+                try container.encode(value)
+            case let .array(value):
+                try container.encode(value)
+            case let .object(value):
+                try container.encode(value)
+            }
+        }
     }
 }
 

@@ -31,8 +31,8 @@ public enum CursorProviderDescriptor {
                 iconResourceName: "ProviderIcon-cursor",
                 color: ProviderColor(red: 0 / 255, green: 191 / 255, blue: 165 / 255)),
             tokenCost: ProviderTokenCostConfig(
-                supportsTokenCost: false,
-                noDataMessage: { "Cursor cost summary is not supported." }),
+                supportsTokenCost: true,
+                noDataMessage: { "Cursor spend needs a web session (browser cookies or manual header)." }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .cli],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [CursorStatusFetchStrategy()] })),

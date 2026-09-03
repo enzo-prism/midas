@@ -46,6 +46,13 @@ Project scoping is tied to the configured Admin API key. Selected OpenAI token a
 `OPENAI_PROJECT_ID`/`workspaceID` so one account cannot inherit another account's project filter. Project-scoped Admin
 API failures do not fall back to the legacy billing endpoint, because that endpoint is not project-filtered.
 
+## Cost estimate (`codexbar cost --provider openai`)
+
+Real billed dollars from the Admin API organization spend endpoints (per-day
+tokens + per-model breakdowns), included in the multi-provider TOTAL at face
+value. Needs `OPENAI_ADMIN_KEY`/`OPENAI_API_KEY` or a Settings key; without one
+the command explains how to configure it.
+
 ## Menu display
 
 - Admin API data renders inline Today/7d/configured-window KPIs plus a compact spend chart.

@@ -34,6 +34,12 @@ enum CLIRenderer {
             now: now,
             lines: &lines)
         self.appendTertiaryLines(snapshot: snapshot, labels: labels, context: context, now: now, lines: &lines)
+        self.appendCursorPoolLines(
+            provider: provider,
+            snapshot: snapshot,
+            context: context,
+            now: now,
+            lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendLimitsUnavailableLine(
@@ -277,6 +283,29 @@ enum CLIRenderer {
             context: context,
             now: now,
             lines: &lines)
+    }
+
+    /// Dashboard pool rows (cursor.com/dashboard/usage language): usage-left for the
+    /// Cursor Models pool, the Other Models pool, and the Grok Bot weekly window.
+    private static func appendCursorPoolLines(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        context: RenderContext,
+        now: Date,
+        lines: inout [String])
+    {
+        guard provider == .cursor, let windows = snapshot.extraRateWindows else { return }
+        for id in ["cursor-pool-models", "cursor-pool-other", "cursor-grok-bot"] {
+            guard let named = windows.first(where: { $0.id == id }) else { continue }
+            self.appendRateWindowLines(
+                provider: provider,
+                title: named.title,
+                window: named.window,
+                includePace: false,
+                context: context,
+                now: now,
+                lines: &lines)
+        }
     }
 
     private static func appendResetAndDetailLines(

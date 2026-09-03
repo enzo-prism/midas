@@ -24,7 +24,21 @@ public struct CodexOAuthCredentials: Sendable {
     public var needsRefresh: Bool {
         guard let lastRefresh else { return true }
         let eightDays: TimeInterval = 8 * 24 * 60 * 60
-        return Date().timeIntervalSince(lastRefresh) > eightDays
+        if Date().timeIntervalSince(lastRefresh) > eightDays { return true }
+        // Proactively refresh when the id_token is about to expire (or already has). The id_token's
+        // email/plan claims feed the menu card; without this guard we'd happily serve stale
+        // identity for up to eight days after the upstream claims actually rotated.
+        if let exp = Self.idTokenExpiry(self.idToken) {
+            let oneHour: TimeInterval = 60 * 60
+            if exp.timeIntervalSinceNow <= oneHour { return true }
+        }
+        return false
+    }
+
+    /// Returns the JWT `exp` claim as a `Date`, or `nil` if the token is missing or has no `exp`.
+    public static func idTokenExpiry(_ idToken: String?) -> Date? {
+        guard let idToken else { return nil }
+        return UsageFetcher.parseJWTExp(idToken)
     }
 }
 

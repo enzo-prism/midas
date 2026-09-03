@@ -538,7 +538,11 @@ protocol ModelsDevHTTPTransport: Sendable {
 
 struct URLSessionModelsDevTransport: ModelsDevHTTPTransport {
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await URLSession.shared.data(for: request)
+        // Route through the shared provider HTTP client so we benefit from connection pooling,
+        // HTTP/2 multiplexing, and the cross-origin redirect guard. Previously this called
+        // `URLSession.shared.data` directly, bypassing both the redirect guard and the pooled
+        // session used by every other provider fetcher.
+        try await ProviderHTTPClient.shared.data(for: request)
     }
 }
 

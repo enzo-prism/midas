@@ -737,7 +737,9 @@ extension CodexBarCLI {
 
         let providers = Self.costProviders(from: selection)
         guard !providers.isEmpty else {
-            return Self.serveError(status: .badRequest, message: "cost is only supported for Claude and Codex")
+            return Self.serveError(
+                status: .badRequest,
+                message: "cost is only supported for Claude, Codex, z.ai, Meta, OpenAI, and Cursor")
         }
 
         let fetcher = CostUsageFetcher()

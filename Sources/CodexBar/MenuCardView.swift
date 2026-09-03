@@ -123,9 +123,28 @@ struct UsageMenuCardView: View {
         struct TokenUsageSection {
             let sessionLine: String
             let monthLine: String
+            let meteredLine: String?
             let hintLine: String?
             let errorLine: String?
             let errorCopyText: String?
+
+            /// Explicit initializer so `meteredLine` defaults to nil: callers
+            /// that predate it (and providers that never report it) keep their call sites.
+            init(
+                sessionLine: String,
+                monthLine: String,
+                meteredLine: String? = nil,
+                hintLine: String?,
+                errorLine: String?,
+                errorCopyText: String?)
+            {
+                self.sessionLine = sessionLine
+                self.monthLine = monthLine
+                self.meteredLine = meteredLine
+                self.hintLine = hintLine
+                self.errorLine = errorLine
+                self.errorCopyText = errorCopyText
+            }
         }
 
         struct ProviderCostSection {
@@ -242,6 +261,10 @@ struct UsageMenuCardView: View {
                                 .font(.footnote)
                             Text(tokenUsage.monthLine)
                                 .font(.footnote)
+                            if let metered = tokenUsage.meteredLine, !metered.isEmpty {
+                                Text(metered)
+                                    .font(.footnote)
+                            }
                             if let hint = tokenUsage.hintLine, !hint.isEmpty {
                                 Text(hint)
                                     .font(.footnote)
@@ -856,7 +879,8 @@ extension UsageMenuCardView.Model {
         let openAIAPIUsage = input.snapshot?.openAIAPIUsage
         let inlineUsageDashboard = Self.inlineUsageDashboard(input: input)
         let usageNotes = Self.usageNotes(input: input)
-        let rawCreditsText: String? = if input.provider == .openrouter {
+        // The Codex tab never shows credits: subscription plans don't use them.
+        let rawCreditsText: String? = if input.provider == .openrouter || input.provider == .codex {
             nil
         } else if input.codexProjection != nil, !input.showOptionalCreditsAndExtraUsage {
             nil
@@ -1197,7 +1221,9 @@ extension UsageMenuCardView.Model {
                 input: input,
                 projection: codexProjection,
                 percentStyle: percentStyle))
-        } else if let primary = snapshot.primary {
+        } else if input.provider != .meta, let primary = snapshot.primary {
+            // Meta skips window rows: its card is the 30-day API usage + costs
+            // below, and 0% window bars duplicate that story with less context.
             metrics.append(Self.primaryMetric(
                 input: input,
                 primary: primary,
@@ -1206,7 +1232,7 @@ extension UsageMenuCardView.Model {
                 zaiTokenDetail: zaiTokenDetail,
                 openRouterQuotaDetail: openRouterQuotaDetail))
         }
-        if input.provider != .codex, let weekly = snapshot.secondary {
+        if input.provider != .codex, input.provider != .meta, let weekly = snapshot.secondary {
             metrics.append(Self.secondaryMetric(
                 input: input,
                 weekly: weekly,
@@ -1262,26 +1288,6 @@ extension UsageMenuCardView.Model {
             }
         }
 
-        if let codexProjection = input.codexProjection,
-           codexProjection.supplementalMetrics.contains(.codeReview),
-           let remaining = codexProjection.remainingPercent(for: .codeReview)
-        {
-            let percent = input.usageBarsShowUsed ? (100 - remaining) : remaining
-            let resetText = codexProjection.limitWindow(for: .codeReview).flatMap {
-                Self.resetText(for: $0, style: input.resetTimeDisplayStyle, now: input.now)
-            }
-            metrics.append(Metric(
-                id: "code-review",
-                title: L("Code review"),
-                percent: Self.clamped(percent),
-                percentStyle: percentStyle,
-                resetText: resetText,
-                detailText: nil,
-                detailLeftText: nil,
-                detailRightText: nil,
-                pacePercent: nil,
-                paceOnTop: true))
-        }
         return metrics
     }
 
@@ -1591,7 +1597,7 @@ extension UsageMenuCardView.Model {
                 percent: Self.clamped(input.usageBarsShowUsed ? window.usedPercent : window.remainingPercent),
                 percentStyle: percentStyle,
                 resetText: Self.resetText(for: window, style: input.resetTimeDisplayStyle, now: input.now),
-                detailText: nil,
+                detailText: projection.limitProximityDetail(for: lane, showUsed: input.usageBarsShowUsed),
                 detailLeftText: paceDetail?.leftLabel,
                 detailRightText: paceDetail?.rightLabel,
                 pacePercent: paceDetail?.pacePercent,

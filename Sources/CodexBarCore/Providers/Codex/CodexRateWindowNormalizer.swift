@@ -42,14 +42,13 @@ enum CodexRateWindowNormalizer {
     }
 
     private static func role(for window: RateWindow) -> WindowRole {
-        switch window.windowMinutes {
-        case 300:
-            .session
-        case 10080:
-            .weekly
-        default:
-            .unknown
+        if CodexRateWindowDurations.isSession(windowMinutes: window.windowMinutes) {
+            return .session
         }
+        if CodexRateWindowDurations.isWeekly(windowMinutes: window.windowMinutes) {
+            return .weekly
+        }
+        return .unknown
     }
 }
 

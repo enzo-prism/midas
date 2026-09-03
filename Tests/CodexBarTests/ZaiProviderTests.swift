@@ -234,6 +234,152 @@ struct ZaiUsageParsingTests {
     }
 
     @Test
+    func `epoch helper keeps milliseconds and promotes seconds`() {
+        // A millisecond stamp (today's payload shape) is divided down to seconds.
+        let fromMillis = ZaiEpoch.date(fromMillisOrSeconds: 1_768_507_567_547)
+        #expect(abs(fromMillis.timeIntervalSince1970 - 1_768_507_567.547) < 0.001)
+
+        // The same instant expressed in seconds must not be divided again (would land near 1970).
+        let fromSeconds = ZaiEpoch.date(fromMillisOrSeconds: 1_768_507_567)
+        #expect(abs(fromSeconds.timeIntervalSince1970 - 1_768_507_567) < 0.001)
+
+        // Both interpretations resolve to the same calendar day, not the epoch.
+        #expect(abs(fromMillis.timeIntervalSince1970 - fromSeconds.timeIntervalSince1970) < 1)
+    }
+
+    @Test
+    func `parses second-based reset stamp without collapsing to 1970`() throws {
+        // Same row as `parses usage response`, but nextResetTime arrives in seconds.
+        let json = """
+        {
+          "code": 200,
+          "msg": "Operation successful",
+          "data": {
+            "limits": [
+              {
+                "type": "TOKENS_LIMIT",
+                "unit": 3,
+                "number": 5,
+                "usage": 40000000,
+                "currentValue": 13628365,
+                "remaining": 26371635,
+                "percentage": 34,
+                "nextResetTime": 1768507567
+              }
+            ],
+            "planName": "Pro"
+          },
+          "success": true
+        }
+        """
+
+        let snapshot = try ZaiUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+        let reset = try #require(snapshot.tokenLimit?.nextResetTime)
+        // 2026-01-15, not 1970. Guards against the unconditional /1000 regression.
+        #expect(abs(reset.timeIntervalSince1970 - 1_768_507_567) < 0.001)
+    }
+
+    @Test
+    func `parses millisecond reset stamp to the same instant`() throws {
+        let json = """
+        {
+          "code": 200,
+          "msg": "Operation successful",
+          "data": {
+            "limits": [
+              {
+                "type": "TOKENS_LIMIT",
+                "unit": 3,
+                "number": 5,
+                "usage": 40000000,
+                "currentValue": 13628365,
+                "remaining": 26371635,
+                "percentage": 34,
+                "nextResetTime": 1768507567547
+              }
+            ]
+          },
+          "success": true
+        }
+        """
+
+        let snapshot = try ZaiUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+        let reset = try #require(snapshot.tokenLimit?.nextResetTime)
+        #expect(abs(reset.timeIntervalSince1970 - 1_768_507_567.547) < 0.001)
+    }
+
+    @Test
+    func `parses live pro plan response with level field and percentage-only limits`() throws {
+        // Captured verbatim from the live z.ai quota API: the tier arrives as lowercase `level`
+        // (not planName/plan/plan_type/packageName) and the token limits carry only a percentage.
+        let json = """
+        {
+          "code": 200,
+          "msg": "Operation successful",
+          "data": {
+            "limits": [
+              { "type": "TOKENS_LIMIT", "unit": 3, "number": 5, "percentage": 8, "nextResetTime": 1781763754883 },
+              { "type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 1, "nextResetTime": 1782350502980 },
+              {
+                "type": "TIME_LIMIT", "unit": 5, "number": 1,
+                "usage": 1000, "currentValue": 0, "remaining": 1000, "percentage": 0,
+                "nextResetTime": 1784337702976,
+                "usageDetails": [ { "modelCode": "search-prime", "usage": 0 } ]
+              }
+            ],
+            "level": "pro"
+          },
+          "success": true
+        }
+        """
+
+        let snapshot = try ZaiUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+
+        // `level: "pro"` must surface as a capitalized plan, not be dropped.
+        #expect(snapshot.planName == "Pro")
+        // Longest window (1 week) is primary; shortest (5 hour) is the session/tertiary slot.
+        #expect(snapshot.tokenLimit?.windowMinutes == 7 * 24 * 60)
+        #expect(snapshot.tokenLimit?.usedPercent == 1.0)
+        #expect(snapshot.sessionTokenLimit?.windowMinutes == 5 * 60)
+        #expect(snapshot.sessionTokenLimit?.usedPercent == 8.0)
+        #expect(snapshot.timeLimit?.isMCPMonthlyMarker == true)
+
+        let usage = snapshot.toUsageSnapshot()
+        #expect(usage.identity?.loginMethod == "Pro")
+    }
+
+    @Test
+    func `parses string and decimal numeric fields`() throws {
+        let json = """
+        {
+          "code": 200,
+          "msg": "Operation successful",
+          "data": {
+            "limits": [
+              {
+                "type": "TOKENS_LIMIT",
+                "unit": "3",
+                "number": "5",
+                "percentage": "25.5",
+                "nextResetTime": "1768507567547"
+              }
+            ],
+            "level": "pro"
+          },
+          "success": true
+        }
+        """
+
+        let snapshot = try ZaiUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+        let reset = try #require(snapshot.tokenLimit?.nextResetTime)
+
+        #expect(snapshot.tokenLimit?.unit == .hours)
+        #expect(snapshot.tokenLimit?.number == 5)
+        #expect(snapshot.tokenLimit?.usedPercent == 25.5)
+        #expect(abs(reset.timeIntervalSince1970 - 1_768_507_567.547) < 0.001)
+    }
+
+    @Test
     func `zai mcp time limit displays monthly instead of one minute window`() throws {
         let json = """
         {
@@ -389,6 +535,32 @@ struct ZaiHourlyUsageTests {
         #expect(usage.modelNames == ["glm-4.6", "glm-4.5"])
         #expect(usage.modelDataList[0].tokensUsage == [100, nil])
         #expect(usage.modelDataList[1].tokensUsage == [50, 25])
+    }
+
+    @Test
+    func `model usage parser accepts alternate keys and flexible token counts`() throws {
+        let json = """
+        {
+          "code": 200,
+          "msg": "success",
+          "success": true,
+          "data": {
+            "xTime": ["2026-05-14 08:00:00", "2026-05-14 09:00:00"],
+            "model_data_list": [
+              { "model_name": "glm-4.6", "tokens_usage": ["100", null] },
+              { "modelCode": "search-prime", "tokenUsage": [50.0, "25"] }
+            ]
+          }
+        }
+        """
+
+        let usage = try ZaiUsageFetcher.parseModelUsage(from: Data(json.utf8))
+
+        #expect(usage.xTime == ["2026-05-14 08:00:00", "2026-05-14 09:00:00"])
+        #expect(usage.modelNames == ["glm-4.6", "search-prime"])
+        #expect(usage.modelDataList[0].tokensUsage == [100, nil])
+        #expect(usage.modelDataList[1].tokensUsage == [50, 25])
+        #expect(ZaiHourlyBars.parseHourDate("2026-05-14 08:00:00") != nil)
     }
 
     @Test
@@ -610,5 +782,14 @@ struct ZaiAPIRegionTests {
         let env = [ZaiSettingsReader.apiHostKey: "open.bigmodel.cn"]
         let url = ZaiUsageFetcher.resolveQuotaURL(region: .global, environment: env)
         #expect(url.absoluteString == "https://open.bigmodel.cn/api/monitor/usage/quota/limit")
+    }
+}
+
+struct ZaiDescriptorTests {
+    @Test
+    func `descriptor opts in to token cost`() {
+        // z.ai cost is an estimate priced from token counts; the descriptor must opt in so the
+        // cost card / inline dashboard plumbing activates.
+        #expect(ProviderDescriptorRegistry.descriptor(for: .zai).tokenCost.supportsTokenCost)
     }
 }

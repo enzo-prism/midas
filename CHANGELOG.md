@@ -3,6 +3,14 @@
 ## 0.33.1 — Unreleased
 
 ### Added
+- Meta: add Muse Code usage tracking from local `muse` session logs (menu-bar today + 7-day tokens, widget support, provider debug log, per-day history via `codexbar cost --provider meta`), with optional `META_API_KEY` reserved for the Meta Model API. Enable via Settings → Providers → Meta.
+- Meta: price the 30-day token graphic in contributor dollars with the standard-API equivalent alongside (contributor $0.10/$0.20, standard $1.25/$4.25 per 1M in/out), and count Meta at the standard equivalent in the multi-provider `cost` TOTAL line.
+- OpenAI: add `cost --provider openai` backed by the Admin API organization spend endpoints (real billed $, per-day tokens + models), included in the multi-provider TOTAL. Needs `OPENAI_ADMIN_KEY`/`OPENAI_API_KEY` or a Settings key; without one it explains how to configure it.
+- Cursor: add `cost --provider cursor` showing current billing-cycle spend in real billed dollars (plan + on-demand + bot, with breakdowns), included in the multi-provider TOTAL at face value. Requires a Cursor web session; explains how to enable it when cookies are off.
+- Cursor: show usage-left rows for the Cursor Models pool, Other Models pool, and Grok Bot weekly window (dashboard endpoints), in the menu card and `codexbar usage`.
+- Meta: simplify the menu card to the 30-day API usage + costs (contributor and standard-equivalent); drop the Today/7-day window rows. Use the official Meta loop artwork for the provider icon.
+- Config: tolerate provider entries written by newer releases instead of rejecting the whole file, carrying unknown entries (including secrets) opaquely across load/save so older builds never delete settings they don't understand.
+- Z.ai: add an opt-in **estimated cost** view (inline 30-day chart + "Cost (30d)" submenu + `codexbar cost --provider zai`), priced from token counts × public GLM rates, since z.ai exposes no billing API. Enable via Settings → Providers → z.ai → Show estimated cost.
 - Localization: add native Korean language support across the app and language picker (#1460). Thanks @soohanpark!
 - Localization: add German as a selectable app language (#1245). Thanks @Yuxin-Qiao!
 - Devin: add daily and weekly quota tracking from the signed-in Chrome session or a manual Bearer token (#1264, fixes #800). Thanks @coygeek!
@@ -12,6 +20,10 @@
 - Menu bar: move the highlighted Overview provider with trackpad or mouse-wheel scrolling while preserving native submenu and keyboard behavior (#1436). Thanks @joshuavial!
 
 ### Fixed
+- Widget: skip snapshot writes and widget timeline reloads when the rendered content is unchanged, so idle refresh cycles no longer wake the widget extension; unchanged data still re-persists every 15 minutes to keep the relative freshness label honest.
+- Logging: default the app log level to Info instead of Verbose so hot paths (fetch pipeline, icon passes, webview events) no longer pay for eagerly formatted diagnostic strings; Verbose remains selectable in settings.
+- Z.ai: read the subscription tier from the quota API's `level` field (e.g. `pro`) so the plan shows in the menu instead of being blank; the live API uses `level` rather than the previously expected `planName`/`plan` keys.
+- Z.ai: interpret the quota `nextResetTime` as milliseconds or seconds with the same threshold the other providers use, so a seconds-based reset stamp no longer collapses the displayed reset time back to 1970.
 - Settings: slightly increase the window height so standard panes fit without clipping their final controls or helper text.
 - Menu bar: show immediate in-place feedback for manual refreshes, keep tracked-menu geometry stable, and coalesce repeated clicks until the active refresh succeeds or fails (#1458). Thanks @hhh2210!
 - Grok: recover web billing from status-7 credential failures by combining current browser sessions with non-expired CLI auth, accept raw protobuf responses, and render current zero-use periods (#1452). Thanks @bcharleson!

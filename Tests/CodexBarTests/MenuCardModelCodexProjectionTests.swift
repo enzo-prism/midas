@@ -478,11 +478,11 @@ struct MenuCardModelCodexProjectionTests {
         #expect(model.metrics.first?.title == "Session")
         #expect(model.metrics.first?.percent == 22)
         #expect(model.metrics.first?.percentLabel.contains("used") == true)
-        #expect(model.metrics.contains { $0.title == "Code review" && $0.percent == 27 })
+        #expect(!model.metrics.contains { $0.title == "Code review" })
     }
 
     @Test
-    func `shows code review metric when dashboard present`() throws {
+    func `omits code review metric when dashboard present`() throws {
         let now = Date()
         let identity = ProviderIdentitySnapshot(
             providerID: .codex,
@@ -542,9 +542,8 @@ struct MenuCardModelCodexProjectionTests {
             hidePersonalInfo: false,
             now: now))
 
-        #expect(model.metrics.contains { $0.title == "Code review" && $0.percent == 73 })
-        let codeReviewMetric = model.metrics.first { $0.id == "code-review" }
-        #expect(codeReviewMetric?.resetText?.contains("Resets") == true)
+        #expect(!model.metrics.contains { $0.title == "Code review" })
+        #expect(!model.metrics.contains { $0.id == "code-review" })
     }
 
     @Test

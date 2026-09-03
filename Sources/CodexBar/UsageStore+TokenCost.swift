@@ -44,6 +44,28 @@ extension UsageStore {
         }
     }
 
+    func scheduleCostUsageCacheMaintenance() {
+        self.costUsageCacheMaintenanceTask?.cancel()
+        let logger = self.tokenCostLogger
+        self.costUsageCacheMaintenanceTask = Task.detached(priority: .utility) {
+            let result = CostUsageCacheMaintenance.pruneStaleArtifacts()
+            if !result.failedRemovals.isEmpty {
+                logger.warning(
+                    "Cost usage cache maintenance had removal failures",
+                    metadata: [
+                        "failures": "\(result.failedRemovals.count)",
+                    ])
+            }
+            if !result.removedPaths.isEmpty {
+                logger.info(
+                    "Cost usage cache maintenance pruned stale artifacts",
+                    metadata: [
+                        "removed": "\(result.removedPaths.count)",
+                    ])
+            }
+        }
+    }
+
     func isTokenRefreshInFlight(for provider: UsageProvider) -> Bool {
         self.tokenRefreshInFlight.contains(provider)
     }

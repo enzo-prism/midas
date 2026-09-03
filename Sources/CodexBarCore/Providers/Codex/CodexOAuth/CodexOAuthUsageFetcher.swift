@@ -251,7 +251,11 @@ public enum CodexOAuthUsageFetcher {
         }
 
         do {
-            let response = try await ProviderHTTPClient.shared.response(for: request)
+            // `wham/usage` is an idempotent GET; a single transient 429/5xx should not push us
+            // onto the heavy CLI fallback path. Mirror the OpenAI Admin API's retry posture.
+            let response = try await ProviderHTTPClient.shared.response(
+                for: request,
+                retryPolicy: .transientIdempotent)
             let data = response.data
 
             switch response.statusCode {

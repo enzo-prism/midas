@@ -275,7 +275,8 @@ ensure_widget_extension_project() {
   local spec="$ROOT/WidgetExtension/project.yml"
   local project_dir="$ROOT/WidgetExtension/CodexBarWidgetExtension.xcodeproj"
   if command -v xcodegen >/dev/null 2>&1; then
-    xcodegen generate --spec "$spec" --project "$ROOT/WidgetExtension" --quiet
+    # Keep generated-project chatter on stderr: build_widget_extension captures stdout as the .appex path.
+    xcodegen generate --spec "$spec" --project "$ROOT/WidgetExtension" --quiet >&2
   elif [[ ! -f "$project_dir/project.pbxproj" ]]; then
     echo "ERROR: Missing ${project_dir}; install xcodegen or restore the generated project." >&2
     exit 1

@@ -57,6 +57,96 @@ enum CostUsagePricing {
         let cacheReadInputCostPerTokenAboveThreshold: Double?
     }
 
+    /// z.ai cost is an *estimate*: the z.ai model-usage API exposes aggregate per-model token
+    /// counts (no input/output split, no real billing). We price each model with a single blended
+    /// USD-per-token rate derived from public z.ai/Zhipu list pricing. Built-ins are a fallback;
+    /// models.dev (provider id `zai`) wins when available so rates stay current.
+    struct ZaiPricing {
+        let costPerToken: Double
+        let displayLabel: String?
+    }
+
+    /// Which Meta Model API tier priced a bucket of Muse tokens.
+    enum MetaPricingTier: String, Sendable {
+        case contributor
+        case standard
+    }
+
+    /// Meta (Muse Spark) USD-per-token rates, from Meta's public Model API pricing.
+    ///
+    /// Contributor tier (data-sharing consent): $0.10/M input, $0.20/M output,
+    /// $0.002/M cached input. Standard tier: $1.25/M input, $4.25/M output,
+    /// $0.15/M cached input. Reasoning tokens bill at the output rate.
+    /// Verify against https://dev.meta.ai/docs before tightening.
+    struct MetaPricing: Sendable, Equatable {
+        let inputCostPerToken: Double
+        let outputCostPerToken: Double
+        let cacheReadInputCostPerToken: Double
+        let tier: MetaPricingTier
+        let displayLabel: String
+
+        static let contributor = MetaPricing(
+            inputCostPerToken: 1.0e-7,
+            outputCostPerToken: 2.0e-7,
+            cacheReadInputCostPerToken: 2.0e-9,
+            tier: .contributor,
+            displayLabel: "Contributor $0.10/$0.20 per 1M in/out")
+
+        static let standard = MetaPricing(
+            inputCostPerToken: 1.25e-6,
+            outputCostPerToken: 4.25e-6,
+            cacheReadInputCostPerToken: 1.5e-7,
+            tier: .standard,
+            displayLabel: "Standard $1.25/$4.25 per 1M in/out")
+    }
+
+    /// Classifies one Muse model id into a pricing tier. Contributor builds carry
+    /// "contributor" in the name (e.g. `muse-spark-1.3-contributor`); other Muse
+    /// models price at the standard tier. Unknown models return nil (unpriced).
+    static func metaPricingTier(forModel raw: String) -> MetaPricingTier? {
+        let model = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !model.isEmpty else { return nil }
+        if model.contains("contributor") {
+            return .contributor
+        }
+        if model.contains("muse-spark") || model.contains("muse") {
+            return .standard
+        }
+        return nil
+    }
+
+    /// Tier for a day's model mix. Prices only when every reported model agrees;
+    /// mixed or unknown mixes return nil so estimates never silently misattribute.
+    static func metaPricingTier(forModels models: [String]) -> MetaPricingTier? {
+        let tiers = models.compactMap { self.metaPricingTier(forModel: $0) }
+        guard !models.isEmpty, tiers.count == models.count else { return nil }
+        guard let first = tiers.first, tiers.allSatisfy({ $0 == first }) else { return nil }
+        return first
+    }
+
+    static func metaPricing(for tier: MetaPricingTier) -> MetaPricing {
+        switch tier {
+        case .contributor:
+            .contributor
+        case .standard:
+            .standard
+        }
+    }
+
+    /// USD cost for token buckets at a Meta tier. Reasoning bills at output rate.
+    static func metaCost(
+        inputTokens: Int,
+        outputTokens: Int,
+        reasoningTokens: Int,
+        cacheReadTokens: Int,
+        tier: MetaPricingTier) -> Double
+    {
+        let pricing = self.metaPricing(for: tier)
+        return Double(max(0, inputTokens)) * pricing.inputCostPerToken
+            + Double(max(0, outputTokens + reasoningTokens)) * pricing.outputCostPerToken
+            + Double(max(0, cacheReadTokens)) * pricing.cacheReadInputCostPerToken
+    }
+
     private struct ClaudeCostTokens {
         let input: Int
         let cacheRead: Int
@@ -389,8 +479,44 @@ enum CostUsagePricing {
             cacheReadInputCostPerTokenAboveThreshold: 6e-7),
     ]
 
+    /// Blended USD-per-token rates for z.ai/Zhipu GLM models.
+    ///
+    /// Values are approximate, computed from z.ai's public USD list prices (roughly a 75/25
+    /// input/output token mix typical of agentic coding traffic). Free tier models are priced 0.
+    /// Verify against https://z.ai/pricing or https://open.bigmodel.cn/pricing before tightening;
+    /// the `zaiBuiltInPricingFingerprint` + models.dev upstream path handle corrections.
+    private static let zai: [String: ZaiPricing] = [
+        "glm-4.6": ZaiPricing(costPerToken: 1.0e-6, displayLabel: nil),
+        "glm-4-6": ZaiPricing(costPerToken: 1.0e-6, displayLabel: nil),
+        "glm-4.5": ZaiPricing(costPerToken: 1.0e-6, displayLabel: nil),
+        "glm-4-5": ZaiPricing(costPerToken: 1.0e-6, displayLabel: nil),
+        "glm-4.5-air": ZaiPricing(costPerToken: 2.0e-7, displayLabel: nil),
+        "glm-4-5-air": ZaiPricing(costPerToken: 2.0e-7, displayLabel: nil),
+        "glm-4-plus": ZaiPricing(costPerToken: 7.0e-7, displayLabel: nil),
+        "glm-4-air": ZaiPricing(costPerToken: 1.0e-7, displayLabel: nil),
+        "glm-4-long": ZaiPricing(costPerToken: 1.0e-7, displayLabel: nil),
+        "glm-4v": ZaiPricing(costPerToken: 7.0e-7, displayLabel: nil),
+        "glm-4v-flash": ZaiPricing(costPerToken: 0, displayLabel: "Free"),
+        "glm-4-flash": ZaiPricing(costPerToken: 0, displayLabel: "Free"),
+        "glm-4-flashx": ZaiPricing(costPerToken: 0, displayLabel: "Free"),
+    ]
+
+    static func zaiBuiltInPricingFingerprint() -> String {
+        var parts: [String] = []
+        for model in self.zai.keys.sorted() {
+            guard let pricing = self.zai[model] else { continue }
+            parts.append([
+                "model=\(model)",
+                self.optionalPricingFingerprint(pricing.costPerToken),
+                pricing.displayLabel ?? "nil",
+            ].joined(separator: "|"))
+        }
+        return parts.joined(separator: "\n")
+    }
+
     private static let codexModelsDevProviderID = "openai"
     private static let claudeModelsDevProviderID = "anthropic"
+    private static let zaiModelsDevProviderID = "zai"
 
     static func normalizeCodexModel(_ raw: String) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -414,6 +540,37 @@ enum CostUsagePricing {
     static func codexDisplayLabel(model: String) -> String? {
         let key = self.normalizeCodexModel(model)
         return self.codex[key]?.displayLabel
+    }
+
+    static func zaiDisplayLabel(model: String) -> String? {
+        let key = self.normalizeZaiModel(model)
+        return self.zai[key]?.displayLabel
+    }
+
+    /// Normalizes a z.ai/Zhipu model id to a built-in table key.
+    /// Handles `zhipu/`, `zai/` prefixes and dated snapshot suffixes. The table lists both
+    /// dot and dash variants (e.g. `glm-4.6` and `glm-4-6`), so no separator swapping is needed.
+    static func normalizeZaiModel(_ raw: String) -> String {
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("zhipu/") {
+            trimmed = String(trimmed.dropFirst("zhipu/".count))
+        } else if trimmed.lowercased().hasPrefix("zai/") {
+            trimmed = String(trimmed.dropFirst("zai/".count))
+        }
+
+        if self.zai[trimmed] != nil {
+            return trimmed
+        }
+
+        // Snapshot/dated suffixes, e.g. glm-4.6-20260101.
+        if let datedSuffix = trimmed.range(of: #"-\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) {
+            let base = String(trimmed[..<datedSuffix.lowerBound])
+            if self.zai[base] != nil {
+                return base
+            }
+        }
+
+        return trimmed
     }
 
     static func normalizeClaudeModel(_ raw: String) -> String {
@@ -648,6 +805,32 @@ enum CostUsagePricing {
 
     static func modelsDevCatalog(now: Date = Date(), cacheRoot: URL? = nil) -> ModelsDevCatalog? {
         ModelsDevCache.load(now: now, cacheRoot: cacheRoot).artifact?.catalog
+    }
+
+    /// Estimated z.ai cost from aggregate per-model token counts.
+    ///
+    /// z.ai's model-usage API exposes only total tokens per model (no input/output split), so the
+    /// estimate uses a single blended USD-per-token rate. Returns `nil` for unknown models so
+    /// callers do not invent cost; free models return `0`.
+    static func zaiCostUSD(
+        model: String,
+        totalTokens: Int,
+        modelsDevCatalog: ModelsDevCatalog? = nil,
+        modelsDevCacheRoot: URL? = nil) -> Double?
+    {
+        if let lookup = self.modelsDevLookup(
+            providerID: self.zaiModelsDevProviderID,
+            model: model,
+            catalog: modelsDevCatalog,
+            cacheRoot: modelsDevCacheRoot)
+        {
+            let blendedPerToken = (lookup.pricing.inputCostPerToken + lookup.pricing.outputCostPerToken) / 2
+            return Double(max(0, totalTokens)) * blendedPerToken
+        }
+
+        let key = self.normalizeZaiModel(model)
+        guard let pricing = self.zai[key] else { return nil }
+        return Double(max(0, totalTokens)) * pricing.costPerToken
     }
 
     private static func modelsDevLookup(

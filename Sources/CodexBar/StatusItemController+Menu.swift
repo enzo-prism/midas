@@ -532,6 +532,23 @@ extension StatusItemController {
         let t0 = CACurrentMediaTime()
         defer { self.logChartRenderDurationIfSlow("addOverviewRows(\(rows.count))", startedAt: t0) }
 
+        if let spendSummary = self.overviewSpendSummary(providers: overviewProviders) {
+            let fingerprint = [
+                "section=overview-spend",
+                "spend=\(spendSummary.primarySpendText)",
+                "coverage=\(spendSummary.providerCoverageText)",
+                "tokens=\(spendSummary.tokenText ?? "")",
+                "comparison=\(spendSummary.comparison?.text ?? "")",
+            ].joined(separator: "|")
+            menu.addItem(self.makeMenuCardItem(
+                OverviewSpendSummaryCardView(summary: spendSummary, width: menuWidth),
+                id: "overviewSpend",
+                width: menuWidth,
+                heightCacheScope: "overview",
+                heightCacheFingerprint: fingerprint))
+            menu.addItem(.separator())
+        }
+
         for (index, row) in rows.enumerated() {
             let identifier = "\(Self.overviewRowIdentifierPrefix)\(row.provider.rawValue)"
             let storageText = self.store.storageFootprintText(for: row.provider)
@@ -637,7 +654,7 @@ extension StatusItemController {
         if self.addStorageMenuCardSection(to: menu, provider: context.currentProvider, width: context.menuWidth) {
             menu.addItem(.separator())
         }
-        if context.openAIContext.canShowBuyCredits {
+        if context.openAIContext.canShowBuyCredits, context.currentProvider != .codex {
             menu.addItem(self.makeBuyCreditsItem())
         }
         menu.addItem(.separator())
@@ -1293,7 +1310,7 @@ extension StatusItemController {
                 heightCacheScope: provider.rawValue,
                 heightCacheFingerprint: model.heightFingerprint(section: "credits"),
                 submenu: creditsSubmenu))
-            if webItems.canShowBuyCredits {
+            if webItems.canShowBuyCredits, provider != .codex {
                 menu.addItem(self.makeBuyCreditsItem())
             }
         }

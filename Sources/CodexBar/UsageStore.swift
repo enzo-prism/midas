@@ -17,6 +17,8 @@ extension UsageStore {
         _ = self.codexAccountSnapshots
         _ = self.kiloScopeSnapshots
         _ = self.tokenSnapshots
+        _ = self.priorSpendTotals
+        _ = self.priorSpendFullWindow
         _ = self.tokenErrors
         _ = self.tokenRefreshInFlight
         _ = self.credits
@@ -139,6 +141,8 @@ final class UsageStore {
     var codexAccountSnapshots: [CodexAccountUsageSnapshot] = []
     var kiloScopeSnapshots: [KiloScopeSnapshot] = []
     var tokenSnapshots: [UsageProvider: CostUsageTokenSnapshot] = [:]
+    var priorSpendTotals: [UsageProvider: [String: Double]] = [:]
+    var priorSpendFullWindow: [UsageProvider: Bool] = [:]
     var tokenErrors: [UsageProvider: String] = [:]
     var tokenRefreshInFlight: Set<UsageProvider> = []
     var credits: CreditsSnapshot?
@@ -199,6 +203,9 @@ final class UsageStore {
         TimeInterval) async throws -> OpenAIDashboardSnapshot)?
     @ObservationIgnored var _test_codexCreditsLoaderOverride: (@MainActor () async throws -> CreditsSnapshot)?
     @ObservationIgnored var _test_widgetSnapshotSaveOverride: (@MainActor (WidgetSnapshot) async -> Void)?
+    @ObservationIgnored var _test_widgetSnapshotSaveResultOverride: (@MainActor (
+        WidgetSnapshot) async -> WidgetSnapshotStore.SaveResult)?
+    @ObservationIgnored var _test_widgetTimelineReloadOverride: (@MainActor () -> Void)?
     @ObservationIgnored var _test_providerRefreshOverride: (@MainActor (UsageProvider) async -> Void)?
     @ObservationIgnored var _test_tokenUsageRefreshOverride: (@MainActor (UsageProvider, Bool) async -> Void)?
     @ObservationIgnored var _test_providerStatusFetchOverride: (@MainActor (
@@ -207,6 +214,9 @@ final class UsageStore {
     @ObservationIgnored var _test_startupConnectivityRetrySleepOverride: (@MainActor (
         TimeInterval) async throws -> Void)?
     @ObservationIgnored var widgetSnapshotPersistTask: Task<Void, Never>?
+    @ObservationIgnored var lastScheduledWidgetSnapshot: WidgetSnapshot?
+    @ObservationIgnored var pendingForcedRefreshAfterCurrentRefresh = false
+    @ObservationIgnored var pendingForcedRefreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     @ObservationIgnored let codexFetcher: UsageFetcher
     @ObservationIgnored let claudeFetcher: any ClaudeUsageFetching
@@ -218,10 +228,13 @@ final class UsageStore {
     @ObservationIgnored private let sessionQuotaNotifier: any SessionQuotaNotifying
     @ObservationIgnored private let sessionQuotaLogger = CodexBarLog.logger(LogCategories.sessionQuota)
     @ObservationIgnored let openAIWebLogger = CodexBarLog.logger(LogCategories.openAIWeb)
-    @ObservationIgnored private let tokenCostLogger = CodexBarLog.logger(LogCategories.tokenCost)
+    @ObservationIgnored let tokenCostLogger = CodexBarLog.logger(LogCategories.tokenCost)
     @ObservationIgnored let augmentLogger = CodexBarLog.logger(LogCategories.augment)
     @ObservationIgnored let providerLogger = CodexBarLog.logger(LogCategories.providers)
     @ObservationIgnored var openAIWebDebugLines: [String] = []
+    /// Debounce task for `openAIDashboardCookieImportDebugLog` flushes. Lives on `UsageStore`
+    /// because extensions can't declare stored properties.
+    @ObservationIgnored var openAIDashboardDebugLogFlushTask: Task<Void, Never>?
     @ObservationIgnored var failureGates: [UsageProvider: ConsecutiveFailureGate] = [:]
     @ObservationIgnored var tokenFailureGates: [UsageProvider: ConsecutiveFailureGate] = [:]
     @ObservationIgnored var providerSpecs: [UsageProvider: ProviderSpec] = [:]
@@ -234,9 +247,18 @@ final class UsageStore {
     @ObservationIgnored var providerRefreshCounts: [UsageProvider: Int] = [:]
     @ObservationIgnored private var providerAvailabilityCache: [UsageProvider: ProviderAvailabilityCacheEntry] = [:]
     @ObservationIgnored var accountInfoCache: [UsageProvider: AccountInfoCacheEntry] = [:]
-    @ObservationIgnored private var timerTask: Task<Void, Never>?
-    @ObservationIgnored private var tokenTimerTask: Task<Void, Never>?
-    @ObservationIgnored private var tokenRefreshSequenceTask: Task<Void, Never>?
+
+    // Cache for `enabledProvidersForDisplay()`. The result depends only on
+    // `settings.configRevision` (which bumps on every provider enablement/order change), so we
+    // memoize the array on that revision and short-circuit the per-tick iteration of
+    // `orderedProviders()` + `filter`. Critical for blink/animation loops that previously walked
+    // all 35+ providers every 75ms.
+    @ObservationIgnored private var enabledProvidersForDisplayCache: (revision: Int, providers: [UsageProvider])?
+    @ObservationIgnored private var enabledProvidersForRefreshCache: (revision: Int, providers: [UsageProvider])?
+    @ObservationIgnored var timerTask: Task<Void, Never>?
+    @ObservationIgnored var tokenTimerTask: Task<Void, Never>?
+    @ObservationIgnored var tokenRefreshSequenceTask: Task<Void, Never>?
+    @ObservationIgnored var costUsageCacheMaintenanceTask: Task<Void, Never>?
     @ObservationIgnored var memoryPressureReliefTask: Task<Void, Never>?
     @ObservationIgnored var startupConnectivityRetryTask: Task<Void, Never>?
     @ObservationIgnored var startupConnectivityRetryNeeded = false
@@ -254,6 +276,7 @@ final class UsageStore {
     @ObservationIgnored let historicalUsageHistoryStore: HistoricalUsageHistoryStore
     @ObservationIgnored let planUtilizationHistoryStore: PlanUtilizationHistoryStore
     @ObservationIgnored let codexAccountUsageSnapshotStore: (any CodexAccountUsageSnapshotStoring)?
+    @ObservationIgnored let zaiSnapshotStore: (any ZaiSnapshotStoring)?
     @ObservationIgnored var codexHistoricalDataset: CodexHistoricalDataset?
     @ObservationIgnored var codexHistoricalDatasetAccountKey: String?
     @ObservationIgnored var lastKnownResetSnapshots: [UsageProvider: UsageSnapshot] = [:]
@@ -263,12 +286,13 @@ final class UsageStore {
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [UsageProvider: String] = [:]
+    @ObservationIgnored var lastPriorSpendFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var planUtilizationHistory: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
     @ObservationIgnored var weeklyLimitResetDetectorStates: [String: WeeklyLimitResetDetectorState] = [:]
     @ObservationIgnored private var hasCompletedInitialRefresh: Bool = false
     @ObservationIgnored private let providerAvailabilityCacheTTL: TimeInterval = 1
     @ObservationIgnored let accountInfoCacheTTL: TimeInterval = 30
-    @ObservationIgnored private let tokenFetchTTL: TimeInterval = 60 * 60
+    @ObservationIgnored let tokenFetchTTL: TimeInterval = 60 * 60
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
     @ObservationIgnored let startupBehavior: StartupBehavior
     @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator
@@ -283,6 +307,7 @@ final class UsageStore {
         historicalUsageHistoryStore: HistoricalUsageHistoryStore = HistoricalUsageHistoryStore(),
         planUtilizationHistoryStore: PlanUtilizationHistoryStore = .defaultAppSupport(),
         codexAccountUsageSnapshotStore: (any CodexAccountUsageSnapshotStoring)? = nil,
+        zaiSnapshotStore: (any ZaiSnapshotStoring)? = nil,
         sessionQuotaNotifier: any SessionQuotaNotifying = SessionQuotaNotifier(),
         startupBehavior: StartupBehavior = .automatic,
         environmentBase: [String: String] = ProcessInfo.processInfo.environment)
@@ -300,6 +325,8 @@ final class UsageStore {
         self.startupBehavior = startupBehavior.resolved(isRunningTests: Self.isRunningTestsProcess())
         self.codexAccountUsageSnapshotStore = codexAccountUsageSnapshotStore ??
             (self.startupBehavior.automaticallyStartsBackgroundWork ? FileCodexAccountUsageSnapshotStore() : nil)
+        self.zaiSnapshotStore = zaiSnapshotStore ??
+            (self.startupBehavior.automaticallyStartsBackgroundWork ? FileZaiSnapshotStore() : nil)
         self.planUtilizationPersistenceCoordinator = PlanUtilizationHistoryPersistenceCoordinator(
             store: planUtilizationHistoryStore)
         self.providerMetadata = registry.metadata
@@ -326,15 +353,26 @@ final class UsageStore {
             self.codexAccountSnapshots = codexAccountUsageSnapshotStore.load(
                 for: self.freshCodexVisibleAccountsForSnapshotHydration())
         }
+        // Hydrate z.ai's last successful snapshot so the card renders before the first network
+        // refresh completes. This matches the Codex account-snapshot hydration pattern.
+        if let zaiSnapshotStore = self.zaiSnapshotStore,
+           let cachedZaiSnapshot = zaiSnapshotStore.load()
+        {
+            self.snapshots[.zai] = cachedZaiSnapshot
+        }
         self.logStartupState()
         self.bindSettings()
+        // Defer the synchronous login-shell PATH probe off the cold-launch critical path. The
+        // initial empty value is filled in by `schedulePathDebugInfoRefresh` (below) on a
+        // background task; provider runtimes resolve PATH lazily on first use.
         self.pathDebugInfo = PathDebugSnapshot(
             codexBinary: nil,
             claudeBinary: nil,
             geminiBinary: nil,
-            effectivePATH: PathBuilder.effectivePATH(purposes: [.rpc, .tty, .nodeTooling]),
+            effectivePATH: "",
             loginShellPATH: LoginShellPathCache.shared.current?.joined(separator: ":"))
         guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
+        self.scheduleCostUsageCacheMaintenance()
         self.hydrateCachedTokenSnapshots()
         self.detectVersions()
         self.updateProviderRuntimes()
@@ -410,14 +448,29 @@ final class UsageStore {
 
     func enabledProviders() -> [UsageProvider] {
         // Use cached enablement to avoid repeated UserDefaults lookups in animation ticks.
+        let revision = self.settings.configRevision
+        if let cached = self.enabledProvidersForRefreshCache, cached.revision == revision {
+            return cached.providers
+        }
         let enabled = self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata)
         let now = Date()
-        return enabled.filter { self.isProviderAvailable($0, now: now) }
+        let filtered = enabled.filter { self.isProviderAvailable($0, now: now) }
+        self.enabledProvidersForRefreshCache = (revision, filtered)
+        return filtered
     }
 
     /// Enabled providers without availability filtering. Used for display (switcher, merge-icons).
     func enabledProvidersForDisplay() -> [UsageProvider] {
-        self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata)
+        // Cache on configRevision so blink/animation/icon-signature loops don't re-walk all 35+
+        // providers per tick. Availability filtering happens in `enabledProviders()`; display
+        // callers intentionally see disabled-but-configured providers.
+        let revision = self.settings.configRevision
+        if let cached = self.enabledProvidersForDisplayCache, cached.revision == revision {
+            return cached.providers
+        }
+        let providers = self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata)
+        self.enabledProvidersForDisplayCache = (revision, providers)
+        return providers
     }
 
     /// Providers that should actually participate in background refresh/status/token work.
@@ -557,7 +610,12 @@ final class UsageStore {
         startupConnectivityRetryAttempt: Int?,
         coalesceProviderRefreshesOverride: Bool? = nil) async
     {
-        guard !self.isRefreshing else { return }
+        if self.isRefreshing {
+            if forceTokenUsage {
+                await self.enqueueForcedRefreshAfterCurrentRefresh()
+            }
+            return
+        }
         self.prepareRefreshState()
         let refreshPhase = Self.refreshPhase(hasCompletedInitialRefresh: self.hasCompletedInitialRefresh)
         let openAIWebRefreshPhase = Self.openAIWebRefreshPhase(
@@ -660,6 +718,7 @@ final class UsageStore {
         if refreshPhase == .startup {
             self.scheduleMemoryPressureRelief()
         }
+        await self.drainPendingForcedRefreshes()
     }
 
     /// For demo/testing: drop the snapshot so the loading animation plays, then restore the last snapshot.
@@ -682,71 +741,11 @@ final class UsageStore {
         self.observeSettingsChanges()
     }
 
-    private func startTimer() {
-        self.timerTask?.cancel()
-        guard let wait = self.settings.refreshFrequency.seconds else { return }
-
-        // Background poller so the menu stays responsive; canceled when settings change or store deallocates.
-        self.timerTask = Task.detached(priority: .utility) { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(wait))
-                await self?.refresh()
-            }
-        }
-    }
-
-    private func startTokenTimer() {
-        self.tokenTimerTask?.cancel()
-        let wait = self.tokenFetchTTL
-        self.tokenTimerTask = Task.detached(priority: .utility) { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(wait))
-                await self?.scheduleTokenRefresh(force: false)
-            }
-        }
-    }
-
-    private func scheduleTokenRefresh(force: Bool) {
-        if force {
-            self.tokenRefreshSequenceTask?.cancel()
-            self.tokenRefreshSequenceTask = nil
-        } else if self.tokenRefreshSequenceTask != nil {
-            return
-        }
-
-        self.tokenRefreshSequenceTask = Task(priority: .utility) { [weak self] in
-            guard let self else { return }
-            defer {
-                Task { @MainActor [weak self] in
-                    self?.tokenRefreshSequenceTask = nil
-                }
-            }
-            await self.refreshTokenUsageSequence(force: force)
-        }
-    }
-
-    private func refreshTokenUsageSequenceNow(force: Bool) async {
-        if force, let existing = self.tokenRefreshSequenceTask {
-            existing.cancel()
-            await existing.value
-            self.tokenRefreshSequenceTask = nil
-        }
-
-        await self.refreshTokenUsageSequence(force: force)
-    }
-
-    private func refreshTokenUsageSequence(force: Bool) async {
-        for provider in self.enabledProvidersForBackgroundWork() {
-            if Task.isCancelled { break }
-            await self.refreshTokenUsage(provider, force: force)
-        }
-        self.scheduleMemoryPressureRelief()
-    }
-
     deinit {
         self.timerTask?.cancel()
         self.tokenTimerTask?.cancel()
         self.tokenRefreshSequenceTask?.cancel()
+        self.costUsageCacheMaintenanceTask?.cancel()
         self.memoryPressureReliefTask?.cancel()
         self.startupConnectivityRetryTask?.cancel()
         self.storageRefreshTask?.cancel()
@@ -1000,7 +999,35 @@ extension UsageStore {
         await AugmentStatusProbe.latestDumps()
     }
 
-    // swiftlint:disable:next function_body_length
+    private nonisolated static let unimplementedDebugLogMessages: [UsageProvider: String] = [
+        .gemini: "Gemini debug log not yet implemented",
+        .antigravity: "Antigravity debug log not yet implemented",
+        .opencode: "OpenCode debug log not yet implemented",
+        .alibaba: "Alibaba Coding Plan debug log not yet implemented",
+        .alibabatokenplan: "Alibaba Token Plan debug log not yet implemented",
+        .factory: "Droid debug log not yet implemented",
+        .copilot: "Copilot debug log not yet implemented",
+        .manus: "Manus debug log not yet implemented",
+        .vertexai: "Vertex AI debug log not yet implemented",
+        .kilo: "Kilo debug log not yet implemented",
+        .kiro: "Kiro debug log not yet implemented",
+        .kimi: "Kimi debug log not yet implemented",
+        .kimik2: "Kimi K2 debug log not yet implemented",
+        .jetbrains: "JetBrains AI debug log not yet implemented",
+        .mimo: "Xiaomi MiMo debug log not yet implemented",
+        .doubao: "Doubao debug log not yet implemented",
+        .venice: "Venice debug log not yet implemented",
+        .commandcode: "Command Code debug log not yet implemented",
+        .stepfun: "StepFun debug log not yet implemented",
+        .bedrock: "Bedrock debug log not yet implemented",
+        .grok: "Grok debug log not yet implemented",
+        .groq: "Groq debug log not yet implemented",
+        .t3chat: "T3 Chat debug log not yet implemented",
+        .llmproxy: "LLM Proxy debug log not yet implemented",
+        .deepgram: "Deepgram debug log not yet implemented",
+    ]
+
+    // swiftlint:disable:next cyclomatic_complexity
     func debugLog(for provider: UsageProvider) async -> String {
         if let cached = self.probeLogs[provider], !cached.isEmpty {
             return cached
@@ -1041,33 +1068,7 @@ extension UsageStore {
         let browserDetection = self.browserDetection
         let claudeDebugExecutionContext = self.currentClaudeDebugExecutionContext()
         let text = await Task.detached(priority: .utility) { () -> String in
-            let unimplementedDebugLogMessages: [UsageProvider: String] = [
-                .gemini: "Gemini debug log not yet implemented",
-                .antigravity: "Antigravity debug log not yet implemented",
-                .opencode: "OpenCode debug log not yet implemented",
-                .alibaba: "Alibaba Coding Plan debug log not yet implemented",
-                .alibabatokenplan: "Alibaba Token Plan debug log not yet implemented",
-                .factory: "Droid debug log not yet implemented",
-                .copilot: "Copilot debug log not yet implemented",
-                .manus: "Manus debug log not yet implemented",
-                .vertexai: "Vertex AI debug log not yet implemented",
-                .kilo: "Kilo debug log not yet implemented",
-                .kiro: "Kiro debug log not yet implemented",
-                .kimi: "Kimi debug log not yet implemented",
-                .kimik2: "Kimi K2 debug log not yet implemented",
-                .jetbrains: "JetBrains AI debug log not yet implemented",
-                .mimo: "Xiaomi MiMo debug log not yet implemented",
-                .doubao: "Doubao debug log not yet implemented",
-                .venice: "Venice debug log not yet implemented",
-                .commandcode: "Command Code debug log not yet implemented",
-                .stepfun: "StepFun debug log not yet implemented",
-                .bedrock: "Bedrock debug log not yet implemented",
-                .grok: "Grok debug log not yet implemented",
-                .groq: "Groq debug log not yet implemented",
-                .t3chat: "T3 Chat debug log not yet implemented",
-                .llmproxy: "LLM Proxy debug log not yet implemented",
-                .deepgram: "Deepgram debug log not yet implemented",
-            ]
+            let unimplementedDebugLogMessages = Self.unimplementedDebugLogMessages
             let buildText = {
                 switch provider {
                 case .codex:
@@ -1134,6 +1135,7 @@ extension UsageStore {
                     let hasAny = resolution != nil
                     let source = resolution?.source.rawValue ?? "none"
                     return "WARP_API_KEY=\(hasAny ? "present" : "missing") source=\(source)"
+                case .meta: return Self.debugMetaLog()
                 case .deepseek:
                     return Self.apiKeyDebugLine(
                         label: "DEEPSEEK_API_KEY",
@@ -1505,7 +1507,7 @@ extension UsageStore {
         }
     }
 
-    private func refreshTokenUsage(_ provider: UsageProvider, force: Bool) async {
+    func refreshTokenUsage(_ provider: UsageProvider, force: Bool) async {
         guard ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.supportsTokenCost else {
             self.tokenSnapshots.removeValue(forKey: provider)
             self.tokenErrors[provider] = nil
@@ -1535,6 +1537,17 @@ extension UsageStore {
         }
 
         guard self.settings.costUsageEnabled else {
+            self.tokenSnapshots.removeValue(forKey: provider)
+            self.tokenErrors[provider] = nil
+            self.tokenFailureGates[provider]?.reset()
+            self.lastTokenFetchAt.removeValue(forKey: provider)
+            self.lastTokenFetchScope.removeValue(forKey: provider)
+            return
+        }
+
+        // z.ai cost is an estimate priced from token counts; keep it behind its own opt-in so it
+        // never silently turns on for users who only want real billing-style providers.
+        if provider == .zai, !self.settings.zaiEstimatedCostEnabled {
             self.tokenSnapshots.removeValue(forKey: provider)
             self.tokenErrors[provider] = nil
             self.tokenFailureGates[provider]?.reset()
@@ -1590,6 +1603,10 @@ extension UsageStore {
             // remote state, so managed Codex account selection does not retarget that fetch.
             // If the UI later needs account-scoped token history, it should label and source that
             // separately instead of silently changing the meaning of this section.
+            // Forward the in-app z.ai region picker so the cost path uses the same endpoint
+            // as the quota path. Without this, users who select BigModel CN in Preferences
+            // but don't set Z_AI_API_HOST silently fetch from the global endpoint.
+            let zaiRegion: ZaiAPIRegion? = provider == .zai ? self.settings.zaiAPIRegion : nil
             let snapshot = try await withThrowingTaskGroup(of: CostUsageTokenSnapshot.self) { group in
                 group.addTask(priority: .utility) {
                     try await fetcher.loadTokenSnapshot(
@@ -1599,7 +1616,9 @@ extension UsageStore {
                         forceRefresh: force,
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
                         codexHomePath: costScope.codexHomePath,
-                        historyDays: historyDays)
+                        historyDays: historyDays,
+                        zaiAPIRegion: zaiRegion,
+                        cursorSettings: self.cursorCostSettings(for: provider))
                 }
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))

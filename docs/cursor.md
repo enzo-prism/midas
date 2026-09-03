@@ -63,8 +63,35 @@ The storage detail lists measured paths and their sizes. CodexBar does not delet
 - Primary: plan usage percent (included plan).
 - Secondary: Auto + Composer usage percent.
 - Tertiary: API (named model) usage percent.
+- Bot row: `individualUsage.botUsage` (fallback `teamUsage.botUsage`) renders a "Bot" card row when the API reports a bot limit.
+- Models row: `individualUsage.modelSplit` (`cursorModelCents` / `nonCursorModelCents`) renders a "Models" card row showing the Cursor-served share of reported model spend.
 - Provider cost: Extra usage USD. A capped individual budget wins; team accounts without a user cap use the shared team on-demand budget.
 - Reset: billing cycle end date.
+
+## Dashboard pools (Cursor Models / Other Models / Grok Bot)
+
+The menu card and `codexbar usage --provider cursor` show usage-left rows in
+dashboard language, from the same endpoints as cursor.com/dashboard/usage:
+
+- `POST /api/dashboard/get-current-period-usage` (`{}` body) → **Cursor Models**
+  (auto bucket %) and **Other Models** (API %) pools, resetting at
+  `billingCycleEnd`.
+- `POST /api/dashboard/get-sand-usage-status` (`{}` body) → **Grok Bot** weekly
+  % with `nextResetTimestampUtc`. Absent for plans without the Grok feature.
+
+Both calls are best-effort with the web session cookies: failure hides that row
+instead of erroring (team accounts needing a teamId body, plans without Grok).
+`sand-*` spend belongs to the Grok Bot window; `autoBucketModels` defines the
+Cursor Models pool; everything else counts toward Other Models.
+
+## Cost estimate (`codexbar cost --provider cursor`)
+
+Billing-cycle spend in real billed dollars: plan + on-demand + bot spend, with a
+per-bucket breakdown (Bot row only when the API reports a bot quota). Cursor
+reports spend, not tokens, so there are no token counts — and no pricing table
+is involved. Requires a Cursor web session (browser cookies or manual header);
+with cookies off it explains how to enable them. Included in the
+multi-provider TOTAL at face value.
 
 ## Key files
 - `Sources/CodexBarCore/Providers/Cursor/CursorStatusProbe.swift`

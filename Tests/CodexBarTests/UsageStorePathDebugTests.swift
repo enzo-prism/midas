@@ -52,4 +52,28 @@ struct UsageStorePathDebugTests {
 
         #expect(debugLog == "DEEPSEEK_API_KEY=present source=settings-token-account")
     }
+
+    @Test
+    func `meta debug log reports key status and sessions root`() async throws {
+        let suite = "UsageStorePathDebugTests-meta-debug-log"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore())
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing,
+            environmentBase: [:])
+
+        let debugLog = await store.debugLog(for: UsageProvider.meta)
+
+        #expect(debugLog.contains("META_API_KEY="))
+        #expect(debugLog.contains("sessionsRoot="))
+        #expect(debugLog.contains("model="))
+    }
 }

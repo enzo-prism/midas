@@ -1,6 +1,13 @@
-# CodexBar 🎚️ — May your tokens never run out.
+# CodexBar (Personal Fork) 🎚️ — May your tokens never run out.
 
 > Every AI coding limit, in your menu bar.
+
+> **Personal fork.** This repo is a fork of [steipete/CodexBar](https://github.com/steipete/CodexBar)
+> (MIT-licensed, all credit to Peter Steinberger and contributors), modified for my own use.
+> Personal additions so far: Meta provider support, Cursor metered-dollar cost tracking, an
+> Overview "Usage & Spend" header with prior-period comparison, inline cost dashboards for
+> Cursor/Meta, and simplified Cursor/Codex tab layouts. Upstream releases, Homebrew, and
+> codexbar.app below refer to the original project, not this fork.
 
 [![Latest release](https://img.shields.io/github/v/release/steipete/CodexBar?style=flat-square&color=0a0a0c)](https://github.com/steipete/CodexBar/releases/latest)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://github.com/steipete/CodexBar/releases/latest)
@@ -118,6 +125,7 @@ See [CLI configuration](docs/cli-configuration.md) for the full flow.
 - [AWS Bedrock](docs/bedrock.md) — AWS access keys or a named AWS profile (SSO/assume-role via the AWS CLI) for Cost Explorer usage and monthly budget tracking.
 - [Grok](docs/grok.md) — Grok CLI billing RPC plus grok.com browser-session fallback.
 - [GroqCloud](docs/groqcloud.md) — API key for Enterprise Prometheus request/token/cache-hit metrics.
+- [Meta](docs/meta.md) — Local Muse session-log token scan plus optional `META_API_KEY`.
 - [LLM Proxy](docs/llm-proxy.md) — API key + base URL for aggregate proxy quota stats and provider breakdowns.
 - [Deepgram](docs/deepgram.md) — API key usage summaries across speech, agent, token, and TTS metrics.
 - Open to new providers: [provider authoring guide](docs/provider.md).

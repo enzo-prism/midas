@@ -28,8 +28,10 @@ public enum ZaiProviderDescriptor {
                 iconResourceName: "ProviderIcon-zai",
                 color: ProviderColor(red: 232 / 255, green: 90 / 255, blue: 106 / 255)),
             tokenCost: ProviderTokenCostConfig(
-                supportsTokenCost: false,
-                noDataMessage: { "z.ai cost summary is not supported." }),
+                supportsTokenCost: true,
+                noDataMessage: {
+                    "Enable “Show estimated cost” in z.ai settings, then run a prompt so z.ai reports model usage."
+                }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [ZaiAPIFetchStrategy()] })),

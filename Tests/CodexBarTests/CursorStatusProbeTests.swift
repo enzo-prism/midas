@@ -318,8 +318,8 @@ struct CursorStatusProbeTests {
         let usageSnapshot = snapshot.toUsageSnapshot()
         #expect(usageSnapshot.primary?.remainingPercent == 99.55897435897436)
         #expect(usageSnapshot.primary?.windowMinutes == 44640)
-        #expect(usageSnapshot.secondary?.windowMinutes == 44640)
-        #expect(usageSnapshot.tertiary?.windowMinutes == 44640)
+        #expect(usageSnapshot.secondary == nil)
+        #expect(usageSnapshot.tertiary == nil)
     }
 
     @Test
@@ -346,10 +346,9 @@ struct CursorStatusProbeTests {
         #expect(usageSnapshot.primary?.usedPercent == 45.0)
         #expect(usageSnapshot.accountEmail(for: .cursor) == "user@example.com")
         #expect(usageSnapshot.loginMethod(for: .cursor) == "Cursor Pro")
-        #expect(usageSnapshot.secondary != nil)
-        #expect(usageSnapshot.secondary?.usedPercent == 5.0)
+        #expect(usageSnapshot.secondary == nil)
+        #expect(usageSnapshot.tertiary == nil)
         #expect(usageSnapshot.primary?.windowMinutes == 44640)
-        #expect(usageSnapshot.secondary?.windowMinutes == 44640)
         #expect(usageSnapshot.providerCost?.used == 5.0)
         #expect(usageSnapshot.providerCost?.limit == 100.0)
         #expect(usageSnapshot.providerCost?.currencyCode == "USD")
@@ -401,7 +400,7 @@ struct CursorStatusProbeTests {
 
         let usageSnapshot = snapshot.toUsageSnapshot()
 
-        #expect(usageSnapshot.secondary?.usedPercent == 20.0)
+        #expect(usageSnapshot.secondary == nil)
         #expect(usageSnapshot.providerCost?.used == 12.0)
         #expect(usageSnapshot.providerCost?.limit == 60.0)
     }
@@ -974,7 +973,12 @@ extension CursorStatusProbeTests {
 
         #expect(snapshot.planPercentUsed == 30.0)
         #expect(snapshot.accountEmail == nil)
-        #expect(CursorStatusProbeStubURLProtocol.requestCount == 2)
+        // usage-summary + auth/me + the two best-effort dashboard pool calls.
+        #expect(CursorStatusProbeStubURLProtocol.requestCount == 4)
+        // Failed dashboard calls hide their rows instead of erroring.
+        #expect(snapshot.cursorModelsUsedPercent == nil)
+        #expect(snapshot.otherModelsUsedPercent == nil)
+        #expect(snapshot.grokBotWeeklyUsedPercent == nil)
     }
 
     @Test

@@ -123,7 +123,15 @@ enum PiSessionCostScanner {
             cache.scanUntilKey = range.scanUntilKey
             cache.lastScanUnixMs = nowMs
             try checkCancellation?()
-            PiSessionCostCacheIO.save(cache: cache, cacheRoot: options.cacheRoot)
+            let saveResult = PiSessionCostCacheIO.save(cache: cache, cacheRoot: options.cacheRoot)
+            if !saveResult.didSave {
+                CodexBarLog.logger(LogCategories.tokenCost).warning(
+                    "Failed to persist Pi session cost cache",
+                    metadata: [
+                        "path": saveResult.path,
+                        "error": saveResult.message ?? "unknown",
+                    ])
+            }
         }
 
         return self.buildReport(

@@ -147,6 +147,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case providerCost
         case kiroUsage
         case ampUsage
+        case zaiUsage
         case openRouterUsage
         case openAIAPIUsage
         case claudeAdminAPIUsage
@@ -214,7 +215,11 @@ public struct UsageSnapshot: Codable, Sendable {
         self.providerCost = try container.decodeIfPresent(ProviderCostSnapshot.self, forKey: .providerCost)
         self.kiroUsage = try container.decodeIfPresent(KiroUsageDetails.self, forKey: .kiroUsage)
         self.ampUsage = try container.decodeIfPresent(AmpUsageDetails.self, forKey: .ampUsage)
-        self.zaiUsage = nil // Not persisted, fetched fresh each time
+        // Persist z.ai's quota snapshot so cold-launch hydration shows the last known plan/token
+        // window before the first network call completes. The hourly modelUsage payload inside is
+        // intentionally dropped at encode time (see ZaiUsageSnapshot.encode) to keep the cache
+        // small; the card rehydrates that detail on the next live refresh.
+        self.zaiUsage = try container.decodeIfPresent(ZaiUsageSnapshot.self, forKey: .zaiUsage)
         self.minimaxUsage = nil // Not persisted, fetched fresh each time
         self.deepseekUsage = nil // Not persisted, fetched fresh each time
         self.openRouterUsage = try container.decodeIfPresent(OpenRouterUsageSnapshot.self, forKey: .openRouterUsage)
@@ -256,6 +261,7 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.providerCost, forKey: .providerCost)
         try container.encodeIfPresent(self.kiroUsage, forKey: .kiroUsage)
         try container.encodeIfPresent(self.ampUsage, forKey: .ampUsage)
+        try container.encodeIfPresent(self.zaiUsage, forKey: .zaiUsage)
         try container.encodeIfPresent(self.openRouterUsage, forKey: .openRouterUsage)
         try container.encodeIfPresent(self.openAIAPIUsage, forKey: .openAIAPIUsage)
         try container.encodeIfPresent(self.claudeAdminAPIUsage, forKey: .claudeAdminAPIUsage)
@@ -1176,6 +1182,28 @@ public struct UsageFetcher: Sendable {
         guard let data = Data(base64Encoded: padded) else { return nil }
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return json
+    }
+
+    /// Returns the JWT `exp` claim as a `Date`, or `nil` if absent or unparseable.
+    ///
+    /// OpenAI id_tokens set `exp` as epoch seconds. CodexBar treats the id_token as a cache of
+    /// email/plan claims; once `exp` is past, those claims are considered stale and callers fall
+    /// back to leaving identity blank until the next OAuth refresh rewrites `auth.json`.
+    public static func parseJWTExp(_ token: String) -> Date? {
+        guard let payload = parseJWT(token) else { return nil }
+        if let number = payload["exp"] as? NSNumber {
+            return Date(timeIntervalSince1970: number.doubleValue)
+        }
+        if let int = payload["exp"] as? Int {
+            return Date(timeIntervalSince1970: TimeInterval(int))
+        }
+        if let double = payload["exp"] as? Double {
+            return Date(timeIntervalSince1970: double)
+        }
+        if let string = payload["exp"] as? String, let value = TimeInterval(string) {
+            return Date(timeIntervalSince1970: value)
+        }
+        return nil
     }
 }
 

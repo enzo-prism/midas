@@ -124,6 +124,7 @@ public struct CodexReconciledState: Sendable {
 
     private static func resolveAccountEmail(from credentials: CodexOAuthCredentials) -> String? {
         guard let idToken = credentials.idToken,
+              isIDTokenFresh(idToken),
               let payload = UsageFetcher.parseJWT(idToken)
         else {
             return nil
@@ -137,6 +138,7 @@ public struct CodexReconciledState: Sendable {
     private static func resolvePlan(response: CodexUsageResponse, credentials: CodexOAuthCredentials) -> String? {
         if let plan = response.planType?.rawValue, !plan.isEmpty { return plan }
         guard let idToken = credentials.idToken,
+              Self.isIDTokenFresh(idToken),
               let payload = UsageFetcher.parseJWT(idToken)
         else {
             return nil
@@ -145,5 +147,13 @@ public struct CodexReconciledState: Sendable {
         let authDict = payload["https://api.openai.com/auth"] as? [String: Any]
         let plan = (authDict?["chatgpt_plan_type"] as? String) ?? (payload["chatgpt_plan_type"] as? String)
         return plan?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Returns true when the id_token is either fresh (exp in the future) or has no `exp` claim
+    /// (treated as non-expiring for identity purposes — preserves prior behavior for legacy
+    /// tokens that don't carry `exp`).
+    private static func isIDTokenFresh(_ idToken: String) -> Bool {
+        guard let exp = UsageFetcher.parseJWTExp(idToken) else { return true }
+        return exp > Date()
     }
 }

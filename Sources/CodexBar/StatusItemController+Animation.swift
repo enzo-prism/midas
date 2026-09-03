@@ -80,7 +80,11 @@ extension StatusItemController {
         let mergeIcons = self.shouldMergeIcons
         var nextWakeAt: Date?
 
-        for provider in UsageProvider.allCases {
+        // Iterate only display-visible providers (cached on configRevision) instead of all 35+
+        // providers per tick. The result is identical because disabled providers cannot blink,
+        // but we cut the per-tick work from O(N=all providers) to O(N=visible providers).
+        let candidates = self.store.enabledProvidersForDisplay()
+        for provider in candidates {
             let shouldRender = mergeIcons ? self.isEnabled(provider) : self.isVisible(provider)
             guard shouldRender, !self.shouldAnimate(provider: provider, mergeIcons: mergeIcons)
             else { continue }
@@ -121,7 +125,16 @@ extension StatusItemController {
         // Cache merge state once per tick to avoid repeated enabled-provider lookups.
         let mergeIcons = self.shouldMergeIcons
 
-        for provider in UsageProvider.allCases {
+        // Iterate only display-visible providers (cached on configRevision). The previous loop
+        // walked `UsageProvider.allCases` (35+ providers) every tick even though disabled ones
+        // always hit the `shouldRender` early-exit; cutting this drops per-tick work from
+        // O(N=all providers) to O(N=visible providers).
+        let activeProviders = self.store.enabledProvidersForDisplay()
+        // Clear motion on any provider that's no longer display-visible so it doesn't keep glowing.
+        for provider in UsageProvider.allCases where !activeProviders.contains(provider) {
+            self.clearMotion(for: provider)
+        }
+        for provider in activeProviders {
             let shouldRender = mergeIcons ? self.isEnabled(provider) : self.isVisible(provider)
             guard shouldRender, !self.shouldAnimate(provider: provider, mergeIcons: mergeIcons)
             else {

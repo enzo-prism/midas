@@ -16,7 +16,7 @@ struct CursorLegacyRequestProjectionTests {
     }
 
     @Test
-    func `unusable legacy request quota preserves token bars`() {
+    func `unusable legacy request quota drops auto and api bars`() {
         let requestCases: [(used: Int?, limit: Int?)] = [
             (nil, 500),
             (12, 0),
@@ -29,8 +29,8 @@ struct CursorLegacyRequestProjectionTests {
 
             #expect(usageSnapshot.primary?.usedPercent == 7.0)
             #expect(usageSnapshot.cursorRequests == nil)
-            #expect(usageSnapshot.secondary?.usedPercent == 11.0)
-            #expect(usageSnapshot.tertiary?.usedPercent == 22.0)
+            #expect(usageSnapshot.secondary == nil)
+            #expect(usageSnapshot.tertiary == nil)
         }
     }
 

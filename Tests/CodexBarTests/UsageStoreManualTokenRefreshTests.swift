@@ -61,6 +61,54 @@ private actor CompletionFlag {
     }
 }
 
+private actor ProviderRefreshGate {
+    private var started = 0
+    private var released = 0
+    private var startWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func block() async {
+        self.started += 1
+        let startID = self.started
+        self.resumeSatisfiedStartWaiters()
+        if self.released < startID {
+            await withCheckedContinuation { continuation in
+                self.releaseWaiters.append(continuation)
+            }
+        }
+    }
+
+    func waitUntilStarted(count: Int) async {
+        if self.started >= count { return }
+        await withCheckedContinuation { continuation in
+            self.startWaiters.append((count, continuation))
+        }
+    }
+
+    func releaseNext() {
+        self.released += 1
+        if !self.releaseWaiters.isEmpty {
+            self.releaseWaiters.removeFirst().resume()
+        }
+    }
+
+    func startedCount() -> Int {
+        self.started
+    }
+
+    private func resumeSatisfiedStartWaiters() {
+        var remaining: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
+        for waiter in self.startWaiters {
+            if self.started >= waiter.count {
+                waiter.continuation.resume()
+            } else {
+                remaining.append(waiter)
+            }
+        }
+        self.startWaiters = remaining
+    }
+}
+
 private actor TokenRefreshRecorder {
     private(set) var calls: [(provider: UsageProvider, force: Bool)] = []
 
@@ -170,6 +218,43 @@ struct UsageStoreManualTokenRefreshTests {
             #expect(calls.map(\.force) == [false])
             #expect(await gate.hasFinished())
         }
+    }
+
+    @Test
+    func `manual forced refresh queues behind active background refresh`() async {
+        let store = Self.makeStore()
+        let providerGate = ProviderRefreshGate()
+        let completion = CompletionFlag()
+        store._test_providerRefreshOverride = { _ in
+            await providerGate.block()
+        }
+        defer { store._test_providerRefreshOverride = nil }
+        store._test_tokenUsageRefreshOverride = { _, _ in }
+        defer { store._test_tokenUsageRefreshOverride = nil }
+
+        let backgroundTask = Task { @MainActor in
+            await store.refresh(forceTokenUsage: false)
+        }
+        await providerGate.waitUntilStarted(count: 1)
+
+        let forcedTask = Task { @MainActor in
+            await store.refresh(forceTokenUsage: true)
+            await completion.markCompleted()
+        }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(await completion.isCompleted() == false)
+        #expect(await providerGate.startedCount() == 1)
+
+        await providerGate.releaseNext()
+        await providerGate.waitUntilStarted(count: 2)
+        #expect(await completion.isCompleted() == false)
+
+        await providerGate.releaseNext()
+        await backgroundTask.value
+        await forcedTask.value
+
+        #expect(await completion.isCompleted())
+        #expect(await providerGate.startedCount() == 2)
     }
 
     private static func makeStore() -> UsageStore {

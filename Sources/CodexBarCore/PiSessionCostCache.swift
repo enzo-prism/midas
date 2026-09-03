@@ -12,7 +12,11 @@ enum PiSessionCostCacheIO {
         let root = cacheRoot ?? self.defaultCacheRoot()
         return root
             .appendingPathComponent("cost-usage", isDirectory: true)
-            .appendingPathComponent("pi-sessions-v\(Self.artifactVersion).json", isDirectory: false)
+            .appendingPathComponent(self.cacheFileName(), isDirectory: false)
+    }
+
+    static func cacheFileName() -> String {
+        "pi-sessions-v\(self.artifactVersion).json"
     }
 
     static func load(cacheRoot: URL? = nil) -> PiSessionCostCache {
@@ -26,22 +30,25 @@ enum PiSessionCostCacheIO {
         return decoded
     }
 
-    static func save(cache: PiSessionCostCache, cacheRoot: URL? = nil) {
+    @discardableResult
+    static func save(cache: PiSessionCostCache, cacheRoot: URL? = nil) -> CostUsageCacheSaveResult {
         let url = self.cacheFileURL(cacheRoot: cacheRoot)
         let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let tmp = dir.appendingPathComponent(".tmp-\(UUID().uuidString).json", isDirectory: false)
-        let data = (try? JSONEncoder().encode(cache)) ?? Data()
         do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(cache)
             try data.write(to: tmp, options: [.atomic])
             if FileManager.default.fileExists(atPath: url.path) {
                 _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
             } else {
                 try FileManager.default.moveItem(at: tmp, to: url)
             }
+            return .saved(path: url.path)
         } catch {
             try? FileManager.default.removeItem(at: tmp)
+            return .failed(path: url.path, message: error.localizedDescription)
         }
     }
 }

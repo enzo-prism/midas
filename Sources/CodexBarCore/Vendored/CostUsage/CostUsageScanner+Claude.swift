@@ -688,7 +688,16 @@ extension CostUsageScanner {
             cache.scanUntilKey = range.scanUntilKey
             cache.lastScanUnixMs = nowMs
             try checkCancellation?()
-            CostUsageCacheIO.save(provider: provider, cache: cache, cacheRoot: options.cacheRoot)
+            let saveResult = CostUsageCacheIO.save(provider: provider, cache: cache, cacheRoot: options.cacheRoot)
+            if !saveResult.didSave {
+                CostUsageScanner.log.warning(
+                    "Failed to persist Claude cost usage cache",
+                    metadata: [
+                        "provider": provider.rawValue,
+                        "path": saveResult.path,
+                        "error": saveResult.message ?? "unknown",
+                    ])
+            }
         }
 
         let modelsDevCatalog = CostUsagePricing.modelsDevCatalog(now: now, cacheRoot: options.cacheRoot)

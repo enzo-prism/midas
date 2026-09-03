@@ -71,7 +71,11 @@ public enum ClaudeUsageError: LocalizedError, Sendable {
 public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
     private static let sessionWindowMinutes = 5 * 60
     private static let weeklyWindowMinutes = 7 * 24 * 60
-    private static let cliAutoProbeTimeout: TimeInterval = 12
+    // The `claude /usage` TUI needs a real cold-start budget: node/CLI launch plus a network
+    // round-trip to Anthropic routinely takes ~30-40s on a fresh session. A 12s first attempt
+    // almost always missed and forced the slow 60s retry, which made the menu flicker under load.
+    // Match the proven CLI-runtime budget (24s, then 60s retry) so the app auto path is reliable.
+    private static let cliAutoProbeTimeout: TimeInterval = 24
     private static let cliProbeTimeout: TimeInterval = 24
     private static let cliRetryProbeTimeout: TimeInterval = 60
     private struct Configuration {

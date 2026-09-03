@@ -62,6 +62,8 @@ extension UsageMenuCardView.Model {
         let sessionTokens = snapshot.sessionTokens.map { UsageFormatter.tokenCountString($0) }
         let sessionLabel = if provider == .bedrock || provider == .mistral {
             Self.latestBillingDayLabel(from: snapshot)
+        } else if provider == .cursor {
+            L("Billing cycle")
         } else {
             L("Today")
         }
@@ -85,10 +87,17 @@ extension UsageMenuCardView.Model {
             }
             return "\(windowLabel): \(monthCost)"
         }()
+        // Plan-metered spend over the same window (what the plan actually deducts);
+        // only providers that report it (currently Cursor) populate `meteredCostUSD`.
+        let meteredLine: String? = snapshot.meteredCostUSD.map {
+            let amount = UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode)
+            return String(format: L("Cursor-metered: %@ (%@)"), amount, windowLabel.lowercased())
+        }
         let err = (error?.isEmpty ?? true) ? nil : error
         return TokenUsageSection(
             sessionLine: sessionLine,
             monthLine: monthLine,
+            meteredLine: meteredLine,
             hintLine: Self.tokenUsageHint(provider: provider),
             errorLine: err,
             errorCopyText: (error?.isEmpty ?? true) ? nil : error)
@@ -108,6 +117,8 @@ extension UsageMenuCardView.Model {
             L("Reported by OpenAI Admin API organization usage.")
         case .mistral:
             L("Reported by Mistral billing usage.")
+        case .cursor:
+            L("Reported by Cursor billing cycle usage.")
         default:
             nil
         }

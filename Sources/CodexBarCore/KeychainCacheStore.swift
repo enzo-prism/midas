@@ -44,6 +44,62 @@ public enum KeychainCacheStore {
     private nonisolated(unsafe) static var implicitTestStore: [TestStoreKey: Data] = [:]
     private nonisolated(unsafe) static var testStoreRefCount = 0
 
+    // MARK: - In-process TTL cache
+
+    //
+    // `KeychainCacheStore.load` previously allocated a fresh `JSONDecoder` and issued a
+    // `SecItemCopyMatching` on every call. Cookie-cache reads hit this on every provider refresh,
+    // so the per-refresh cost compounded across 5+ providers. The short in-process cache below
+    // mirrors the existing `KeychainCookieHeaderStore` pattern and is invalidated on every
+    // `store`/`clear`. Test-store accesses bypass this cache (they have their own fast path).
+
+    private struct InMemoryCachedEntry {
+        let data: Data
+        let savedAt: Date
+    }
+
+    private nonisolated(unsafe) static var inMemoryCache: [String: InMemoryCachedEntry] = [:]
+    private static let inMemoryCacheLock = NSLock()
+    private static let inMemoryCacheTTL: TimeInterval = 300 // 5 minutes
+
+    private static func inMemoryCacheKey(service: String, account: String) -> String {
+        "\(service)::\(account)"
+    }
+
+    private static func inMemoryCacheLoad(service: String, account: String, now: Date = Date()) -> Data? {
+        self.inMemoryCacheLock.lock()
+        defer { Self.inMemoryCacheLock.unlock() }
+        let key = Self.inMemoryCacheKey(service: service, account: account)
+        guard let entry = Self.inMemoryCache[key] else { return nil }
+        if now.timeIntervalSince(entry.savedAt) > Self.inMemoryCacheTTL {
+            Self.inMemoryCache.removeValue(forKey: key)
+            return nil
+        }
+        return entry.data
+    }
+
+    private static func inMemoryCacheStore(service: String, account: String, data: Data, now: Date = Date()) {
+        self.inMemoryCacheLock.lock()
+        defer { Self.inMemoryCacheLock.unlock() }
+        let key = Self.inMemoryCacheKey(service: service, account: account)
+        Self.inMemoryCache[key] = InMemoryCachedEntry(data: data, savedAt: now)
+    }
+
+    private static func inMemoryCacheInvalidate(service: String, account: String) {
+        self.inMemoryCacheLock.lock()
+        defer { Self.inMemoryCacheLock.unlock() }
+        let key = Self.inMemoryCacheKey(service: service, account: account)
+        Self.inMemoryCache.removeValue(forKey: key)
+    }
+
+    /// Clears every entry in the in-process cache. Useful when keychain-wide state may have
+    /// shifted (e.g. Disable Keychain access toggled).
+    static func inMemoryCacheInvalidateAll() {
+        self.inMemoryCacheLock.lock()
+        defer { Self.inMemoryCacheLock.unlock() }
+        self.inMemoryCache.removeAll(keepingCapacity: false)
+    }
+
     public static func load<Entry: Codable>(
         key: Key,
         as type: Entry.Type = Entry.self) -> LoadResult<Entry>
@@ -58,10 +114,24 @@ public enum KeychainCacheStore {
         }
         guard self.canUseRealKeychain else { return .missing }
         #if os(macOS)
+        let serviceName = self.serviceName
+        let account = key.account
+
+        // In-process cache hit avoids both a SecItemCopyMatching round-trip and a JSONDecoder
+        // allocation on the hot path (cookie reads during provider refreshes).
+        if let cachedData = Self.inMemoryCacheLoad(service: serviceName, account: account) {
+            let decoder = Self.makeDecoder()
+            if let decoded = try? decoder.decode(Entry.self, from: cachedData) {
+                return .found(decoded)
+            }
+            // Cached bytes failed to decode (schema change); fall through to re-read.
+            Self.inMemoryCacheInvalidate(service: serviceName, account: account)
+        }
+
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: self.serviceName,
-            kSecAttrAccount as String: key.account,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
             kSecMatchLimit as String: kSecMatchLimitOne,
             kSecReturnData as String: true,
         ]
@@ -80,6 +150,7 @@ public enum KeychainCacheStore {
                 self.log.error("Failed to decode keychain cache (\(key.account))")
                 return .invalid
             }
+            Self.inMemoryCacheStore(service: serviceName, account: account, data: data)
             return .found(decoded)
         default:
             return self.loadResultForKeychainReadFailure(status: status, key: key)
@@ -101,10 +172,13 @@ public enum KeychainCacheStore {
             return
         }
 
+        let serviceName = self.serviceName
+        let account = key.account
+
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: self.serviceName,
-            kSecAttrAccount as String: key.account,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
         ]
         KeychainNoUIQuery.apply(to: &query)
 
@@ -112,6 +186,7 @@ public enum KeychainCacheStore {
             query as CFDictionary,
             [kSecValueData as String: data] as CFDictionary)
         if updateStatus == errSecSuccess {
+            Self.inMemoryCacheStore(service: serviceName, account: account, data: data)
             return
         }
         if updateStatus != errSecItemNotFound {
@@ -128,7 +203,9 @@ public enum KeychainCacheStore {
         }
 
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        if addStatus != errSecSuccess {
+        if addStatus == errSecSuccess {
+            Self.inMemoryCacheStore(service: serviceName, account: account, data: data)
+        } else {
             self.log.error("Keychain cache add failed (\(key.account)): \(addStatus)")
         }
         #endif
@@ -141,10 +218,13 @@ public enum KeychainCacheStore {
         }
         guard self.canUseRealKeychain else { return false }
         #if os(macOS)
+        let serviceName = self.serviceName
+        let account = key.account
+        Self.inMemoryCacheInvalidate(service: serviceName, account: account)
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: self.serviceName,
-            kSecAttrAccount as String: key.account,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
         ]
         KeychainNoUIQuery.apply(to: &query)
         return self.clearResultForKeychainDeleteStatus(SecItemDelete(query as CFDictionary), key: key)

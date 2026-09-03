@@ -17,6 +17,7 @@ struct ZaiProviderImplementation: ProviderImplementation {
     func observeSettings(_ settings: SettingsStore) {
         _ = settings.zaiAPIToken
         _ = settings.zaiAPIRegion
+        _ = settings.zaiEstimatedCostEnabled
     }
 
     @MainActor
@@ -61,5 +62,25 @@ struct ZaiProviderImplementation: ProviderImplementation {
     func settingsFields(context: ProviderSettingsContext) -> [ProviderSettingsFieldDescriptor] {
         _ = context
         return []
+    }
+
+    @MainActor
+    func settingsToggles(context: ProviderSettingsContext) -> [ProviderSettingsToggleDescriptor] {
+        let binding = Binding(
+            get: { context.settings.zaiEstimatedCostEnabled },
+            set: { enabled in context.settings.zaiEstimatedCostEnabled = enabled })
+        return [
+            ProviderSettingsToggleDescriptor(
+                id: "zai-estimated-cost",
+                title: "Show estimated cost",
+                subtitle: "Estimate USD spend from token counts × public GLM pricing. Not actual billing.",
+                binding: binding,
+                statusText: nil,
+                actions: [],
+                isVisible: nil,
+                onChange: nil,
+                onAppDidBecomeActive: nil,
+                onAppearWhenEnabled: nil),
+        ]
     }
 }

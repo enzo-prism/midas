@@ -289,6 +289,19 @@ struct CodexConsumerProjection {
         }
     }
 
+    /// Explicit limit-proximity line for a rate lane (display only).
+    /// Spells out the remaining quota as `"N% left"` (or `"N% used"` when
+    /// `showUsed` is true) so proximity to the limit is visible even when
+    /// the pace labels occupy the detail row. Returns `nil` when the lane
+    /// has no window.
+    func limitProximityDetail(for lane: RateLane, showUsed: Bool) -> String? {
+        guard let window = self.rateWindow(for: lane) else { return nil }
+        return UsageFormatter.usageLine(
+            remaining: window.remainingPercent,
+            used: window.usedPercent,
+            showUsed: showUsed)
+    }
+
     private static func dashboardVisibility(surface: Surface, context: Context) -> DashboardVisibility {
         guard surface != .overrideCard else { return .hidden }
         guard context.dashboardRequiresLogin == false, context.liveDashboard != nil else { return .hidden }

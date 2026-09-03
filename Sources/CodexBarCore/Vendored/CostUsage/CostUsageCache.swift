@@ -23,10 +23,13 @@ enum CostUsageCacheIO {
 
     static func cacheFileURL(provider: UsageProvider, cacheRoot: URL? = nil) -> URL {
         let root = cacheRoot ?? self.defaultCacheRoot()
-        let artifactVersion = self.artifactVersion(for: provider)
         return root
             .appendingPathComponent("cost-usage", isDirectory: true)
-            .appendingPathComponent("\(provider.rawValue)-v\(artifactVersion).json", isDirectory: false)
+            .appendingPathComponent(self.cacheFileName(provider: provider), isDirectory: false)
+    }
+
+    static func cacheFileName(provider: UsageProvider) -> String {
+        "\(provider.rawValue)-v\(self.artifactVersion(for: provider)).json"
     }
 
     static func load(
@@ -66,30 +69,33 @@ enum CostUsageCacheIO {
         return decoded
     }
 
+    @discardableResult
     static func save(
         provider: UsageProvider,
         cache: CostUsageCache,
         cacheRoot: URL? = nil,
-        producerKey: String? = nil)
+        producerKey: String? = nil) -> CostUsageCacheSaveResult
     {
         let url = self.cacheFileURL(provider: provider, cacheRoot: cacheRoot)
         let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         var cache = cache
         cache.producerKey = producerKey ?? self.currentProducerKey(provider: provider)
 
         let tmp = dir.appendingPathComponent(".tmp-\(UUID().uuidString).json", isDirectory: false)
-        let data = (try? JSONEncoder().encode(cache)) ?? Data()
         do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(cache)
             try data.write(to: tmp, options: [.atomic])
             if FileManager.default.fileExists(atPath: url.path) {
                 _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
             } else {
                 try FileManager.default.moveItem(at: tmp, to: url)
             }
+            return .saved(path: url.path)
         } catch {
             try? FileManager.default.removeItem(at: tmp)
+            return .failed(path: url.path, message: error.localizedDescription)
         }
     }
 
@@ -99,6 +105,37 @@ enum CostUsageCacheIO {
     {
         guard provider == .codex else { return nil }
         return "\(provider.rawValue):cu:p\(parserHash)"
+    }
+}
+
+enum CostUsageCacheSaveResult: Equatable, Sendable {
+    case saved(path: String)
+    case failed(path: String, message: String)
+
+    var didSave: Bool {
+        switch self {
+        case .saved:
+            true
+        case .failed:
+            false
+        }
+    }
+
+    var path: String {
+        switch self {
+        case let .saved(path),
+             let .failed(path, _):
+            path
+        }
+    }
+
+    var message: String? {
+        switch self {
+        case .saved:
+            nil
+        case let .failed(_, message):
+            message
+        }
     }
 }
 

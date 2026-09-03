@@ -143,6 +143,51 @@ struct CostUsageCacheTests {
     }
 
     @Test
+    func `cache save reports failure when cache root is not a directory`() throws {
+        let root = try self.makeTemporaryCacheRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fileRoot = root.appendingPathComponent("not-a-directory", isDirectory: false)
+        try "occupied".write(to: fileRoot, atomically: true, encoding: .utf8)
+
+        let costResult = CostUsageCacheIO.save(provider: .codex, cache: CostUsageCache(), cacheRoot: fileRoot)
+        let piResult = PiSessionCostCacheIO.save(cache: PiSessionCostCache(), cacheRoot: fileRoot)
+
+        #expect(costResult.didSave == false)
+        #expect(costResult.path.contains("not-a-directory"))
+        #expect(costResult.message?.isEmpty == false)
+        #expect(piResult.didSave == false)
+        #expect(piResult.path.contains("not-a-directory"))
+        #expect(piResult.message?.isEmpty == false)
+    }
+
+    @Test
+    func `cache maintenance prunes stale temp and versioned artifacts only`() throws {
+        let root = try self.makeTemporaryCacheRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("cost-usage", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let current = directory.appendingPathComponent(CostUsageCacheIO.cacheFileName(provider: .codex))
+        let oldCodex = directory.appendingPathComponent("codex-v7.json")
+        let oldPi = directory.appendingPathComponent("pi-sessions-v2.json")
+        let temp = directory.appendingPathComponent(".tmp-stale.json")
+        let unrelated = directory.appendingPathComponent("notes.json")
+        for url in [current, oldCodex, oldPi, temp, unrelated] {
+            try "{}".write(to: url, atomically: true, encoding: .utf8)
+        }
+
+        let result = CostUsageCacheMaintenance.pruneStaleArtifacts(cacheRoot: root)
+
+        #expect(result.failedRemovals.isEmpty)
+        #expect(result.removedPaths.count == 3)
+        #expect(FileManager.default.fileExists(atPath: current.path))
+        #expect(!FileManager.default.fileExists(atPath: oldCodex.path))
+        #expect(!FileManager.default.fileExists(atPath: oldPi.path))
+        #expect(!FileManager.default.fileExists(atPath: temp.path))
+        #expect(FileManager.default.fileExists(atPath: unrelated.path))
+    }
+
+    @Test
     func `generated parser hash is stable short lowercase hex`() {
         let hash = CodexParserHash.value
 

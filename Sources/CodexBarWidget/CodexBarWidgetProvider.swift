@@ -16,6 +16,7 @@ enum ProviderChoice: String, AppEnum {
     case kilo
     case opencode
     case opencodego
+    case meta
 
     static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Provider")
 
@@ -32,6 +33,7 @@ enum ProviderChoice: String, AppEnum {
         .kilo: DisplayRepresentation(title: "Kilo"),
         .opencode: DisplayRepresentation(title: "OpenCode"),
         .opencodego: DisplayRepresentation(title: "OpenCode Go"),
+        .meta: DisplayRepresentation(title: "Meta"),
     ]
 
     var provider: UsageProvider {
@@ -48,6 +50,7 @@ enum ProviderChoice: String, AppEnum {
         case .kilo: .kilo
         case .opencode: .opencode
         case .opencodego: .opencodego
+        case .meta: .meta
         }
     }
 
@@ -103,6 +106,7 @@ enum ProviderChoice: String, AppEnum {
         case .groq: return nil // Groq not yet supported in widgets
         case .llmproxy: return nil // LLM Proxy not yet supported in widgets
         case .deepgram: return nil // Deepgram not yet supported in widgets
+        case .meta: self = .meta
         }
     }
 }

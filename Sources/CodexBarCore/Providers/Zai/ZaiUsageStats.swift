@@ -4,13 +4,13 @@ import FoundationNetworking
 #endif
 
 /// Z.ai usage limit types from the API
-public enum ZaiLimitType: String, Sendable {
+public enum ZaiLimitType: String, Sendable, Codable {
     case timeLimit = "TIME_LIMIT"
     case tokensLimit = "TOKENS_LIMIT"
 }
 
 /// Z.ai usage limit unit types
-public enum ZaiLimitUnit: Int, Sendable {
+public enum ZaiLimitUnit: Int, Sendable, Codable {
     case unknown = 0
     case days = 1
     case hours = 3
@@ -18,8 +18,29 @@ public enum ZaiLimitUnit: Int, Sendable {
     case weeks = 6
 }
 
+/// Interprets a z.ai epoch reset stamp that may arrive in milliseconds or seconds.
+///
+/// z.ai's quota API has historically returned `nextResetTime` in milliseconds, but the field is
+/// untyped and individual limit rows (or future API revisions) can hand back plain seconds. Dividing
+/// unconditionally by 1000 would then place the reset back near 1970 and surface a nonsense "resets"
+/// label. We disambiguate with the same `10_000_000_000` threshold the other providers use
+/// (T3Chat, Devin, MiniMax, Kilo): a millisecond stamp for any realistic reset date is far above it,
+/// while a seconds stamp stays well below, so this is a no-op for today's millisecond payloads.
+enum ZaiEpoch {
+    /// Epoch values above this are treated as milliseconds; at or below, as seconds.
+    /// 1e10 seconds is the year 2286 and 1e10 ms is April 1970, so any plausible reset date is
+    /// classified unambiguously.
+    static let millisecondThreshold = 10_000_000_000
+
+    static func date(fromMillisOrSeconds raw: Int64) -> Date {
+        let magnitude = raw == Int64.min ? Int64.max : Swift.abs(raw)
+        let seconds = magnitude > self.millisecondThreshold ? Double(raw) / 1000.0 : Double(raw)
+        return Date(timeIntervalSince1970: seconds)
+    }
+}
+
 /// A single limit entry from the z.ai API
-public struct ZaiLimitEntry: Sendable {
+public struct ZaiLimitEntry: Sendable, Codable {
     public let type: ZaiLimitType
     public let unit: ZaiLimitUnit
     public let number: Int
@@ -50,6 +71,31 @@ public struct ZaiLimitEntry: Sendable {
         self.percentage = percentage
         self.usageDetails = usageDetails
         self.nextResetTime = nextResetTime
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case unit
+        case number
+        case usage
+        case currentValue
+        case remaining
+        case percentage
+        case usageDetails
+        case nextResetTime
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try container.decode(ZaiLimitType.self, forKey: .type)
+        self.unit = try container.decode(ZaiLimitUnit.self, forKey: .unit)
+        self.number = try container.decode(Int.self, forKey: .number)
+        self.usage = try container.decodeIfPresent(Int.self, forKey: .usage)
+        self.currentValue = try container.decodeIfPresent(Int.self, forKey: .currentValue)
+        self.remaining = try container.decodeIfPresent(Int.self, forKey: .remaining)
+        self.percentage = try container.decodeIfPresent(Double.self, forKey: .percentage) ?? 0
+        self.usageDetails = try container.decodeIfPresent([ZaiUsageDetail].self, forKey: .usageDetails) ?? []
+        self.nextResetTime = try container.decodeIfPresent(Date.self, forKey: .nextResetTime)
     }
 }
 
@@ -135,7 +181,7 @@ public struct ZaiUsageDetail: Sendable, Codable {
 }
 
 /// Complete z.ai usage response
-public struct ZaiUsageSnapshot: Sendable {
+public struct ZaiUsageSnapshot: Sendable, Codable {
     public let tokenLimit: ZaiLimitEntry?
     /// Shorter-window TOKENS_LIMIT (e.g. 5-hour), present only when the API returns two TOKENS_LIMIT entries.
     public let sessionTokenLimit: ZaiLimitEntry?
@@ -158,6 +204,37 @@ public struct ZaiUsageSnapshot: Sendable {
         self.planName = planName
         self.modelUsage = modelUsage
         self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case tokenLimit
+        case sessionTokenLimit
+        case timeLimit
+        case planName
+        case modelUsage
+        case updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.tokenLimit = try container.decodeIfPresent(ZaiLimitEntry.self, forKey: .tokenLimit)
+        self.sessionTokenLimit = try container.decodeIfPresent(ZaiLimitEntry.self, forKey: .sessionTokenLimit)
+        self.timeLimit = try container.decodeIfPresent(ZaiLimitEntry.self, forKey: .timeLimit)
+        self.planName = try container.decodeIfPresent(String.self, forKey: .planName)
+        // modelUsage is intentionally optional — it's not persisted across launches (it's a
+        // best-effort 24h fetch, cheap to refetch, and would bloat the snapshot cache).
+        self.modelUsage = nil
+        self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(self.tokenLimit, forKey: .tokenLimit)
+        try container.encodeIfPresent(self.sessionTokenLimit, forKey: .sessionTokenLimit)
+        try container.encodeIfPresent(self.timeLimit, forKey: .timeLimit)
+        try container.encodeIfPresent(self.planName, forKey: .planName)
+        // modelUsage is excluded from encoding so the cache stays compact.
+        try container.encode(self.updatedAt, forKey: .updatedAt)
     }
 
     /// Returns true if this snapshot contains valid z.ai data
@@ -236,13 +313,19 @@ private struct ZaiQuotaLimitData: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.limits = try container.decodeIfPresent([ZaiLimitRaw].self, forKey: .limits) ?? []
-        let rawPlan = try [
+        let explicitPlan = try [
             container.decodeIfPresent(String.self, forKey: .planName),
             container.decodeIfPresent(String.self, forKey: .plan),
             container.decodeIfPresent(String.self, forKey: .planType),
             container.decodeIfPresent(String.self, forKey: .packageName),
         ].compactMap(\.self).first
-        let trimmed = rawPlan?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The live quota API reports the subscription tier only as a lowercase `level` code
+        // (e.g. "pro", "max"). Surface it as the plan when no explicit name field is present, and
+        // upper-case the leading character so it reads like the z.ai console ("Pro").
+        let levelTier = try container.decodeIfPresent(String.self, forKey: .level)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .flatMap { $0.isEmpty ? nil : $0.prefix(1).uppercased() + $0.dropFirst() }
+        let trimmed = (explicitPlan ?? levelTier)?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.planName = (trimmed?.isEmpty ?? true) ? nil : trimmed
     }
 
@@ -252,24 +335,50 @@ private struct ZaiQuotaLimitData: Decodable {
         case plan
         case planType = "plan_type"
         case packageName
+        case level
     }
 }
 
-private struct ZaiLimitRaw: Codable {
+private struct ZaiLimitRaw: Decodable {
     let type: String
     let unit: Int
     let number: Int
     let usage: Int?
     let currentValue: Int?
     let remaining: Int?
-    let percentage: Int
+    let percentage: Double
     let usageDetails: [ZaiUsageDetail]?
-    let nextResetTime: Int?
+    let nextResetTime: Int64?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try container.decode(String.self, forKey: .type)
+        self.unit = container.decodeZaiLossyIntIfPresent(forKey: .unit) ?? ZaiLimitUnit.unknown.rawValue
+        self.number = container.decodeZaiLossyIntIfPresent(forKey: .number) ?? 0
+        self.usage = container.decodeZaiLossyIntIfPresent(forKey: .usage)
+        self.currentValue = container.decodeZaiLossyIntIfPresent(forKey: .currentValue)
+        self.remaining = container.decodeZaiLossyIntIfPresent(forKey: .remaining)
+        self.percentage = container.decodeZaiLossyDoubleIfPresent(forKey: .percentage) ?? 0
+        self.usageDetails = try container.decodeIfPresent([ZaiUsageDetail].self, forKey: .usageDetails)
+        self.nextResetTime = container.decodeZaiLossyInt64IfPresent(forKey: .nextResetTime)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case unit
+        case number
+        case usage
+        case currentValue
+        case remaining
+        case percentage
+        case usageDetails
+        case nextResetTime
+    }
 
     func toLimitEntry() -> ZaiLimitEntry? {
         guard let limitType = ZaiLimitType(rawValue: type) else { return nil }
         let limitUnit = ZaiLimitUnit(rawValue: unit) ?? .unknown
-        let nextReset = self.nextResetTime.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
+        let nextReset = self.nextResetTime.map(ZaiEpoch.date(fromMillisOrSeconds:))
         return ZaiLimitEntry(
             type: limitType,
             unit: limitUnit,
@@ -277,7 +386,7 @@ private struct ZaiLimitRaw: Codable {
             usage: self.usage,
             currentValue: self.currentValue,
             remaining: self.remaining,
-            percentage: Double(self.percentage),
+            percentage: self.percentage,
             usageDetails: self.usageDetails ?? [],
             nextResetTime: nextReset)
     }
@@ -326,7 +435,9 @@ public struct ZaiUsageFetcher: Sendable {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "authorization")
         request.setValue("application/json", forHTTPHeaderField: "accept")
 
-        let response = try await ProviderHTTPClient.shared.response(for: request)
+        let response = try await ProviderHTTPClient.shared.response(
+            for: request,
+            retryPolicy: .transientIdempotent)
         let data = response.data
         guard response.statusCode == 200 else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
@@ -441,7 +552,7 @@ public struct ZaiUsageFetcher: Sendable {
 // MARK: - Model Usage Data
 
 /// Per-model hourly token usage from the z.ai model-usage API
-public struct ZaiModelUsageData: Sendable {
+public struct ZaiModelUsageData: Sendable, Codable {
     public let xTime: [String]
     public let modelDataList: [ZaiModelDataItem]
 
@@ -450,18 +561,67 @@ public struct ZaiModelUsageData: Sendable {
         self.modelDataList = modelDataList
     }
 
+    enum CodingKeys: String, CodingKey {
+        case xTime
+        case x_time
+        case modelDataList
+        case model_data_list
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.xTime = try container.decodeIfPresent([String].self, forKey: .xTime)
+            ?? container.decodeIfPresent([String].self, forKey: .x_time)
+            ?? []
+        self.modelDataList = try container.decodeIfPresent([ZaiModelDataItem].self, forKey: .modelDataList)
+            ?? container.decodeIfPresent([ZaiModelDataItem].self, forKey: .model_data_list)
+            ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.xTime, forKey: .xTime)
+        try container.encode(self.modelDataList, forKey: .modelDataList)
+    }
+
     public var modelNames: [String] {
         self.modelDataList.compactMap(\.modelName)
     }
 }
 
-public struct ZaiModelDataItem: Sendable {
+public struct ZaiModelDataItem: Sendable, Codable {
     public let modelName: String?
     public let tokensUsage: [Int?]
 
     public init(modelName: String?, tokensUsage: [Int?]) {
         self.modelName = modelName
         self.tokensUsage = tokensUsage
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case modelName
+        case model_name
+        case tokensUsage
+        case tokens_usage
+        case tokenUsage
+        case token_usage
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.modelName = try container.decodeIfPresent(String.self, forKey: .modelName)
+            ?? container.decodeIfPresent(String.self, forKey: .model_name)
+        self.tokensUsage = try container.decodeIfPresent([Int?].self, forKey: .tokensUsage)
+            ?? container.decodeIfPresent([Int?].self, forKey: .tokens_usage)
+            ?? container.decodeIfPresent([Int?].self, forKey: .tokenUsage)
+            ?? container.decodeIfPresent([Int?].self, forKey: .token_usage)
+            ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(self.modelName, forKey: .modelName)
+        try container.encode(self.tokensUsage, forKey: .tokensUsage)
     }
 }
 
@@ -530,10 +690,19 @@ public enum ZaiHourlyBars: Sendable {
     }
 
     public static func parseHourDate(_ string: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.date(from: string)
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        for format in ["yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss"] {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let date = formatter.date(from: trimmed) {
+                return date
+            }
+        }
+
+        return ISO8601DateFormatter().date(from: trimmed)
     }
 
     private static func formatHourLabel(hourDate: Date) -> String {
@@ -557,6 +726,40 @@ extension ZaiUsageFetcher {
             throw ZaiUsageError.invalidCredentials
         }
 
+        let now = Date()
+        let calendar = Calendar.current
+        guard let startDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)) else {
+            throw ZaiUsageError.parseFailed("Invalid date calculation")
+        }
+
+        return try await Self.fetchModelUsageRange(
+            apiKey: apiKey,
+            region: region,
+            environment: environment,
+            since: startDate,
+            until: now)
+    }
+
+    /// Fetches hourly model usage data for an arbitrary `[since, until]` window.
+    ///
+    /// Used by the estimated-cost path to pull up to ~30 days of per-model token counts, which the
+    /// z.ai quota API does not expose. The endpoint accepts `startTime`/`endTime` query params and
+    /// returns hourly buckets; callers aggregate into daily buckets.
+    ///
+    /// `until` is truncated to the **minute**, not the hour, so the current hour shows up in the
+    /// chart within minutes of generation. Set `ZAI_MODEL_USAGE_HOUR_PRECISION=1` to restore the
+    /// legacy hour-truncated behavior in case an upstream endpoint rejects minute precision.
+    public static func fetchModelUsageRange(
+        apiKey: String,
+        region: ZaiAPIRegion = .global,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        since: Date,
+        until: Date) async throws -> ZaiModelUsageData
+    {
+        guard !apiKey.isEmpty else {
+            throw ZaiUsageError.invalidCredentials
+        }
+
         let baseURL: URL = if let host = ZaiSettingsReader.apiHost(environment: environment),
                               let resolved = Self.modelUsageURL(baseURLString: host)
         {
@@ -565,26 +768,37 @@ extension ZaiUsageFetcher {
             region.modelUsageURL
         }
 
-        let now = Date()
-        let calendar = Calendar.current
-        guard let startDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)) else {
-            throw ZaiUsageError.parseFailed("Invalid date calculation")
-        }
+        let hourPrecision = environment["ZAI_MODEL_USAGE_HOUR_PRECISION"] == "1"
 
-        let startComponents = calendar.dateComponents([.year, .month, .day, .hour], from: startDate)
-        let endComponents = calendar.dateComponents([.year, .month, .day, .hour], from: now)
+        let calendar = Calendar.current
+        let startComponents = calendar.dateComponents([.year, .month, .day, .hour], from: since)
+        let endComponents: DateComponents = if hourPrecision {
+            calendar.dateComponents([.year, .month, .day, .hour], from: until)
+        } else {
+            calendar.dateComponents([.year, .month, .day, .hour, .minute], from: until)
+        }
         let startTime = String(
             format: "%04d-%02d-%02d %02d:00:00",
             startComponents.year!,
             startComponents.month!,
             startComponents.day!,
             startComponents.hour!)
-        let endTime = String(
-            format: "%04d-%02d-%02d %02d:59:59",
-            endComponents.year!,
-            endComponents.month!,
-            endComponents.day!,
-            endComponents.hour!)
+        let endTime = if hourPrecision {
+            String(
+                format: "%04d-%02d-%02d %02d:59:59",
+                endComponents.year!,
+                endComponents.month!,
+                endComponents.day!,
+                endComponents.hour!)
+        } else {
+            String(
+                format: "%04d-%02d-%02d %02d:%02d:59",
+                endComponents.year!,
+                endComponents.month!,
+                endComponents.day!,
+                endComponents.hour!,
+                endComponents.minute ?? 0)
+        }
 
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw ZaiUsageError.networkError("Invalid URL")
@@ -603,7 +817,9 @@ extension ZaiUsageFetcher {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let response = try await ProviderHTTPClient.shared.response(for: request)
+        let response = try await ProviderHTTPClient.shared.response(
+            for: request,
+            retryPolicy: .transientIdempotent)
         let data = response.data
         guard response.statusCode == 200 else {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
@@ -700,8 +916,18 @@ private struct ZaiModelUsageRawData: Decodable {
     let xTime: [String]?
     let modelDataList: [ZaiModelDataItemRaw]?
 
-    enum CodingKeys: String, CodingKey {
-        case xTime = "x_time"
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.xTime = try container.decodeIfPresent([String].self, forKey: .xTimeSnake)
+            ?? container.decodeIfPresent([String].self, forKey: .xTimeCamel)
+        self.modelDataList = try container.decodeIfPresent([ZaiModelDataItemRaw].self, forKey: .modelDataList)
+            ?? container.decodeIfPresent([ZaiModelDataItemRaw].self, forKey: .modelDataListSnake)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case xTimeSnake = "x_time"
+        case xTimeCamel = "xTime"
+        case modelDataListSnake = "model_data_list"
         case modelDataList
     }
 }
@@ -709,6 +935,113 @@ private struct ZaiModelUsageRawData: Decodable {
 private struct ZaiModelDataItemRaw: Decodable {
     let modelName: String?
     let tokensUsage: [Int?]?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.modelName = try container.decodeIfPresent(String.self, forKey: .modelName)
+            ?? container.decodeIfPresent(String.self, forKey: .modelNameSnake)
+            ?? container.decodeIfPresent(String.self, forKey: .modelCode)
+        let usage = try container.decodeIfPresent([ZaiFlexibleOptionalInt].self, forKey: .tokensUsage)
+            ?? container.decodeIfPresent([ZaiFlexibleOptionalInt].self, forKey: .tokensUsageSnake)
+            ?? container.decodeIfPresent([ZaiFlexibleOptionalInt].self, forKey: .tokenUsage)
+        self.tokensUsage = usage?.map(\.value)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case modelName
+        case modelNameSnake = "model_name"
+        case modelCode
+        case tokensUsage
+        case tokensUsageSnake = "tokens_usage"
+        case tokenUsage
+    }
+}
+
+private struct ZaiFlexibleOptionalInt: Decodable {
+    let value: Int?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self.value = nil
+        } else if let intValue = try? container.decode(Int.self) {
+            self.value = intValue
+        } else if let int64Value = try? container.decode(Int64.self) {
+            self.value = Int(exactly: int64Value)
+        } else if let doubleValue = try? container.decode(Double.self), doubleValue.isFinite {
+            self.value = Int(doubleValue.rounded())
+        } else if let stringValue = try? container.decode(String.self) {
+            self.value = Self.parseInt(stringValue)
+        } else {
+            self.value = nil
+        }
+    }
+
+    fileprivate static func parseInt(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let intValue = Int(trimmed) {
+            return intValue
+        }
+        guard let doubleValue = Double(trimmed), doubleValue.isFinite else {
+            return nil
+        }
+        return Int(doubleValue.rounded())
+    }
+}
+
+extension KeyedDecodingContainer where K: CodingKey {
+    fileprivate func decodeZaiLossyIntIfPresent(forKey key: K) -> Int? {
+        if let value = try? self.decodeIfPresent(Int.self, forKey: key) {
+            return value
+        }
+        if let value = try? self.decodeIfPresent(Int64.self, forKey: key) {
+            return Int(exactly: value)
+        }
+        if let value = try? self.decodeIfPresent(Double.self, forKey: key), value.isFinite {
+            return Int(value.rounded())
+        }
+        if let stringValue = try? self.decodeIfPresent(String.self, forKey: key) {
+            return ZaiFlexibleOptionalInt.parseInt(stringValue)
+        }
+        return nil
+    }
+
+    fileprivate func decodeZaiLossyInt64IfPresent(forKey key: K) -> Int64? {
+        if let value = try? self.decodeIfPresent(Int64.self, forKey: key) {
+            return value
+        }
+        if let value = try? self.decodeIfPresent(Int.self, forKey: key) {
+            return Int64(value)
+        }
+        if let value = try? self.decodeIfPresent(Double.self, forKey: key), value.isFinite {
+            return Int64(value.rounded())
+        }
+        if let stringValue = try? self.decodeIfPresent(String.self, forKey: key) {
+            let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let value = Int64(trimmed) {
+                return value
+            }
+            guard let doubleValue = Double(trimmed), doubleValue.isFinite else { return nil }
+            return Int64(doubleValue.rounded())
+        }
+        return nil
+    }
+
+    fileprivate func decodeZaiLossyDoubleIfPresent(forKey key: K) -> Double? {
+        if let value = try? self.decodeIfPresent(Double.self, forKey: key), value.isFinite {
+            return value
+        }
+        if let value = try? self.decodeIfPresent(Int.self, forKey: key) {
+            return Double(value)
+        }
+        if let stringValue = try? self.decodeIfPresent(String.self, forKey: key) {
+            let trimmed = stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let value = Double(trimmed), value.isFinite else { return nil }
+            return value
+        }
+        return nil
+    }
 }
 
 /// Errors that can occur during z.ai usage fetching

@@ -318,6 +318,7 @@ extension SettingsStore {
         return hadExistingConfig
     }
 
+    // swiftlint:disable:next function_body_length
     private static func loadDefaultsState(userDefaults: UserDefaults) -> SettingsDefaultsState {
         let refreshDefault = userDefaults.string(forKey: "refreshFrequency")
             .flatMap(RefreshFrequency.init(rawValue:))
@@ -342,7 +343,7 @@ extension SettingsStore {
             return false
         }()
         let debugFileLoggingEnabled = userDefaults.object(forKey: "debugFileLoggingEnabled") as? Bool ?? false
-        let debugLogLevelRaw = userDefaults.string(forKey: "debugLogLevel") ?? CodexBarLog.Level.verbose.rawValue
+        let debugLogLevelRaw = userDefaults.string(forKey: "debugLogLevel") ?? CodexBarLog.Level.info.rawValue
         if Self.isRunningTests, userDefaults.string(forKey: "debugLogLevel") == nil {
             userDefaults.set(debugLogLevelRaw, forKey: "debugLogLevel")
         }
@@ -380,6 +381,7 @@ extension SettingsStore {
         let costUsageEnabled = userDefaults.object(forKey: "tokenCostUsageEnabled") as? Bool ?? false
         let rawCostUsageHistoryDays = userDefaults.object(forKey: "tokenCostUsageHistoryDays") as? Int ?? 30
         let costUsageHistoryDays = max(1, min(365, rawCostUsageHistoryDays))
+        let zaiEstimatedCostEnabled = userDefaults.object(forKey: "zaiEstimatedCostEnabled") as? Bool ?? false
         let hidePersonalInfo = userDefaults.object(forKey: "hidePersonalInfo") as? Bool ?? false
         let randomBlinkEnabled = userDefaults.object(forKey: "randomBlinkEnabled") as? Bool ?? false
         let confettiOnWeeklyLimitResetsEnabled = userDefaults.object(
@@ -449,6 +451,7 @@ extension SettingsStore {
             menuBarMetricPreferencesRaw: resolvedPreferences,
             costUsageEnabled: costUsageEnabled,
             costUsageHistoryDays: costUsageHistoryDays,
+            zaiEstimatedCostEnabled: zaiEstimatedCostEnabled,
             hidePersonalInfo: hidePersonalInfo,
             randomBlinkEnabled: randomBlinkEnabled,
             confettiOnWeeklyLimitResetsEnabled: confettiOnWeeklyLimitResetsEnabled,
