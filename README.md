@@ -1,13 +1,14 @@
-# CodexBar (Personal Fork) 🎚️ — May your tokens never run out.
+# Midas 🎚️ — May your tokens never run out.
 
 > Every AI coding limit, in your menu bar.
 
-> **Personal fork.** This repo is a fork of [steipete/CodexBar](https://github.com/steipete/CodexBar)
-> (MIT-licensed, all credit to Peter Steinberger and contributors), modified for my own use.
-> Personal additions so far: Meta provider support, Cursor metered-dollar cost tracking, an
-> Overview "Usage & Spend" header with prior-period comparison, inline cost dashboards for
-> Cursor/Meta, and simplified Cursor/Codex tab layouts. Upstream releases, Homebrew, and
-> codexbar.app below refer to the original project, not this fork.
+> **Project Midas** is my personal version of CodexBar, forked from
+> [steipete/CodexBar](https://github.com/steipete/CodexBar) (MIT-licensed — all credit to
+> Peter Steinberger and contributors) and modified for my own use. My additions so far:
+> Meta provider support, Cursor metered-dollar cost tracking, an Overview "Usage & Spend"
+> header with prior-period comparison, inline cost dashboards for Cursor/Meta, and simplified
+> Cursor/Codex tab layouts. Upstream releases, Homebrew, and codexbar.app references below
+> refer to the original CodexBar project, not this fork.
 
 [![Latest release](https://img.shields.io/github/v/release/steipete/CodexBar?style=flat-square&color=0a0a0c)](https://github.com/steipete/CodexBar/releases/latest)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://github.com/steipete/CodexBar/releases/latest)
