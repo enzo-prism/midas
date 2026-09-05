@@ -61,7 +61,8 @@ Existing Ledger users move to Orbit once. Other explicit modes and the selected 
 unchanged; choosing Ledger again is respected. **Ledger** remains available. **Focus** pins one
 provider’s quota (Codex is always weekly remaining). **Constellation** shows up to three separate
 readings, prioritizing enabled Codex, Cursor, and Meta, then other enabled providers. All modes
-retain one stable-width native status item. Settings → Display offers these modes, focus-provider
+retain one content-sized native status item. Text uses 13-point monospaced digits; equal-length
+numeric updates and status changes preserve width, while shorter readings reclaim space. Settings → Display offers these modes, focus-provider
 selection, menu-bar spend privacy, and **Legacy**, which restores saved original icon preferences.
 
 Cached background refreshes stay still. Active initial/manual requests can animate a separate

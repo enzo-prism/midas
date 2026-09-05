@@ -58,18 +58,26 @@ final class MidasMenuBarView: NSView {
     }
 
     static func geometry(in bounds: CGRect, orbit: Bool = false) -> Geometry {
+        let inset = MidasMenuBarLayout.horizontalInset
+        let gap = MidasMenuBarLayout.readingGap
         if orbit {
-            let orb = CGRect(x: bounds.width - 25, y: (bounds.height - 18) / 2, width: 18, height: 18)
+            let size = MidasMenuBarLayout.orbitWidth
+            let orb = CGRect(x: bounds.maxX - inset - size, y: bounds.midY - size / 2, width: size, height: size)
             let reading = CGRect(
-                x: 7,
-                y: (bounds.height - 17) / 2,
-                width: max(0, orb.minX - 14),
+                x: bounds.minX + inset,
+                y: bounds.midY - 8.5,
+                width: max(0, orb.minX - gap - bounds.minX - inset),
                 height: 17)
             return Geometry(mark: orb, title: reading, badge: orb)
         }
-        let mark = CGRect(x: 6, y: (bounds.height - 16) / 2, width: 16, height: 16)
-        let badge = CGRect(x: bounds.width - 18, y: (bounds.height - 12) / 2, width: 12, height: 12)
-        let title = CGRect(x: 28, y: (bounds.height - 17) / 2, width: max(0, badge.minX - 32), height: 17)
+        let mark = CGRect(x: bounds.minX + inset, y: bounds.midY - 8, width: 16, height: 16)
+        // Reserve only the small indicator slot so refresh/stale/warning transitions do not shift neighbors.
+        let badge = CGRect(x: bounds.maxX - inset - 12, y: bounds.midY - 6, width: 12, height: 12)
+        let title = CGRect(
+            x: mark.maxX + gap,
+            y: bounds.midY - 8.5,
+            width: max(0, badge.minX - MidasMenuBarLayout.badgeGap - mark.maxX - gap),
+            height: 17)
         return Geometry(mark: mark, title: title, badge: badge)
     }
 
@@ -103,22 +111,14 @@ final class MidasMenuBarView: NSView {
             let highlighted = (self.superview as? NSButton)?.cell?.isHighlighted == true
             // A status button highlight is not a selected menu row; retain its inherited label appearance.
             let color = NSColor.labelColor
-            let nominalFont = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-            let measuredWidth = (presentation.title as NSString).size(withAttributes: [.font: nominalFont]).width
-            let availableWidth = Self.geometry(in: CGRect(
-                x: 0,
-                y: 0,
-                width: presentation.width,
-                height: self.bounds.height), orbit: presentation.orbitProvider != nil).title.width
-            let fittedSize = max(9, min(13, 13 * availableWidth / max(1, measuredWidth)))
-            let font = NSFont.monospacedDigitSystemFont(ofSize: (fittedSize * 2).rounded(.down) / 2, weight: .medium)
+            let font = MidasMenuBarLayout.font
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             self.markLayer.isHidden = presentation.orbitProvider != nil
             self.badgeLayer.isHidden = presentation.orbitProvider != nil
             self.orbitLayer.isHidden = presentation.orbitProvider == nil
             self.markLayer.fillColor = color.cgColor
-            self.titleLayer.alignmentMode = presentation.orbitProvider == nil ? .left : .right
+            self.titleLayer.alignmentMode = .left
             self.titleLayer.font = font as CTFont
             self.titleLayer.fontSize = font.pointSize
             self.titleLayer.foregroundColor = color.cgColor

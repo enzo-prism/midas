@@ -50,7 +50,7 @@ struct MidasMenuBarRenderTests {
     @Test func orbitKeepsAmountBeforeRingWithinNativeBar() {
         let bounds = CGRect(x: 0, y: 0, width: 110, height: 24)
         let geometry = MidasMenuBarView.geometry(in: bounds, orbit: true)
-        #expect(geometry.title.maxX + 7 == geometry.mark.minX)
+        #expect(geometry.title.maxX + MidasMenuBarLayout.readingGap == geometry.mark.minX)
         #expect(bounds.contains(geometry.mark))
         #expect(bounds.contains(geometry.title))
         #expect(geometry.mark.height == 18)
@@ -118,6 +118,25 @@ struct MidasMenuBarRenderTests {
         guard let output = ProcessInfo.processInfo.environment["MIDAS_MENUBAR_PREVIEW_OUTPUT"] else { return }
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         let fixtures = [
+            ("orbit-compact", self.presentation(
+                "$13.9k",
+                width: MidasMenuBarLayout.width(title: "$13.9k", orbit: true),
+                orbitProvider: .codex,
+                remaining: 72)),
+            ("orbit-compact-missing", self.presentation(
+                "—",
+                width: MidasMenuBarLayout.width(title: "—", orbit: true),
+                orbitProvider: .codex)),
+            ("orbit-compact-private", self.presentation(
+                "••••",
+                width: MidasMenuBarLayout.width(title: "••••", orbit: true),
+                orbitProvider: .codex)),
+            ("ledger-compact", self.presentation(
+                "≈$42.80", width: MidasMenuBarLayout.width(title: "≈$42.80", orbit: false))),
+            ("focus-compact", self.presentation(
+                "C 72%", width: MidasMenuBarLayout.width(title: "C 72%", orbit: false))),
+            ("constellation-compact", self.presentation(
+                "C 72%  U 54%  M —", width: MidasMenuBarLayout.width(title: "C 72%  U 54%  M —", orbit: false))),
             ("orbit-codex", self.presentation("$13.9k", width: 110, orbitProvider: .codex, remaining: 72)),
             ("orbit-cursor", self.presentation("$13.9k", width: 110, orbitProvider: .cursor, remaining: 54)),
             ("orbit-meta-neutral", self.presentation("$13.9k", width: 110, orbitProvider: .meta)),

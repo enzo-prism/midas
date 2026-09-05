@@ -15,7 +15,7 @@ struct MidasMenuBarPresentationTests {
                 amount: 10)])
         #expect(model.title == "C 72%")
         #expect(model.tooltip.contains("Token spend (API rates)"))
-        #expect(model.width == 120)
+        #expect(model.width < 100)
     }
 
     @Test func missingWeeklyDoesNotFallBackToSession() {
@@ -207,7 +207,7 @@ struct MidasMenuBarPresentationTests {
             self.item(.cursor, amount: 20),
         ])
         #expect(model.title == "$30")
-        #expect(model.width == 110)
+        #expect(model.width < 75)
         #expect(model.orbitProvider == .codex)
         #expect(model.orbitRemainingPercent == 72)
         #expect(model.tooltip.contains("Favorite: Codex"))

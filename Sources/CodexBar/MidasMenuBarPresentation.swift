@@ -39,7 +39,7 @@ struct MidasMenuBarPresentation: Equatable {
         isRefreshing: Bool,
         attention: Bool,
         isStale: Bool,
-        width: CGFloat,
+        width: CGFloat? = nil,
         isPartial: Bool = false,
         orbitProvider: UsageProvider? = nil,
         orbitRemainingPercent: Double? = nil)
@@ -51,7 +51,7 @@ struct MidasMenuBarPresentation: Equatable {
         self.attention = attention
         self.isStale = isStale
         self.isPartial = isPartial
-        self.width = width
+        self.width = width ?? MidasMenuBarLayout.width(title: title, orbit: orbitProvider != nil)
         self.orbitProvider = orbitProvider
         self.orbitRemainingPercent = orbitRemainingPercent
     }
@@ -99,7 +99,6 @@ struct MidasMenuBarPresentation: Equatable {
             && total.excludedProviderCount > 0
         switch mode {
         case .ledger, .orbit:
-            self.width = mode == .orbit ? 110 : 130
             if hideSpend {
                 self.title = "••••"
             } else if total.totals.isEmpty {
@@ -110,21 +109,19 @@ struct MidasMenuBarPresentation: Equatable {
                     : prefix + Self.compactMoney(total.totals[0].amount, currency: total.totals[0].currency)
             }
         case .focus:
-            self.width = 120
             let item = displayed.first
             let quota = item.flatMap(Self.quota)
             let remaining = quota.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—"
             self.title = "\(Self.initial(focusProvider)) \(remaining)"
         case .constellation:
-            self.width = 190
             self.title = displayed.isEmpty ? "—" : displayed.map { item in
                 let quota = Self.quota(item).map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—"
                 return "\(Self.initial(item.provider)) \(quota)"
             }.joined(separator: "  ")
         case .legacy:
-            self.width = 24
             self.title = ""
         }
+        self.width = mode == .legacy ? 24 : MidasMenuBarLayout.width(title: self.title, orbit: mode == .orbit)
         var descriptions = displayed.map { Self.describe($0, hideSpend: hideSpend, now: now) }
         if displayed.isEmpty {
             descriptions.append(mode == .focus || mode == .orbit

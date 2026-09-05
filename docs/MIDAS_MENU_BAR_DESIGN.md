@@ -5,7 +5,7 @@ September 4, 2026. Original design study with fictional values, followed by nati
 ## Implementation status
 
 Orbit is now the default for new Midas installs and migrates existing Ledger users once. Its
-110-point status item puts the all-provider token-spend total before one favorite provider’s
+content-sized status item puts the all-provider token-spend total before one favorite provider’s
 logo and an 18-point capacity ring. The panel’s provider dropdown selects the favorite and switches to Orbit; Settings → Display →
 Orbit provider offers the same selection.
 The ring stays static during refresh; a separate satellite communicates activity. Unknown capacity
@@ -14,8 +14,9 @@ remaining, Cursor uses actual quota, and Meta has no quota. The small monochrome
 assets preserve identity without reusing full-color panel artwork at an unsuitable size.
 
 Ledger, Focus, and Constellation remain available, with Legacy
-preserving prior icon settings. The native renderer uses stable widths of 130, 120, and 190 points
-respectively, a passive Midas mark/text/badge view, and monospaced digits. Constellation uses compact
+preserving prior icon settings. The native renderer measures the 13-point reading at its displayed font size
+and adds only the mark, indicator, gaps, and edge insets. A passive drawing view uses monospaced digits.
+Constellation uses compact
 separate readings rather than subpixel quota tracks. Mixed currencies display a currency count;
 the tooltip retains separate totals. Hidden spend is masked and excluded from accessibility text.
 
@@ -37,7 +38,7 @@ Give Midas a recognizable four-point mark and a steady estimated-spend figure: *
 
 The menu bar should answer “What is my estimated usage value?” One click should answer “Where did it go, and how much capacity remains?” Keep the total prominent above separate Codex, Cursor, and Meta readings. Their quotas have different meanings and cannot truthfully become one averaged percentage.
 
-The proposed default occupies roughly 100–112 points including padding and a reserved status slot. This is a target, to be measured in native AppKit at actual system font sizes. Use tabular numerals and a fixed width within the chosen display mode. Compact large amounts to approximately `$1.2K` or `$12.4K`; the tooltip and panel retain exact amounts. Keep `≈` visible. Currency formatting must follow the selected locale and remain unambiguous when more than one currency is present.
+The original 100–112-point target is superseded by content measurement at the native font size, including padding and a reserved status slot. Use tabular numerals and a content-sized width within the chosen display mode. Compact large amounts to approximately `$1.2K` or `$12.4K`; the tooltip and panel retain exact amounts. Keep `≈` visible. Currency formatting must follow the selected locale and remain unambiguous when more than one currency is present.
 
 Do not automatically replace spend with quota or reset time. A stable unit helps the user read the item without reconsidering its meaning. A small static warning mark can add urgency without hiding the primary reading.
 
@@ -162,3 +163,15 @@ Build a `MidasMenuBarPresentation` model with mode, selected provider/window, am
 The original interactive study compared Ledger, Focus, and Constellation plus ten data states, privacy, and reduced motion. Its critique pass added explicit estimate provenance, separated missing estimates from missing Codex quota, replaced low constellation fills with legible numbers, improved supporting type, and kept the brand mark still during refresh. That study is a layout proposal, not a native benchmark or live account dashboard; the app implementation is described above.
 
 Prototype verification: 30 concept/state combinations passed in headless Chromium, with no JavaScript errors. Refresh completion, panel toggling, masked-dollar accessibility text, reduced-motion CSS, and 375-pixel layout checks passed. Light and dark rendered previews were visually inspected. These results validate the prototype only; the native acceptance steps above remain necessary for app implementation.
+
+## Compact sizing implementation
+
+The earlier 110/130/120/190-point mode widths reserved blank space even for short readings.
+`MidasMenuBarLayout` now shares measurement metrics with the native drawing view. Orbit uses
+6-point edge insets, the measured reading, a 5-point gap, and an 18-point ring. Other modes
+retain a small 12-point status slot with a 4-point gap so refresh, warning, and stale-state
+changes never move neighboring items. The text stays at 13 points instead of shrinking.
+Monospaced digits preserve width for equal-length numeric changes; shorter readings reclaim
+space, and larger readings expand. Extreme strings are capped at 220 points and ellipsized,
+with the full accessible description and tooltip retained. Native hit testing and animation
+behavior remain on the original status button.
