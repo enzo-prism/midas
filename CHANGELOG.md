@@ -1,5 +1,11 @@
 # Changelog
 
+## Midas 0.33.2 — September 4, 2026
+
+- Rename the primary spend label to “Token spend (API rates)” throughout provider cards, totals, menu-bar tooltips, and accessibility descriptions.
+- Preserve API-rate estimate explanations, provider-metered labels, and all usage calculations.
+- Release build 84 for Apple Silicon with updated project and distribution documentation.
+
 ## 0.33.1 — Unreleased
 
 ### Midas fork — September 4, 2026

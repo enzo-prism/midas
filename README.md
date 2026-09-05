@@ -5,7 +5,7 @@
 > **Project Midas** is my personal version of CodexBar, forked from
 > [steipete/CodexBar](https://github.com/steipete/CodexBar) (MIT-licensed — all credit to
 > Peter Steinberger and contributors) and modified for my own use. My additions so far:
-> the Midas Air native interface, provider estimated spend and an all-provider estimated total,
+> the Midas Air native interface, provider token spend (API rates) and an all-provider token-spend total,
 > Meta usage tracking, Cursor cost dashboards, Codex weekly remaining and rate-limit reset credits
 > (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
 > refer to the original CodexBar project, not this fork.
@@ -13,7 +13,7 @@
 ## Midas Air
 
 Midas now opens a spacious native panel with warm neutral surfaces, a restrained gold accent,
-bundled provider logos, and prominent estimated spend beside remaining usage. Both overviews show
+bundled provider logos, and prominent token spend (API rates) beside remaining usage. Both overviews show
 the total across all enabled providers with usable estimates, including providers outside Favorites.
 Missing estimates are excluded and disclosed; currencies stay separate. These are usage-rate
 estimates, not a combined bill. Codex keeps an explicit weekly-remaining view. **Open Usage** opens

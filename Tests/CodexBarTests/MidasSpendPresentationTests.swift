@@ -12,7 +12,7 @@ struct MidasSpendPresentationTests {
             snapshot: self.snapshot(
                 amount: 12.50,
                 provenance: .listPriceEstimate)))
-        #expect(spend.title == "Estimated spend")
+        #expect(spend.title == "Token spend (API rates)")
         #expect(spend.amount == 12.50)
         #expect(spend.period == "Last 7 days")
         #expect(spend.detail.contains("API-rate"))
@@ -53,7 +53,7 @@ struct MidasSpendPresentationTests {
                 amount: 15,
                 provenance: .mixed,
                 metered: 3)))
-        #expect(spend.title == "Estimated spend")
+        #expect(spend.title == "Token spend (API rates)")
         #expect(spend.amount == 15)
         #expect(spend.secondaryLabel == "Provider-metered consumption")
         #expect(spend.secondaryValue == 3.0.formatted(.currency(code: "USD")))
@@ -78,7 +78,7 @@ struct MidasSpendPresentationTests {
                 amount: 0,
                 provenance: .listPriceEstimate,
                 equivalent: 22)))
-        #expect(spend.title == "Estimated spend")
+        #expect(spend.title == "Token spend (API rates)")
         #expect(spend.amount == 0)
         #expect(spend.detail.contains("Model-tier"))
         #expect(spend.secondaryLabel == "Standard API-equivalent value")

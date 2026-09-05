@@ -69,7 +69,7 @@ struct MidasSpendPresentation {
         let detail: String
         switch provenance {
         case .listPriceEstimate:
-            title = "Estimated spend"
+            title = "Token spend (API rates)"
             detail = provider == .meta
                 ? "Model-tier price estimate from local Muse activity; not a bill."
                 : "API-rate value of recorded usage; an estimate, not a bill."

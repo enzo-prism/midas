@@ -14,7 +14,7 @@ struct MidasMenuBarPresentationTests {
                 remaining: 72,
                 amount: 10)])
         #expect(model.title == "C 72%")
-        #expect(model.tooltip.contains("Estimated spend"))
+        #expect(model.tooltip.contains("Token spend (API rates)"))
         #expect(model.width == 120)
     }
 
@@ -85,7 +85,7 @@ struct MidasMenuBarPresentationTests {
             for text in [model.title, model.tooltip, model.accessibilityLabel] {
                 #expect(!text.contains("$"))
                 #expect(!text.contains("123.45"))
-                #expect(!text.contains("Estimated spend"))
+                #expect(!text.contains("Token spend (API rates)"))
             }
         }
     }

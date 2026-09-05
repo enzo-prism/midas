@@ -120,7 +120,7 @@ struct MidasProviderDetailView: View {
 
     private var spendHeadline: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(self.presentation.spend?.title ?? "Estimated spend")
+            Text(self.presentation.spend?.title ?? "Token spend (API rates)")
                 .font(.callout).foregroundStyle(MidasTheme.secondaryText)
             Text(self.presentation.spend?.value ?? "—")
                 .font(.system(size: 46, weight: .semibold, design: .rounded))

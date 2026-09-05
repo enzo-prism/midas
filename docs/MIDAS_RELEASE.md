@@ -6,13 +6,21 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The first Midas distribution is version 0.33.1, build 83, tagged `v0.33.1-midas.1`.
+The current Midas distribution is version 0.33.2, build 84, tagged `v0.33.2-midas.1`.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
 and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
 
 Midas keeps upstream Sparkle updates disabled. Install this release manually from GitHub.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+
+## 0.33.2 changes
+
+- Replaces “Estimated spend” with “Token spend (API rates)” in provider cards, totals,
+  menu-bar tooltips, and accessibility descriptions.
+- Keeps provider-metered values distinct and preserves the explanation that API-rate values
+  are estimates, not billed charges. Usage calculations and remaining-capacity behavior are unchanged.
+- Validated with 34 focused presentation/layout tests, strict lint, and light/dark native fixtures.
 
 ## Release procedure
 
@@ -29,7 +37,8 @@ runs only for upstream releases; fork maintainers may still invoke its artifact-
    for distribution. Publish against the exact tested commit in `enzo-prism/midas` with an explicit
    architecture label. Include license notices and the existing bundled credits.
 8. Download the published asset, verify its SHA-256, and inspect the extracted app signature/ticket.
-   Restart the local app from the same validated bundle and confirm its process remains running.
+   Extract into a clean temporary directory outside Documents to avoid File Provider metadata
+   modifying signed bundles. Restart the local app from the same validated bundle and confirm its process remains running.
 
 Keep signed archives and signing credentials on internal encrypted storage. Do not publish logs,
 provider account data, keys, or local settings. A source push, a signed build, an accepted Apple

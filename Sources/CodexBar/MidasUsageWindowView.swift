@@ -112,7 +112,7 @@ struct MidasUsageWindowView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Overview")
                         .font(.system(size: 29, weight: .semibold, design: .rounded))
-                    Text("Estimated spend, remaining capacity, and activity.")
+                    Text("Token spend (API rates), remaining capacity, and activity.")
                         .foregroundStyle(MidasTheme.secondaryText)
                 }
                 Spacer()

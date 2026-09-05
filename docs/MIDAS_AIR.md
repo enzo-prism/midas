@@ -6,9 +6,9 @@ settings, and legacy menu-bar icon preferences intact. macOS 14 remains the mini
 
 ## Everyday surfaces
 
-- **Overview:** total estimated spend across all enabled providers, ordered favorite provider rows, an All providers chooser, freshness and
+- **Overview:** total token spend (API rates) across all enabled providers, ordered favorite provider rows, an All providers chooser, freshness and
   connection states, refresh, settings, and Open Usage.
-- **Provider detail:** prominent estimated spend, recognizable logos, explicit periods and remaining capacity, reset
+- **Provider detail:** prominent token spend (API rates), recognizable logos, explicit periods and remaining capacity, reset
   information, and separate session constraints. Codex uses weekly remaining as its quota hero;
   missing weekly data does not turn into a session metric.
 - **Usage window:** resizable provider navigation, Usage and Costs views, period controls,
@@ -33,7 +33,7 @@ runs preserve the original routing. Do not edit a signed app's plist to switch i
 Favorites filtering. It deduplicates providers, keeps currencies separate without conversion, and
 reports coverage and reporting periods. A missing estimate is excluded rather than converted to
 zero; a genuine zero estimate remains valid. Secondary API equivalents, metered balances, and
-reset credits are not additional estimated spend. Provider valuation bases can differ, so this
+reset credits are not additional token spend (API rates). Provider valuation bases can differ, so this
 total is a sum of usage-rate estimates, not billed charges.
 
 Codex keeps weekly remaining separate from session constraints, and its single menu-bar capsule

@@ -121,7 +121,9 @@ struct MidasMenuBarPresentation: Equatable {
         }
         if !hideSpend, mode == .ledger {
             let amounts = total.totals.map { "\($0.value) \($0.currency)" }.joined(separator: ", ")
-            descriptions.insert(amounts.isEmpty ? "Estimated spend unavailable" : "Estimated spend: \(amounts)", at: 0)
+            descriptions.insert(
+                amounts.isEmpty ? "Token spend (API rates) unavailable" : "Token spend (API rates): \(amounts)",
+                at: 0)
             descriptions.append(total.periodText)
             descriptions.append(total.coverageText)
         }

@@ -10,11 +10,11 @@ struct MidasTotalSpendView: View {
     var body: some View {
         let total = self.total
         VStack(alignment: .leading, spacing: 10) {
-            Text("Total estimated spend")
+            Text("Total token spend (API rates)")
                 .font(.callout).foregroundStyle(MidasTheme.secondaryText)
             if total.totals.isEmpty {
                 Text("—").font(.system(size: 42, weight: .semibold, design: .rounded))
-                    .accessibilityLabel("Total estimate unavailable")
+                    .accessibilityLabel("Total token spend (API rates) unavailable")
             } else {
                 ForEach(total.totals) { currency in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
