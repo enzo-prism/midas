@@ -9,12 +9,16 @@ public struct CodexUsageResponse: Decodable, Sendable {
     public let credits: CreditDetails?
     /// Model-specific limits (e.g. GPT-5.3-Codex-Spark) that sit alongside the primary/weekly windows.
     public let additionalRateLimits: [AdditionalRateLimit]?
+    /// On-demand rate-limit reset credit counts. The usage body carries counts only;
+    /// per-credit expiries come from the dedicated reset-credits endpoint.
+    public let rateLimitResetCredits: RateLimitResetCreditsSummary?
 
     enum CodingKeys: String, CodingKey {
         case planType = "plan_type"
         case rateLimit = "rate_limit"
         case credits
         case additionalRateLimits = "additional_rate_limits"
+        case rateLimitResetCredits = "rate_limit_reset_credits"
     }
 
     public init(from decoder: Decoder) throws {
@@ -22,6 +26,9 @@ public struct CodexUsageResponse: Decodable, Sendable {
         self.planType = try? container.decodeIfPresent(PlanType.self, forKey: .planType)
         self.rateLimit = try? container.decodeIfPresent(RateLimitDetails.self, forKey: .rateLimit)
         self.credits = try? container.decodeIfPresent(CreditDetails.self, forKey: .credits)
+        self.rateLimitResetCredits = try? container.decodeIfPresent(
+            RateLimitResetCreditsSummary.self,
+            forKey: .rateLimitResetCredits)
         // Optional and additive: missing/malformed extra limits must never disturb primary/weekly mapping.
         // Decode per element so a single malformed entry cannot discard its valid siblings; a non-array
         // value (or absent field) leaves `additionalRateLimits` nil and primary/weekly mapping untouched.
@@ -178,6 +185,28 @@ public struct CodexUsageResponse: Decodable, Sendable {
         }
     }
 
+    /// Counts embedded in the `wham/usage` body under `rate_limit_reset_credits`.
+    /// `availableCount` is the headline "N available" figure; `applicableAvailableCount`
+    /// is reported alongside it (observed 0 while nothing needs resetting) and kept for
+    /// diagnostics. Neither carries per-credit expiries.
+    public struct RateLimitResetCreditsSummary: Decodable, Sendable {
+        public let availableCount: Int?
+        public let applicableAvailableCount: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case availableCount = "available_count"
+            case applicableAvailableCount = "applicable_available_count"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.availableCount = try? container.decodeIfPresent(Int.self, forKey: .availableCount)
+            self.applicableAvailableCount = try? container.decodeIfPresent(
+                Int.self,
+                forKey: .applicableAvailableCount)
+        }
+    }
+
     public struct CreditDetails: Decodable, Sendable {
         public let hasCredits: Bool
         public let unlimited: Bool
@@ -278,6 +307,62 @@ public enum CodexOAuthUsageFetcher {
         }
     }
 
+    /// Best-effort fetch of per-credit reset expiries from the dedicated endpoint.
+    /// Callers must not fail the refresh when this throws; fall back to the count embedded
+    /// in the `wham/usage` body (which carries no expiries).
+    public static func fetchResetCredits(
+        accessToken: String,
+        accountId: String?,
+        env: [String: String] = ProcessInfo.processInfo.environment) async throws -> CodexResetCreditsResponse
+    {
+        var request = URLRequest(url: Self.resolveResetCreditsURL(env: env))
+        request.httpMethod = "GET"
+        request.timeoutInterval = 30
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("CodexBar", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let accountId, !accountId.isEmpty {
+            request.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
+        }
+
+        do {
+            let response = try await ProviderHTTPClient.shared.response(
+                for: request,
+                retryPolicy: .transientIdempotent)
+            let data = response.data
+
+            switch response.statusCode {
+            case 200...299:
+                do {
+                    return try JSONDecoder().decode(CodexResetCreditsResponse.self, from: data)
+                } catch {
+                    throw CodexOAuthFetchError.invalidResponse
+                }
+            case 401, 403:
+                throw CodexOAuthFetchError.unauthorized
+            default:
+                let body = String(data: data, encoding: .utf8)
+                throw CodexOAuthFetchError.serverError(response.statusCode, body)
+            }
+        } catch let error as CodexOAuthFetchError {
+            throw error
+        } catch {
+            throw CodexOAuthFetchError.networkError(error)
+        }
+    }
+
+    private static let resetCreditsUsagePath = "/wham/rate-limit-reset-credits"
+    private static let resetCreditsCodexPath = "/api/codex/rate-limit-reset-credits"
+
+    private static func resolveResetCreditsURL(env: [String: String]) -> URL {
+        let baseURL = self.resolveChatGPTBaseURL(env: env, configContents: nil)
+        let normalized = self.normalizeChatGPTBaseURL(baseURL)
+        let path = normalized.contains("/backend-api") ? Self.resetCreditsUsagePath : Self.resetCreditsCodexPath
+        let full = normalized + path
+        return URL(string: full) ?? URL(string: Self.defaultChatGPTBaseURL + Self.resetCreditsUsagePath)!
+    }
+
     private static func resolveUsageURL(env: [String: String]) -> URL {
         self.resolveUsageURL(env: env, configContents: nil)
     }
@@ -354,6 +439,14 @@ extension CodexOAuthUsageFetcher {
 
     static func _decodeUsageResponseForTesting(_ data: Data) throws -> CodexUsageResponse {
         try JSONDecoder().decode(CodexUsageResponse.self, from: data)
+    }
+
+    static func _resolveResetCreditsURLForTesting(env: [String: String] = [:]) -> URL {
+        self.resolveResetCreditsURL(env: env)
+    }
+
+    static func _decodeResetCreditsResponseForTesting(_ data: Data) throws -> CodexResetCreditsResponse {
+        try JSONDecoder().decode(CodexResetCreditsResponse.self, from: data)
     }
 }
 #endif

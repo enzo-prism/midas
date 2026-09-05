@@ -134,6 +134,9 @@ public struct UsageSnapshot: Codable, Sendable {
     public let mistralUsage: MistralUsageSnapshot?
     public let deepgramUsage: DeepgramUsageSnapshot?
     public let cursorRequests: CursorRequestUsage?
+    /// On-demand Codex rate-limit reset credits (count + per-credit expiries). Codex only;
+    /// nil for other providers and for non-OAuth Codex sources that cannot report it.
+    public let codexResetCredits: CodexResetCreditsSnapshot?
     public let subscriptionExpiresAt: Date?
     public let subscriptionRenewsAt: Date?
     public let updatedAt: Date
@@ -153,6 +156,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case claudeAdminAPIUsage
         case mistralUsage
         case deepgramUsage
+        case codexResetCredits
         case subscriptionExpiresAt
         case subscriptionRenewsAt
         case updatedAt
@@ -179,6 +183,7 @@ public struct UsageSnapshot: Codable, Sendable {
         mistralUsage: MistralUsageSnapshot? = nil,
         deepgramUsage: DeepgramUsageSnapshot? = nil,
         cursorRequests: CursorRequestUsage? = nil,
+        codexResetCredits: CodexResetCreditsSnapshot? = nil,
         subscriptionExpiresAt: Date? = nil,
         subscriptionRenewsAt: Date? = nil,
         updatedAt: Date,
@@ -200,6 +205,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.mistralUsage = mistralUsage
         self.deepgramUsage = deepgramUsage
         self.cursorRequests = cursorRequests
+        self.codexResetCredits = codexResetCredits
         self.subscriptionExpiresAt = subscriptionExpiresAt
         self.subscriptionRenewsAt = subscriptionRenewsAt
         self.updatedAt = updatedAt
@@ -230,6 +236,9 @@ public struct UsageSnapshot: Codable, Sendable {
         self.mistralUsage = try container.decodeIfPresent(MistralUsageSnapshot.self, forKey: .mistralUsage)
         self.deepgramUsage = try container.decodeIfPresent(DeepgramUsageSnapshot.self, forKey: .deepgramUsage)
         self.cursorRequests = nil // Not persisted, fetched fresh each time
+        self.codexResetCredits = try container.decodeIfPresent(
+            CodexResetCreditsSnapshot.self,
+            forKey: .codexResetCredits)
         self.subscriptionExpiresAt = try container.decodeIfPresent(Date.self, forKey: .subscriptionExpiresAt)
         self.subscriptionRenewsAt = try container.decodeIfPresent(Date.self, forKey: .subscriptionRenewsAt)
         self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
@@ -267,6 +276,7 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.claudeAdminAPIUsage, forKey: .claudeAdminAPIUsage)
         try container.encodeIfPresent(self.mistralUsage, forKey: .mistralUsage)
         try container.encodeIfPresent(self.deepgramUsage, forKey: .deepgramUsage)
+        try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
         try container.encodeIfPresent(self.subscriptionExpiresAt, forKey: .subscriptionExpiresAt)
         try container.encodeIfPresent(self.subscriptionRenewsAt, forKey: .subscriptionRenewsAt)
         try container.encode(self.updatedAt, forKey: .updatedAt)
@@ -373,6 +383,7 @@ public struct UsageSnapshot: Codable, Sendable {
             mistralUsage: self.mistralUsage,
             deepgramUsage: self.deepgramUsage,
             cursorRequests: self.cursorRequests,
+            codexResetCredits: self.codexResetCredits,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,
             updatedAt: self.updatedAt,
@@ -412,6 +423,7 @@ public struct UsageSnapshot: Codable, Sendable {
             mistralUsage: self.mistralUsage,
             deepgramUsage: self.deepgramUsage,
             cursorRequests: self.cursorRequests,
+            codexResetCredits: self.codexResetCredits,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,
             updatedAt: self.updatedAt,
@@ -664,7 +676,7 @@ private final class CodexRPCClient: @unchecked Sendable {
 
     init(
         executable: String = "codex",
-        arguments: [String] = ["-s", "read-only", "-a", "untrusted", "app-server"],
+        arguments: [String] = ["-s", "read-only", "-a", "on-request", "app-server"],
         environment: [String: String] = ProcessInfo.processInfo.environment,
         initializeTimeoutSeconds: TimeInterval = 8.0,
         requestTimeoutSeconds: TimeInterval = 3.0,

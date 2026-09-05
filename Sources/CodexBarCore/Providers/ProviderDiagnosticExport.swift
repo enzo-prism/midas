@@ -88,6 +88,8 @@ public struct ProviderDiagnosticUsageSummary: Codable, Sendable {
     public let windows: [ProviderDiagnosticRateWindow]
     public let extraWindowCount: Int
     public let providerCostPresent: Bool
+    public let codexResetCreditsAvailable: Int?
+    public let codexResetCreditsHaveExpiries: Bool?
     public let providerSpecificData: [String]
 
     public init(from snapshot: UsageSnapshot) {
@@ -125,6 +127,8 @@ public struct ProviderDiagnosticUsageSummary: Codable, Sendable {
         self.windows = windows
         self.extraWindowCount = snapshot.extraRateWindows?.count ?? 0
         self.providerCostPresent = snapshot.providerCost != nil
+        self.codexResetCreditsAvailable = snapshot.codexResetCredits?.availableCount
+        self.codexResetCreditsHaveExpiries = snapshot.codexResetCredits?.hasPerCreditExpiries
         self.providerSpecificData = providerSpecificData.sorted()
     }
 }

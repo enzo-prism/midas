@@ -1187,7 +1187,7 @@ extension StatusMenuTests {
     }
 
     @Test
-    func `credits history arriving after open rebuilds parent menu after tracking ends`() async throws {
+    func `usage history arriving after open rebuilds parent menu after tracking ends`() async throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
         settings.statusChecksEnabled = false
@@ -1199,7 +1199,7 @@ extension StatusMenuTests {
         let now = Date()
         let store = self.makeCodexStore(settings: settings, dashboardAuthorized: true)
         store.credits = CreditsSnapshot(remaining: 100, events: [], updatedAt: now)
-        store.openAIDashboard = self.makeOpenAIDashboard(dailyBreakdown: [], updatedAt: now)
+        store.openAIDashboard = self.makeOpenAIDashboard(usageBreakdown: [], updatedAt: now)
         let controller = StatusItemController(
             store: store,
             settings: settings,
@@ -1216,10 +1216,12 @@ extension StatusMenuTests {
         controller.menuRefreshEnabledOverrideForTesting = true
 
         let openedVersion = try #require(controller.menuVersions[key])
-        #expect(self.menuItem(in: menu, id: "menuCardCredits") == nil)
+        #expect(self.menuItem(in: menu, id: "menuCardUsage")?.submenu?.items.contains {
+            ($0.representedObject as? String) == StatusItemController.usageBreakdownChartID
+        } != true)
 
         store.openAIDashboard = self.makeOpenAIDashboard(
-            dailyBreakdown: [
+            usageBreakdown: [
                 OpenAIDashboardDailyBreakdown(day: "2026-05-24", services: [], totalCreditsUsed: 12),
             ],
             updatedAt: now.addingTimeInterval(10))
@@ -1231,10 +1233,11 @@ extension StatusMenuTests {
 
         await self.closeMenuAndWaitUntilFresh(controller, menu: menu, key: key)
 
-        let creditsItem = try #require(self.menuItem(in: menu, id: "menuCardCredits"))
+        let usageItem = try #require(self.menuItem(in: menu, id: "menuCardUsage"))
         #expect(
-            creditsItem.submenu?.items.first?.representedObject as? String ==
-                StatusItemController.creditsHistoryChartID)
+            usageItem.submenu?.items.contains {
+                ($0.representedObject as? String) == StatusItemController.usageBreakdownChartID
+            } == true)
         #expect(controller.menuVersions[key] == controller.menuContentVersion)
     }
 
@@ -1252,7 +1255,7 @@ extension StatusMenuTests {
         let store = self.makeCodexStore(settings: settings, dashboardAuthorized: true)
         store.credits = CreditsSnapshot(remaining: 100, events: [], updatedAt: now)
         store.openAIDashboard = self.makeOpenAIDashboard(
-            dailyBreakdown: [
+            usageBreakdown: [
                 OpenAIDashboardDailyBreakdown(day: "2026-05-24", services: [], totalCreditsUsed: 12),
             ],
             updatedAt: now)
@@ -1272,10 +1275,10 @@ extension StatusMenuTests {
         controller.menuRefreshEnabledOverrideForTesting = true
 
         let openedVersion = try #require(controller.menuVersions[key])
-        _ = try #require(self.menuItem(in: menu, id: "menuCardCredits"))
+        _ = try #require(self.menuItem(in: menu, id: "menuCardUsage"))
 
         store.openAIDashboard = self.makeOpenAIDashboard(
-            dailyBreakdown: [
+            usageBreakdown: [
                 OpenAIDashboardDailyBreakdown(day: "2026-05-24", services: [], totalCreditsUsed: 99),
             ],
             updatedAt: now.addingTimeInterval(10))
@@ -1287,9 +1290,10 @@ extension StatusMenuTests {
 
         await self.closeMenuAndWaitUntilFresh(controller, menu: menu, key: key)
 
-        let creditsItem = try #require(self.menuItem(in: menu, id: "menuCardCredits"))
-        #expect(creditsItem.submenu?.items.first?.representedObject as? String == StatusItemController
-            .creditsHistoryChartID)
+        let usageItem = try #require(self.menuItem(in: menu, id: "menuCardUsage"))
+        #expect(usageItem.submenu?.items.contains {
+            ($0.representedObject as? String) == StatusItemController.usageBreakdownChartID
+        } == true)
     }
 
     @Test
@@ -1555,7 +1559,8 @@ extension StatusMenuTests {
     }
 
     private func makeOpenAIDashboard(
-        dailyBreakdown: [OpenAIDashboardDailyBreakdown],
+        dailyBreakdown: [OpenAIDashboardDailyBreakdown] = [],
+        usageBreakdown: [OpenAIDashboardDailyBreakdown] = [],
         updatedAt: Date) -> OpenAIDashboardSnapshot
     {
         OpenAIDashboardSnapshot(
@@ -1563,7 +1568,7 @@ extension StatusMenuTests {
             codeReviewRemainingPercent: nil,
             creditEvents: [],
             dailyBreakdown: dailyBreakdown,
-            usageBreakdown: [],
+            usageBreakdown: usageBreakdown,
             creditsPurchaseURL: nil,
             updatedAt: updatedAt)
     }

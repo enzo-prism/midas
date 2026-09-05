@@ -5,6 +5,8 @@ public struct CodexReconciledState: Sendable {
     public let weekly: RateWindow?
     /// Named model-specific limits (e.g. Codex Spark) surfaced through `UsageSnapshot.extraRateWindows`.
     public let extraRateWindows: [NamedRateWindow]
+    /// On-demand rate-limit reset credits (OAuth sources only; nil when unavailable).
+    public let resetCredits: CodexResetCreditsSnapshot?
     public let identity: ProviderIdentitySnapshot?
     public let updatedAt: Date
 
@@ -12,12 +14,14 @@ public struct CodexReconciledState: Sendable {
         session: RateWindow?,
         weekly: RateWindow?,
         extraRateWindows: [NamedRateWindow] = [],
+        resetCredits: CodexResetCreditsSnapshot? = nil,
         identity: ProviderIdentitySnapshot?,
         updatedAt: Date)
     {
         self.session = session
         self.weekly = weekly
         self.extraRateWindows = extraRateWindows
+        self.resetCredits = resetCredits
         self.identity = identity
         self.updatedAt = updatedAt
     }
@@ -34,16 +38,32 @@ public struct CodexReconciledState: Sendable {
     public static func fromOAuth(
         response: CodexUsageResponse,
         credentials: CodexOAuthCredentials,
+        resetCredits: CodexResetCreditsSnapshot? = nil,
         updatedAt: Date = Date()) -> CodexReconciledState?
     {
-        self.make(
+        let resolvedResetCredits = resetCredits ?? self.countOnlyResetCredits(
+            summary: response.rateLimitResetCredits,
+            updatedAt: updatedAt)
+        return self.make(
             primary: self.makeWindow(response.rateLimit?.primaryWindow),
             secondary: self.makeWindow(response.rateLimit?.secondaryWindow),
             extraRateWindows: CodexAdditionalRateLimitMapper.extraRateWindows(
                 from: response.additionalRateLimits,
                 now: updatedAt),
+            resetCredits: resolvedResetCredits,
             identity: self.oauthIdentity(response: response, credentials: credentials),
             updatedAt: updatedAt)
+    }
+
+    /// Count-only fallback from the usage-body `rate_limit_reset_credits` summary, which
+    /// carries no per-credit expiries. Returns nil when the body reports no counts so
+    /// older/partial payloads keep a nil (unknown) state instead of a misleading zero.
+    private static func countOnlyResetCredits(
+        summary: CodexUsageResponse.RateLimitResetCreditsSummary?,
+        updatedAt: Date) -> CodexResetCreditsSnapshot?
+    {
+        guard let availableCount = summary?.availableCount else { return nil }
+        return CodexResetCreditsSnapshot.countOnly(availableCount: availableCount, updatedAt: updatedAt)
     }
 
     public static func fromAttachedDashboard(
@@ -74,6 +94,7 @@ public struct CodexReconciledState: Sendable {
             secondary: self.weekly,
             tertiary: nil,
             extraRateWindows: self.extraRateWindows.isEmpty ? nil : self.extraRateWindows,
+            codexResetCredits: self.resetCredits,
             updatedAt: self.updatedAt,
             identity: self.identity)
     }
@@ -93,6 +114,7 @@ public struct CodexReconciledState: Sendable {
         primary: RateWindow?,
         secondary: RateWindow?,
         extraRateWindows: [NamedRateWindow] = [],
+        resetCredits: CodexResetCreditsSnapshot? = nil,
         identity: ProviderIdentitySnapshot?,
         updatedAt: Date) -> CodexReconciledState?
     {
@@ -107,6 +129,7 @@ public struct CodexReconciledState: Sendable {
             session: normalized.primary,
             weekly: normalized.secondary,
             extraRateWindows: extraRateWindows,
+            resetCredits: resetCredits,
             identity: identity,
             updatedAt: updatedAt)
     }

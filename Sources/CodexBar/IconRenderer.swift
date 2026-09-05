@@ -655,7 +655,14 @@ enum IconRenderer {
                 // Warp special case: when no bonus or bonus exhausted, show "top monthly, bottom dimmed"
                 let warpNoBonus = style == .warp && !weeklyAvailable
 
-                if weeklyAvailable {
+                if style == .codex {
+                    // One centered weekly-remaining capsule, including exhausted and unavailable states.
+                    drawBar(
+                        rectPx: RectPx(x: barXPx, y: 12, w: barWidthPx, h: 12),
+                        remaining: topValue,
+                        addFace: true,
+                        blink: blink)
+                } else if weeklyAvailable {
                     // Normal: top=primary, bottom=secondary (bonus/weekly).
                     drawBar(
                         rectPx: topRectPx,

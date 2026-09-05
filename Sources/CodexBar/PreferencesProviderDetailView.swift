@@ -474,6 +474,12 @@ private struct ProviderMetricInlineRow: View {
                     Text(statusText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    if let detail = self.detailText, !detail.isEmpty {
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 case .progress:
                     UsageProgressBar(
                         percent: self.metric.percent,

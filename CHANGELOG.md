@@ -2,7 +2,20 @@
 
 ## 0.33.1 — Unreleased
 
+### Midas fork — September 4, 2026
+- Add Midas Air: native overview popover, resizable Usage window, sidebar settings, warm adaptive surfaces, local provider logos, and Midas application branding.
+- Make provider estimated spend and remaining capacity the primary readings; retain period, provenance, freshness, and independent quota constraints.
+- Add total estimated spend across all enabled providers in both overviews. Deduplicate providers, disclose unavailable estimates, keep currencies separate, and avoid counting secondary equivalents or metered balances twice.
+- Show one centered Codex weekly-remaining menu-bar capsule; preserve unavailable versus exhausted states and keep session constraints separate.
+- Preserve Cursor pool/request semantics and Meta local usage history without inventing an unavailable quota.
+- Fix provider logo proportions and padding; convert Codex SVG arcs to equivalent cubic paths to prevent CoreSVG from clipping the artwork.
+- Preserve provider account navigation and legacy actions, and disable upstream Sparkle updates in packaged Midas builds.
+- Add presentation, total-spend, logo geometry, navigation, Codex reset-credit, and provider regression coverage.
+- Use the Codex access-token expiry for OAuth refresh timing. Update isolated status probes to the CLI's `on-request` approval mode while retaining the read-only sandbox and ephemeral history/state configuration.
+- Document the proposed Ledger/Focus/Constellation menu-bar redesign and state/motion contract. The proposal is not implemented by this update.
+
 ### Added
+- Codex (Midas): track on-demand rate-limit reset credits — headline available count plus per-credit expiry timestamps from the dedicated reset-credits endpoint, shown as a "Rate Limit Resets" row in the Codex menu card (hover for each credit's expiry) and in `codexbar usage` text/JSON output. The endpoint call is best-effort and never fails a refresh: when it errors, the display falls back to the usage-body count and states that expiry times are unavailable.
 - Meta: add Muse Code usage tracking from local `muse` session logs (menu-bar today + 7-day tokens, widget support, provider debug log, per-day history via `codexbar cost --provider meta`), with optional `META_API_KEY` reserved for the Meta Model API. Enable via Settings → Providers → Meta.
 - Meta: price the 30-day token graphic in contributor dollars with the standard-API equivalent alongside (contributor $0.10/$0.20, standard $1.25/$4.25 per 1M in/out), and count Meta at the standard equivalent in the multi-provider `cost` TOTAL line.
 - OpenAI: add `cost --provider openai` backed by the Admin API organization spend endpoints (real billed $, per-day tokens + models), included in the multi-provider TOTAL. Needs `OPENAI_ADMIN_KEY`/`OPENAI_API_KEY` or a Settings key; without one it explains how to configure it.

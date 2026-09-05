@@ -1,0 +1,105 @@
+# Midas Air
+
+Midas Air replaces the main menu presentation with one native SwiftUI popover hosted by the
+existing status-item controller. It keeps the provider engine, account coordinators, saved
+settings, and menu-bar icon modes intact. macOS 14 remains the minimum target.
+
+## Everyday surfaces
+
+- **Overview:** total estimated spend across all enabled providers, ordered favorite provider rows, an All providers chooser, freshness and
+  connection states, refresh, settings, and Open Usage.
+- **Provider detail:** prominent estimated spend, recognizable logos, explicit periods and remaining capacity, reset
+  information, and separate session constraints. Codex uses weekly remaining as its quota hero;
+  missing weekly data does not turn into a session metric.
+- **Usage window:** resizable provider navigation, Usage and Costs views, period controls,
+  history, model breakdowns where available, and source-aware cost labels. Metered consumption,
+  provider-reported costs, and API-equivalent estimates are distinct meanings.
+- **Settings:** a stable sidebar preserving General, Providers, Display, Advanced, About,
+  and the optional Debug pane. Its height is constrained for smaller screens.
+- **Branding:** a native gold-sparkle icon, Midas display names and support links, and explicit
+  acknowledgment of CodexBar's MIT-licensed foundation.
+
+## Original provider menu
+
+Right-click the status icon or choose **Provider actions & accounts…** from the panel's menu
+for the original provider actions, diagnostics, and account menu. This is an intentional
+compatibility path during the presentation migration. It uses the same data and coordinators.
+The packaged `MidasAirEnabled` Info.plist flag selects the new presentation; unbundled/test
+runs preserve the original routing. Do not edit a signed app's plist to switch it.
+
+## Spend and provider semantics
+
+`MidasTotalSpend` sums primary, finite, nonnegative estimates from all enabled providers, before
+Favorites filtering. It deduplicates providers, keeps currencies separate without conversion, and
+reports coverage and reporting periods. A missing estimate is excluded rather than converted to
+zero; a genuine zero estimate remains valid. Secondary API equivalents, metered balances, and
+reset credits are not additional estimated spend. Provider valuation bases can differ, so this
+total is a sum of usage-rate estimates, not billed charges.
+
+Codex keeps weekly remaining separate from session constraints, and its single menu-bar capsule
+never substitutes session data when weekly data is missing. Cursor model spend shares are not
+quota; actual request counts and independent usage pools remain separate. Meta can show local
+history when cost collection is disabled, without fabricating remaining capacity.
+
+The new menu-bar Ledger, Focus, and Constellation directions are documented in
+[the design research](MIDAS_MENU_BAR_DESIGN.md). They remain proposals; the current menu-bar
+rendering still uses the inherited renderer with the Codex weekly-capsule update.
+
+## Local rebuild
+
+From this repository:
+
+```sh
+make check
+swift test
+./Scripts/package_app.sh release
+```
+
+Packaging retains the `CodexBar.app` bundle directory and `CodexBar` executable for compatibility,
+while Finder/application display metadata says Midas. The existing bundle identifiers, app group,
+keychain/storage identity, and signing behavior are intentionally preserved. Restart the freshly
+built bundle using the repository's `Scripts/compile_and_run.sh` development workflow or its
+approved local restart command. Do not launch an older copy from another location.
+
+To regenerate the original Midas icon artwork:
+
+```sh
+swift Scripts/build_midas_icon.swift
+```
+
+This writes `Midas.icns` and intermediate PNGs under `work/midas-icon.iconset`, using native
+AppKit/SF Symbols and `iconutil`. It does not overwrite upstream `Icon.icns`. Packaging copies
+`Midas.icns` into the application resource name expected by its existing metadata.
+
+## Assets and updates
+
+Provider logos are bundled; opening the UI does not request logos from a server. Codex and Cursor
+have appearance-specific variants; Claude and Meta retain their brand color. Other providers reuse
+adaptive template marks. Asset sources are recorded in
+`Sources/CodexBar/Resources/MidasLogo-SOURCES.md`. Menu-bar template images and full-color panel
+images use separate loaders; cached panel images are copied before being returned.
+
+SVG dimensions are normalized from their viewBox and rendered with proportional padding. Codex
+artwork uses equivalent absolute cubic paths because CoreSVG truncated the original compact arc
+paths. Preserve that conversion; transparent-border tests alone do not detect missing interior
+geometry. Logo regression tests also check the full square silhouette.
+
+Midas packages set `MidasUpdatesDisabled`, use an empty Sparkle feed, and disable automatic checks.
+The application checks that flag before constructing its updater. Midas is updated locally until
+it has a deliberate release channel; upstream CodexBar release links elsewhere in this inherited
+README are not Midas releases.
+
+## Implementation boundaries
+
+- `MidasAirCoordinator.swift`: native presentation lifetime and existing action routing.
+- `MidasPresentation.swift`: provider presentation and navigation state.
+- `MidasTotalSpend.swift`, `MidasTotalSpendView.swift`: estimate aggregation and shared total display.
+- `MidasPanelView.swift`, `MidasProviderDetailView.swift`: compact surfaces.
+- `MidasUsageWindowView.swift`, `MidasUsageHistoryView.swift`, `MidasCostPresentation.swift`: history and costs.
+- `MidasDesignSystem.swift`, `MidasProviderLogo.swift`: adaptive visual tokens and provider identity.
+- `PreferencesView.swift`, `PreferencesAboutPane.swift`: sidebar settings and product identity.
+
+Focused model tests cover quota direction, unavailable/stale states, account boundaries, cost
+semantics, and logo caching. Native interactions and final signed-bundle launch should also be
+verified after changes. Tests must not initiate real Keychain/browser/provider probes unless
+explicitly authorized; follow the repository's AGENTS.md testing guidance.

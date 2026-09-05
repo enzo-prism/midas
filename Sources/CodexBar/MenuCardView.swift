@@ -78,6 +78,8 @@ struct UsageMenuCardView: View {
             let paceOnTop: Bool
             let warningMarkerPercents: [Double]
             let cardStyle: Bool
+            /// Hover tooltip (e.g. per-credit expiry timeline for the resets row).
+            let helpText: String?
 
             init(
                 id: String,
@@ -92,7 +94,8 @@ struct UsageMenuCardView: View {
                 pacePercent: Double?,
                 paceOnTop: Bool,
                 warningMarkerPercents: [Double] = [],
-                cardStyle: Bool = false)
+                cardStyle: Bool = false,
+                helpText: String? = nil)
             {
                 self.id = id
                 self.title = title
@@ -107,6 +110,7 @@ struct UsageMenuCardView: View {
                 self.paceOnTop = paceOnTop
                 self.warningMarkerPercents = warningMarkerPercents
                 self.cardStyle = cardStyle
+                self.helpText = helpText
             }
 
             var percentLabel: String {
@@ -467,6 +471,19 @@ private struct ProviderCostContent: View {
     }
 }
 
+extension View {
+    /// Applies a hover tooltip only when text is present; existing rows pass nil
+    /// and keep their current (tooltip-free) hover behavior.
+    @ViewBuilder
+    fileprivate func helpIfPresent(_ text: String?) -> some View {
+        if let text {
+            self.help(text)
+        } else {
+            self
+        }
+    }
+}
+
 private struct MetricRow: View {
     let metric: UsageMenuCardView.Model.Metric
     let title: String
@@ -483,6 +500,14 @@ private struct MetricRow: View {
                     .font(.footnote)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(1)
+                // Status rows (e.g. Rate Limit Resets) carry their details here
+                // since they render no progress bar. Other status rows set no detail.
+                if let detail = self.metric.detailText {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 UsageProgressBar(
                     percent: self.metric.percent,
@@ -535,6 +560,7 @@ private struct MetricRow: View {
         .padding(self.metric.cardStyle ? 10 : 0)
         .background(self.metric.cardStyle ? Color.secondary.opacity(self.isHighlighted ? 0.2 : 0.08) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: self.metric.cardStyle ? 10 : 0))
+        .helpIfPresent(self.metric.helpText)
     }
 }
 
@@ -1221,6 +1247,13 @@ extension UsageMenuCardView.Model {
                 input: input,
                 projection: codexProjection,
                 percentStyle: percentStyle))
+            if let resetsMetric = Self.codexResetCreditsMetric(
+                snapshot: snapshot,
+                now: input.now,
+                percentStyle: percentStyle)
+            {
+                metrics.append(resetsMetric)
+            }
         } else if input.provider != .meta, let primary = snapshot.primary {
             // Meta skips window rows: its card is the 30-day API usage + costs
             // below, and 0% window bars duplicate that story with less context.
@@ -1557,56 +1590,6 @@ extension UsageMenuCardView.Model {
             pacePercent: paceDetail?.pacePercent,
             paceOnTop: paceDetail?.paceOnTop ?? true,
             warningMarkerPercents: Self.weeklyMarkerPercents(input: input, windowMinutes: weekly.windowMinutes))
-    }
-
-    private static func codexRateMetrics(
-        input: Input,
-        projection: CodexConsumerProjection,
-        percentStyle: PercentStyle) -> [Metric]
-    {
-        projection.visibleRateLanes.compactMap { lane in
-            guard let window = projection.rateWindow(for: lane) else { return nil }
-
-            let title: String
-            let id: String
-            let paceDetail: PaceDetail?
-            switch lane {
-            case .session:
-                title = L(input.metadata.sessionLabel)
-                id = "primary"
-                paceDetail = Self.sessionPaceDetail(
-                    provider: input.provider,
-                    window: window,
-                    now: input.now,
-                    showUsed: input.usageBarsShowUsed)
-            case .weekly:
-                title = L(input.metadata.weeklyLabel)
-                id = "secondary"
-                paceDetail = Self.weeklyPaceDetail(
-                    window: window,
-                    now: input.now,
-                    pace: input.weeklyPace
-                        ?? UsagePace.weekly(window: window, now: input.now, defaultWindowMinutes: 10080)
-                        .flatMap { $0.expectedUsedPercent >= 3 ? $0 : nil },
-                    showUsed: input.usageBarsShowUsed)
-            }
-
-            return Metric(
-                id: id,
-                title: title,
-                percent: Self.clamped(input.usageBarsShowUsed ? window.usedPercent : window.remainingPercent),
-                percentStyle: percentStyle,
-                resetText: Self.resetText(for: window, style: input.resetTimeDisplayStyle, now: input.now),
-                detailText: projection.limitProximityDetail(for: lane, showUsed: input.usageBarsShowUsed),
-                detailLeftText: paceDetail?.leftLabel,
-                detailRightText: paceDetail?.rightLabel,
-                pacePercent: paceDetail?.pacePercent,
-                paceOnTop: paceDetail?.paceOnTop ?? true,
-                warningMarkerPercents: Self.codexLaneMarkerPercents(
-                    input: input,
-                    lane: lane,
-                    windowMinutes: window.windowMinutes))
-        }
     }
 
     private static func dashboardHint(error: String?) -> String? {

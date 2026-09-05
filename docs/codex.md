@@ -12,6 +12,13 @@ read_when:
 Codex has three automatic usage data paths (OAuth API, web dashboard, CLI RPC) plus a manual CLI PTY diagnostic parser and a local cost-usage scanner.
 The OAuth API is the default app source when credentials are available; web access is optional for dashboard extras.
 
+## Midas compact preview
+
+The Codex compact icon shows one centered bar for weekly usage remaining. The provider
+switcher indicator uses the same weekly value, regardless of the “show used” setting.
+A missing weekly window stays unavailable; session usage and purchased credits never
+replace it. The detailed usage card and other providers keep their existing behavior.
+
 ## Data sources + fallback order
 
 ### App default selection (debug menu disabled)
@@ -35,6 +42,23 @@ Usage source picker:
 - `additional_rate_limits[]` (model-specific limits such as GPT-5.3-Codex-Spark) map to named
   `UsageSnapshot.extraRateWindows` entries (Spark uses a stable `codex-spark` id / `Codex Spark` title).
   When the field is absent, the snapshot is unchanged.
+- `rate_limit_reset_credits` (`available_count` / `applicable_available_count`) seeds the
+  `UsageSnapshot.codexResetCredits` count. The usage body carries counts only — no expiries.
+
+### Rate-limit reset credits (Midas)
+- After the OAuth usage fetch, Midas makes a best-effort companion call to
+  `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits` (same Bearer token and
+  `ChatGPT-Account-Id` headers; base URL resolved exactly like the usage URL) and maps
+  `credits[]` (id, status, granted/expiry timestamps, title) to per-credit expiries.
+- The companion call never fails the refresh: when it errors, the snapshot falls back to the
+  usage-body `available_count` with `hasPerCreditExpiries: false`, and surfaces state that
+  expiry times are unavailable rather than implying there are none. When the usage body
+  reports no counts either, the snapshot stays nil (unknown) instead of a misleading zero.
+- Non-OAuth Codex sources (CLI RPC, web dashboard) report no reset data and leave the field nil.
+- Display: the Codex menu card shows a "Rate Limit Resets" row (`N available` plus every
+  credit's expiration date and countdown, soonest first, directly in the tab); `codexbar usage` prints the count plus
+  one line per credit; `--format json` includes the snapshot; provider diagnostics export the
+  count and whether expiries are known.
 
 ### OpenAI web dashboard (optional, off by default)
 - Enable it in Preferences -> Providers -> Codex -> OpenAI web extras.
@@ -72,7 +96,7 @@ Usage source picker:
   - Login required or Cloudflare interstitial.
 
 ### Codex CLI RPC (automatic CLI source)
-- Launches local RPC server: `codex -s read-only -a untrusted app-server`.
+- Launches local RPC server: `codex -s read-only -a on-request app-server`.
 - JSON-RPC over stdin/stdout:
   - `initialize` (client name/version)
   - `account/read`
@@ -131,6 +155,8 @@ Usage source picker:
 - Window: configurable 1-365 day rolling history, with a 60s minimum refresh interval.
 
 ## Key files
+- Reset credits: `Sources/CodexBarCore/Providers/Codex/CodexResetCredits.swift`,
+  `CodexOAuthUsageFetcher.fetchResetCredits`, `CodexReconciledState.resetCredits`
 - Web: `Sources/CodexBarCore/OpenAIWeb/*`
 - CLI RPC + diagnostic PTY parser: `Sources/CodexBarCore/UsageFetcher.swift`,
   `Sources/CodexBarCore/Providers/Codex/CodexStatusProbe.swift`

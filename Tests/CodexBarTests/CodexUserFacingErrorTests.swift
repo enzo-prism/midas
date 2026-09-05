@@ -172,8 +172,11 @@ struct CodexUserFacingErrorTests {
         #expect(
             model.creditsHintCopyText ==
                 "OpenAI web refresh was interrupted. Refresh OpenAI cookies and try again.")
+        // Sanitization remains available for diagnostics, but subscription cards omit prepaid credits.
+        #expect(model.creditsText == nil)
         #expect(
-            model.creditsText == "Codex usage is temporarily unavailable. Try refreshing. Cached values from 1m ago.")
+            store.userFacingLastCreditsError ==
+                "Codex usage is temporarily unavailable. Try refreshing. Cached values from 1m ago.")
     }
 
     @Test

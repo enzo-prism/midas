@@ -4,7 +4,6 @@ import SwiftUI
 @MainActor
 struct AboutPane: View {
     let updater: UpdaterProviding
-    @State private var iconHover = false
     @AppStorage("autoUpdateEnabled") private var autoUpdateEnabled: Bool = true
     @AppStorage(UpdateChannel.userDefaultsKey)
     private var updateChannelRaw: String = UpdateChannel.defaultChannel.rawValue
@@ -30,104 +29,108 @@ struct AboutPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            if let image = NSApplication.shared.applicationIconImage {
-                Button(action: self.openProjectHome) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .frame(width: 92, height: 92)
-                        .cornerRadius(16)
-                        .scaleEffect(self.iconHover ? 1.05 : 1.0)
-                        .shadow(color: self.iconHover ? .accentColor.opacity(0.25) : .clear, radius: 6)
+        ScrollView {
+            VStack(spacing: 24) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(MidasTheme.accent.opacity(0.12))
+                        .frame(width: 96, height: 96)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundStyle(MidasTheme.accent)
                 }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-                        self.iconHover = hovering
+                .accessibilityHidden(true)
+
+                VStack(spacing: 8) {
+                    Text("Midas")
+                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    Text("A little more clarity. A lot more room.")
+                        .foregroundStyle(.secondary)
+                    Text(String(format: L("version_format"), self.versionString))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let buildTimestamp {
+                        Text(String(format: L("built_format"), buildTimestamp))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
-            }
 
-            VStack(spacing: 2) {
-                Text("CodexBar")
-                    .font(.title3).bold()
-                Text(String(format: L("version_format"), self.versionString))
-                    .foregroundStyle(.secondary)
-                if let buildTimestamp {
-                    Text(String(format: L("built_format"), buildTimestamp))
-                        .font(.footnote)
+                HStack(spacing: 24) {
+                    AboutLinkRow(
+                        icon: "chevron.left.slash.chevron.right",
+                        title: "Midas on GitHub",
+                        url: "https://github.com/enzo-prism/midas")
+                    AboutLinkRow(
+                        icon: "bubble.left",
+                        title: "Feedback & support",
+                        url: "https://github.com/enzo-prism/midas/issues")
+                }
+
+                Divider().padding(.vertical, 8)
+
+                if self.updater.isAvailable {
+                    VStack(spacing: 10) {
+                        Toggle(L("check_updates_auto"), isOn: self.$autoUpdateEnabled)
+                            .toggleStyle(.checkbox)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        VStack(spacing: 6) {
+                            HStack(spacing: 12) {
+                                Text(L("update_channel"))
+                                Spacer()
+                                Picker("", selection: self.updateChannelBinding) {
+                                    ForEach(UpdateChannel.allCases) { channel in
+                                        Text(channel.displayName).tag(channel)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .labelsHidden()
+                            }
+                            .frame(maxWidth: 280)
+                            Text(self.updateChannel.description)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 280)
+                        }
+                        Button(L("check_for_updates")) { self.updater.checkForUpdates(nil) }
+                    }
+                } else {
+                    Text(self.updater.unavailableReason ?? L("updates_unavailable"))
                         .foregroundStyle(.secondary)
                 }
-                Text(L("about_tagline"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
 
-            VStack(alignment: .center, spacing: 10) {
-                AboutLinkRow(
-                    icon: "chevron.left.slash.chevron.right",
-                    title: L("link_github"),
-                    url: "https://github.com/steipete/CodexBar")
-                AboutLinkRow(icon: "globe", title: L("link_website"), url: "https://steipete.me")
-                AboutLinkRow(icon: "bird", title: L("link_twitter"), url: "https://twitter.com/steipete")
-                AboutLinkRow(icon: "envelope", title: L("link_email"), url: "mailto:peter@steipete.me")
-            }
-            .padding(.top, 8)
-            .frame(maxWidth: .infinity)
-            .multilineTextAlignment(.center)
-
-            Divider()
-
-            if self.updater.isAvailable {
-                VStack(spacing: 10) {
-                    Toggle(L("check_updates_auto"), isOn: self.$autoUpdateEnabled)
-                        .toggleStyle(.checkbox)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    VStack(spacing: 6) {
-                        HStack(spacing: 12) {
-                            Text(L("update_channel"))
-                            Spacer()
-                            Picker("", selection: self.updateChannelBinding) {
-                                ForEach(UpdateChannel.allCases) { channel in
-                                    Text(channel.displayName).tag(channel)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                        }
-                        .frame(maxWidth: 280)
-                        Text(self.updateChannel.description)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 280)
-                    }
-                    Button(L("check_for_updates")) { self.updater.checkForUpdates(nil) }
+                VStack(spacing: 8) {
+                    Text("Built on open source")
+                        .font(.headline)
+                    Text("Midas is a fork of CodexBar by Peter Steinberger and contributors, under the MIT License.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    AboutLinkRow(
+                        icon: "heart",
+                        title: "CodexBar · MIT License",
+                        url: "https://github.com/steipete/CodexBar/blob/main/LICENSE")
+                    Text("Provider marks via SVGL. All trademarks belong to their respective owners.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-            } else {
-                Text(self.updater.unavailableReason ?? L("updates_unavailable"))
-                    .foregroundStyle(.secondary)
+                .padding(.top, 16)
             }
-
-            Text(L("copyright"))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 24)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.top, 4)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
         .onAppear {
-            guard !self.didLoadUpdaterState else { return }
+            guard !self.didLoadUpdaterState, self.updater.isAvailable else { return }
             // Align Sparkle's flag with the persisted preference on first load.
             self.updater.automaticallyChecksForUpdates = self.autoUpdateEnabled
             self.updater.automaticallyDownloadsUpdates = self.autoUpdateEnabled
             self.didLoadUpdaterState = true
         }
         .onChange(of: self.autoUpdateEnabled) { _, newValue in
+            guard self.updater.isAvailable else { return }
             self.updater.automaticallyChecksForUpdates = newValue
             self.updater.automaticallyDownloadsUpdates = newValue
         }
@@ -144,10 +147,5 @@ struct AboutPane: View {
                 self.updateChannelRaw = newValue.rawValue
                 self.updater.checkForUpdates(nil)
             })
-    }
-
-    private func openProjectHome() {
-        guard let url = URL(string: "https://github.com/steipete/CodexBar") else { return }
-        NSWorkspace.shared.open(url)
     }
 }

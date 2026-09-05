@@ -964,6 +964,7 @@ extension UsageStore {
             mistralUsage: snapshot.mistralUsage,
             deepgramUsage: snapshot.deepgramUsage,
             cursorRequests: snapshot.cursorRequests,
+            codexResetCredits: snapshot.codexResetCredits,
             subscriptionExpiresAt: snapshot.subscriptionExpiresAt,
             subscriptionRenewsAt: snapshot.subscriptionRenewsAt,
             updatedAt: snapshot.updatedAt,

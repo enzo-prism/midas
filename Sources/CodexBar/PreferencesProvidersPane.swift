@@ -6,6 +6,7 @@ import SwiftUI
 struct ProvidersPane: View {
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
+    @Bindable var preferencesSelection: PreferencesSelection
     let managedCodexAccountCoordinator: ManagedCodexAccountCoordinator
     let codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator
     let codexAmbientLoginRunner: any CodexAmbientLoginRunning
@@ -33,6 +34,7 @@ struct ProvidersPane: View {
     init(
         settings: SettingsStore,
         store: UsageStore,
+        preferencesSelection: PreferencesSelection = PreferencesSelection(),
         managedCodexAccountCoordinator: ManagedCodexAccountCoordinator = ManagedCodexAccountCoordinator(),
         codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator? = nil,
         codexAmbientLoginRunner: any CodexAmbientLoginRunning = DefaultCodexAmbientLoginRunner(),
@@ -40,6 +42,7 @@ struct ProvidersPane: View {
     {
         self.settings = settings
         self.store = store
+        self.preferencesSelection = preferencesSelection
         self.managedCodexAccountCoordinator = managedCodexAccountCoordinator
         self.codexAccountPromotionCoordinator = codexAccountPromotionCoordinator
             ?? CodexAccountPromotionCoordinator(
@@ -121,7 +124,10 @@ struct ProvidersPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .onAppear {
-            self.ensureSelection()
+            self.applyRequestedProvider()
+        }
+        .onChange(of: self.preferencesSelection.providerRequestID) { _, _ in
+            self.applyRequestedProvider()
         }
         .onChange(of: self.providers) { _, _ in
             self.ensureSelection()
@@ -175,6 +181,14 @@ struct ProvidersPane: View {
             displayName(provider).localizedCaseInsensitiveContains(trimmedQuery)
                 || provider.rawValue.localizedCaseInsensitiveContains(trimmedQuery)
         }
+    }
+
+    private func applyRequestedProvider() {
+        if let provider = self.preferencesSelection.requestedProvider, self.providers.contains(provider) {
+            self.providerSearchText = ""
+            self.selectedProvider = provider
+        }
+        self.ensureSelection()
     }
 
     private func ensureSelection() {

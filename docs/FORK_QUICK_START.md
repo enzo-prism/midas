@@ -1,257 +1,85 @@
 ---
-summary: "Fork quick start: differences, commands, and planned features."
+summary: "Midas fork: current features, local build, verification, and source publishing."
 read_when:
-  - Onboarding to the fork workflow
-  - Reviewing fork-specific changes
-  - Running fork maintenance commands
+  - Onboarding to Midas
+  - Building or verifying the fork
 ---
 
-# CodexBar Fork - Quick Start Guide
+# Midas quick start
 
-**Fork Maintainer:** Brandon Charleson ([topoffunnel.com](https://topoffunnel.com))  
-**Original Author:** Peter Steinberger ([steipete](https://twitter.com/steipete))  
-**Fork Repository:** https://github.com/topoffunnel/CodexBar
+Midas is Enzo’s personal macOS fork of [CodexBar](https://github.com/steipete/CodexBar),
+created by Peter Steinberger and contributors under the MIT license.
 
----
+- **Midas source:** [enzo-prism/midas](https://github.com/enzo-prism/midas)
+- **Midas issues:** [issue tracker](https://github.com/enzo-prism/midas/issues)
+- **Requirements:** macOS 14 or later and a compatible Swift 6/Xcode toolchain.
 
-## 🎯 What Makes This Fork Different?
+## Current features
 
-### Key Enhancements
-1. **Augment Provider Support** - Full integration with Augment Code API
-2. **Enhanced Security** - Improved keychain handling, no permission prompts
-3. **Better Cookie Management** - Automatic session keepalive, Chrome Beta support
-4. **Bug Fixes** - Cursor bonus credits, cookie domain filtering
+Midas Air provides a native overview panel, a resizable Usage window, sidebar settings, and
+bundled provider logos. Estimated spend and remaining capacity are prominent. The overview total
+includes enabled providers outside Favorites and discloses missing estimates and mixed periods.
+Different currencies stay separate; usage-rate estimates are not billed charges.
 
-### Planned Features
-- Multi-account management per provider
-- Enhanced diagnostics and logging
-- Upstream sync automation
-- Usage history tracking
+Codex shows weekly remaining in one centered menu-bar capsule, plus reset-credit details.
+Cursor preserves actual usage pools and request counts. Meta supports local Muse usage history
+and cost estimates without inventing quota availability.
 
----
+See [Midas Air](MIDAS_AIR.md) for implementation boundaries and [Codex](codex.md) for provider
+behavior. The [menu-bar design research](MIDAS_MENU_BAR_DESIGN.md) is a proposal, not shipped UI.
 
-## 🚀 Quick Commands
+## Build and verify
 
-### Development
-```bash
-# Build and run (kills old instances, builds, tests, packages, relaunches)
-./Scripts/compile_and_run.sh
+Run from the repository root:
 
-# Quick build
-swift build
-
-# Run tests
+```sh
+make check
 swift test
-
-# Format code
-swiftformat Sources Tests
-swiftlint --strict
-
-# Package app
-./Scripts/package_app.sh
-
-# Restart app after rebuild
-pkill -x CodexBar || pkill -f CodexBar.app || true
-cd /Users/steipete/Projects/codexbar && open -n /Users/steipete/Projects/codexbar/CodexBar.app
+./Scripts/package_app.sh release
 ```
 
-### Release
-```bash
-# Edit .mac-release.env first: MAC_RELEASE_REPO, feed URL, download URL,
-# bundle id, and Sparkle public/signing key must point at your fork.
-./Scripts/release.sh
+For a focused Midas regression pass:
 
-# See full release process
-cat docs/RELEASING.md
+```sh
+swift test --filter 'Midas|CodexWeeklyPreview|CodexResetCredits'
 ```
 
-### Git Workflow
-```bash
-# Check status
-git status
+Follow [AGENTS.md](../AGENTS.md) for testing boundaries. Use fixtures and isolated stores;
+do not initiate live provider probes, browser imports, or Keychain reads as routine tests.
+Full-suite failures must be reported separately from passing focused tests.
 
-# Create feature branch
-git checkout -b feature/my-feature
+Packaging produces `CodexBar.app` with the Midas display name. Bundle identifiers, executable
+name, storage, and account identity are intentionally retained. To build, test, package, and
+restart in one development workflow:
 
-# Commit changes
-git add -A
-git commit -m "feat: description"
-
-# Push to fork
-git push origin feature/my-feature
-
-# Sync with upstream (TBD - see docs/FORK_ROADMAP.md Phase 4)
-```
-
----
-
-## 📁 Key Files & Directories
-
-### Source Code
-- `Sources/CodexBar/` - Swift 6 menu bar app
-- `Sources/CodexBarCore/` - Core logic, providers, utilities
-- `Sources/CodexBarCore/Providers/Augment/` - Augment provider implementation
-- `Tests/CodexBarTests/` - XCTest coverage
-
-### Scripts
-- `Scripts/compile_and_run.sh` - Main development script
-- `Scripts/package_app.sh` - Package app bundle
-- `Scripts/sign-and-notarize.sh` - Release signing
-- `Scripts/make_appcast.sh` - Generate appcast XML
-
-### Documentation
-- `docs/augment.md` - Augment provider guide
-- `docs/FORK_ROADMAP.md` - Development roadmap
-- `docs/RELEASING.md` - Release process
-- `docs/DEVELOPMENT.md` - Build instructions
-- `README.md` - Main documentation
-
----
-
-## 🔧 Common Tasks
-
-### Adding a New Feature
-1. Create feature branch: `git checkout -b feature/my-feature`
-2. Make changes in `Sources/`
-3. Add tests in `Tests/`
-4. Run `./Scripts/compile_and_run.sh` to verify
-5. Run `swiftformat Sources Tests && swiftlint --strict`
-6. Commit with descriptive message
-7. Push and create PR
-
-### Debugging Augment Issues
-1. Enable debug logging: `export CODEXBAR_LOG_LEVEL=debug`
-2. Check Console.app for "com.steipete.codexbar"
-3. Use Settings → Debug → Augment → Show Debug Info
-4. Check `docs/augment.md` troubleshooting section
-
-### Testing Changes
-```bash
-# Run all tests
-swift test
-
-# Run specific test
-swift test --filter AugmentTests
-
-# Build and test together
+```sh
 ./Scripts/compile_and_run.sh
 ```
 
-### Updating Documentation
-1. Edit relevant `.md` file in `docs/`
-2. Update `README.md` if needed
-3. Commit with `docs:` prefix
-4. No need to rebuild app
+The gold application artwork can be regenerated with `swift Scripts/build_midas_icon.swift`.
+Generated work files and app bundles are excluded from Git.
 
----
+## Navigation
 
-## 🐛 Troubleshooting
+Left-click the status icon to open Midas Air. Use **Open Usage** for the larger window.
+Right-click the icon, or choose **Provider actions & accounts…** inside the panel, for the
+original provider menu and existing account actions. Provider account settings retain the
+selected provider.
 
-### App Won't Launch
-```bash
-# Kill all instances
-pkill -x CodexBar || pkill -f CodexBar.app || true
+## Source updates versus releases
 
-# Rebuild and relaunch
-./Scripts/compile_and_run.sh
-```
+Push source changes to `enzo-prism/midas`. Review `git status` and the staged diff before
+committing; exclude generated bundles, logs, credentials, and local configuration.
+A source push does not publish an installer, GitHub release, or Sparkle update.
 
-### Build Errors
-```bash
-# Clean build
-swift package clean
-swift build
+Midas packages disable upstream CodexBar update checks. The inherited release/Homebrew links
+in the README refer to CodexBar. A future Midas binary release needs a deliberate fork-specific
+release channel; consult [RELEASING.md](RELEASING.md) before configuring one.
 
-# Check for format issues
-swiftformat Sources Tests --lint
-swiftlint --strict
-```
+## Code map
 
-### Cookie Issues (Augment)
-1. Check browser is logged into app.augmentcode.com
-2. Verify cookie source in Settings → Providers → Augment
-3. Try manual cookie import (see `docs/augment.md`)
-4. Check debug logs for cookie import details
-
-### Keychain Permission Prompts
-- This fork includes fixes to eliminate prompts
-- If you still see prompts, check `Sources/CodexBarCore/Keychain/`
-- Ensure you're running the latest build
-
----
-
-## 📚 Learning Resources
-
-### Understanding the Codebase
-1. Start with `Sources/CodexBar/CodexbarApp.swift` - App entry point
-2. Review `Sources/CodexBarCore/UsageStore.swift` - Main state management
-3. Check `Sources/CodexBarCore/Providers/` - Provider implementations
-4. Read `docs/provider.md` - Provider authoring guide
-
-### Swift 6 & SwiftUI
-- Uses `@Observable` macro (not `ObservableObject`)
-- Prefer `@State` ownership over `@StateObject`
-- Use `@Bindable` in views for two-way binding
-- Strict concurrency checking enabled
-
-### Coding Style
-- 4-space indentation
-- 120-character line limit
-- Explicit `self` is intentional (don't remove)
-- Follow existing `MARK` organization
-- Use descriptive variable names
-
----
-
-## 🤝 Contributing
-
-### To This Fork
-1. Fork the fork repository
-2. Create feature branch
-3. Make changes with tests
-4. Submit PR to `topoffunnel/CodexBar`
-
-### To Upstream
-1. Check if feature benefits all users
-2. Create PR to `steipete/CodexBar`
-3. Reference this fork if relevant
-4. Be patient with review process
-
-See `docs/FORK_ROADMAP.md` for contribution strategy.
-
----
-
-## 📞 Support
-
-### Fork-Specific Issues
-- GitHub Issues: https://github.com/topoffunnel/CodexBar/issues
-- Email: [your-email]@topoffunnel.com
-
-### Upstream Issues
-- GitHub Issues: https://github.com/steipete/CodexBar/issues
-- Twitter: [@steipete](https://twitter.com/steipete)
-
----
-
-## 📋 Next Steps
-
-1. **Read the Roadmap:** `docs/FORK_ROADMAP.md`
-2. **Set Up Development:** `./Scripts/compile_and_run.sh`
-3. **Review Augment Docs:** `docs/augment.md`
-4. **Check Current Issues:** GitHub Issues tab
-5. **Join Development:** Pick a task from Phase 2-5
-
----
-
-## 🎉 Quick Wins
-
-Want to contribute but not sure where to start? Try these:
-
-- [ ] Add more test coverage for Augment provider
-- [ ] Improve error messages in cookie import
-- [ ] Add screenshots to `docs/augment.md`
-- [ ] Test on different macOS versions
-- [ ] Report bugs you find
-- [ ] Suggest UI improvements
-
-Happy coding! 🚀
+- `Sources/CodexBar/`: app, Midas views, presentation models, and status-item controller.
+- `Sources/CodexBarCore/`: providers, usage parsing, costs, and shared models.
+- `Sources/CodexBarCLI/`: command-line output.
+- `Tests/CodexBarTests/`: model, parser, rendering, and regression tests.
+- `Scripts/`: formatting, build, and packaging helpers.

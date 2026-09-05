@@ -109,7 +109,8 @@ struct CodexConsumerProjectionCharacterizationTests {
             snapshotOverride: overrideSnapshot,
             errorOverride: "Override error"))
 
-        #expect(model.creditsText == "Credits unavailable; keep Codex running to refresh.")
+        // Codex subscription cards omit the separate prepaid credits section entirely.
+        #expect(model.creditsText == nil)
         #expect(model.tokenUsage == nil)
         #expect(model.metrics.contains { $0.id == "code-review" } == false)
         #expect(model.subtitleText == "Override error")

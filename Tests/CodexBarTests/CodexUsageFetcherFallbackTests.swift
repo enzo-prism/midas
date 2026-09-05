@@ -25,6 +25,16 @@ struct CodexUsageFetcherFallbackTests {
     }
 
     @Test
+    func `CLI RPC uses supported approval policy and read only sandbox`() async throws {
+        let stubCLIPath = try self.makeDecodeMismatchStubCodexCLI()
+        defer { try? FileManager.default.removeItem(atPath: stubCLIPath) }
+
+        let snapshot = try await self.makeStubUsageFetcher(stubCLIPath).loadLatestUsage()
+
+        #expect(snapshot.primary?.usedPercent == 4)
+    }
+
+    @Test
     func `CLI usage recovers from RPC decode mismatch body payload`() {
         let snapshot = UsageFetcher._recoverCodexRPCUsageFromErrorForTesting(
             Self.decodeMismatchBodyMessage)
@@ -304,6 +314,9 @@ struct CodexUsageFetcherFallbackTests {
         import sys
 
         args = sys.argv[1:]
+        if args != ["-s", "read-only", "-a", "on-request", "app-server"]:
+            sys.stderr.write("unsupported Codex probe launch arguments\\n")
+            sys.exit(2)
         if "app-server" in args:
             for line in sys.stdin:
                 if not line.strip():

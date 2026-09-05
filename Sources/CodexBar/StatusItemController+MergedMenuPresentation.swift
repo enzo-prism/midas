@@ -5,6 +5,10 @@ extension StatusItemController {
 
     @objc func showMergedMenu(_ sender: NSStatusBarButton) {
         guard self.shouldMergeIcons else { return }
+        if self.usesMidasAir {
+            self.showMidasAir(sender)
+            return
+        }
         let menu = self.prepareMergedMenuForPresentation()
 
         let popupPoint = Self.trailingAlignedMenuPopupPoint(

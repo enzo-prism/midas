@@ -22,17 +22,15 @@ public struct CodexOAuthCredentials: Sendable {
     }
 
     public var needsRefresh: Bool {
+        // Usage requests authenticate with the access token. The short-lived ID token
+        // only supplies identity claims; its expiry must not rotate shared credentials
+        // or prevent a still-valid access token from reaching the usage API.
+        if let expiry = UsageFetcher.parseJWTExp(self.accessToken) {
+            return expiry.timeIntervalSinceNow <= 60
+        }
         guard let lastRefresh else { return true }
         let eightDays: TimeInterval = 8 * 24 * 60 * 60
-        if Date().timeIntervalSince(lastRefresh) > eightDays { return true }
-        // Proactively refresh when the id_token is about to expire (or already has). The id_token's
-        // email/plan claims feed the menu card; without this guard we'd happily serve stale
-        // identity for up to eight days after the upstream claims actually rotated.
-        if let exp = Self.idTokenExpiry(self.idToken) {
-            let oneHour: TimeInterval = 60 * 60
-            if exp.timeIntervalSinceNow <= oneHour { return true }
-        }
-        return false
+        return Date().timeIntervalSince(lastRefresh) > eightDays
     }
 
     /// Returns the JWT `exp` claim as a `Date`, or `nil` if the token is missing or has no `exp`.

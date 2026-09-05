@@ -415,6 +415,17 @@ struct StatusItemAnimationSignatureTests {
                 updatedAt: Date()),
             provider: .codex)
 
+        // Session-only changes no longer alter the weekly preview.
+        #expect(controller.applyIcon(for: .codex, phase: nil) == true)
+
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: nil,
+                secondary: RateWindow(usedPercent: 50, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+                updatedAt: Date()),
+            provider: .codex)
+
         #expect(controller.applyIcon(for: .codex, phase: nil) == false)
+        #expect(controller.applyIcon(for: .codex, phase: nil) == true)
     }
 }

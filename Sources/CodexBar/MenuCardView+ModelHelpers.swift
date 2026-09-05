@@ -267,6 +267,86 @@ extension UsageMenuCardView.Model {
         }
     }
 
+    static func codexRateMetrics(
+        input: Input,
+        projection: CodexConsumerProjection,
+        percentStyle: PercentStyle) -> [Metric]
+    {
+        projection.visibleRateLanes.compactMap { lane in
+            guard let window = projection.rateWindow(for: lane) else { return nil }
+
+            let title: String
+            let id: String
+            let paceDetail: PaceDetail?
+            switch lane {
+            case .session:
+                title = L(input.metadata.sessionLabel)
+                id = "primary"
+                paceDetail = Self.sessionPaceDetail(
+                    provider: input.provider,
+                    window: window,
+                    now: input.now,
+                    showUsed: input.usageBarsShowUsed)
+            case .weekly:
+                title = L(input.metadata.weeklyLabel)
+                id = "secondary"
+                paceDetail = Self.weeklyPaceDetail(
+                    window: window,
+                    now: input.now,
+                    pace: input.weeklyPace
+                        ?? UsagePace.weekly(window: window, now: input.now, defaultWindowMinutes: 10080)
+                        .flatMap { $0.expectedUsedPercent >= 3 ? $0 : nil },
+                    showUsed: input.usageBarsShowUsed)
+            }
+
+            return Metric(
+                id: id,
+                title: title,
+                percent: Self.clamped(input.usageBarsShowUsed ? window.usedPercent : window.remainingPercent),
+                percentStyle: percentStyle,
+                resetText: Self.resetText(for: window, style: input.resetTimeDisplayStyle, now: input.now),
+                detailText: projection.limitProximityDetail(for: lane, showUsed: input.usageBarsShowUsed),
+                detailLeftText: paceDetail?.leftLabel,
+                detailRightText: paceDetail?.rightLabel,
+                pacePercent: paceDetail?.pacePercent,
+                paceOnTop: paceDetail?.paceOnTop ?? true,
+                warningMarkerPercents: Self.codexLaneMarkerPercents(
+                    input: input,
+                    lane: lane,
+                    windowMinutes: window.windowMinutes))
+        }
+    }
+
+    /// On-demand Codex rate-limit reset credits row: headline count with every
+    /// expiry underneath, ordered soonest first. Renders as
+    /// a status row (no usage bar — a count is not a percentage). Nil when the current
+    /// source reports no reset data (non-OAuth sources, older payloads).
+    static func codexResetCreditsMetric(
+        snapshot: UsageSnapshot,
+        now: Date,
+        percentStyle: PercentStyle) -> Metric?
+    {
+        guard let resetCredits = snapshot.codexResetCredits else { return nil }
+        let detailText: String? = if resetCredits.availableCount > 0 {
+            CodexResetCreditFormatting.tooltipText(snapshot: resetCredits, now: now)
+        } else {
+            L("You have no rate limit resets")
+        }
+        return Metric(
+            id: "codex-reset-credits",
+            title: L("Rate Limit Resets"),
+            percent: 0,
+            percentStyle: percentStyle,
+            statusText: CodexResetCreditFormatting.countText(availableCount: resetCredits.availableCount),
+            resetText: nil,
+            detailText: detailText,
+            detailLeftText: nil,
+            detailRightText: nil,
+            pacePercent: nil,
+            paceOnTop: true,
+            helpText: CodexResetCreditFormatting.tooltipText(snapshot: resetCredits, now: now))
+    }
+
     static func antigravityMetric(
         id: String,
         title: String,

@@ -48,6 +48,12 @@ enum CLIRenderer {
             useColor: context.useColor,
             lines: &lines)
         self.appendCreditsLine(provider: provider, credits: credits, useColor: context.useColor, lines: &lines)
+        self.appendCodexResetCreditsLines(
+            provider: provider,
+            snapshot: snapshot,
+            useColor: context.useColor,
+            now: now,
+            lines: &lines)
         self.appendIdentityAndNotes(
             provider: provider,
             snapshot: snapshot,
@@ -214,6 +220,44 @@ enum CLIRenderer {
             "Credits",
             value: UsageFormatter.creditsString(from: credits.remaining),
             useColor: useColor))
+    }
+
+    /// On-demand Codex rate-limit reset credits: headline count plus one line per
+    /// credit with its expiry. Count-only snapshots (usage-body fallback) state that
+    /// expiry times are unavailable instead of implying there are none.
+    private static func appendCodexResetCreditsLines(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        now: Date,
+        lines: inout [String])
+    {
+        guard provider == .codex, let resetCredits = snapshot.codexResetCredits else { return }
+        lines.append(self.labelValueLine(
+            "Rate Limit Resets",
+            value: CodexResetCreditFormatting.countText(availableCount: resetCredits.availableCount),
+            useColor: useColor))
+        if resetCredits.availableCount <= 0 { return }
+        let available = resetCredits.availableCredits
+        if available.isEmpty || !resetCredits.hasPerCreditExpiries {
+            lines.append(self.subtleLine("Expiry times unavailable", useColor: useColor))
+            return
+        }
+        for (index, credit) in available.enumerated() {
+            var detail = "\(index + 1). "
+            if let expiresAt = credit.expiresAt {
+                let countdown = UsageFormatter.resetCountdownDescription(from: expiresAt, now: now)
+                detail += "Expires \(CodexResetCreditFormatting.absoluteExpiryText(expiresAt)) (\(countdown))"
+            } else {
+                detail += "Expiry unknown"
+            }
+            if let title = credit.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !title.isEmpty
+            {
+                detail += " — \(title)"
+            }
+            lines.append(self.subtleLine(detail, useColor: useColor))
+        }
     }
 
     private static func appendLimitsUnavailableLine(

@@ -314,6 +314,10 @@ private func isDeveloperIDSigned(bundleURL: URL) -> Bool {
 
 @MainActor
 private func makeUpdaterController() -> UpdaterProviding {
+    if Bundle.main.object(forInfoDictionaryKey: "MidasUpdatesDisabled") as? Bool == true {
+        return DisabledUpdaterController(
+            unavailableReason: "Midas updates are installed locally. Upstream CodexBar updates are disabled.")
+    }
     let bundleURL = Bundle.main.bundleURL
     let isBundledApp = bundleURL.pathExtension == "app"
     guard isBundledApp else {

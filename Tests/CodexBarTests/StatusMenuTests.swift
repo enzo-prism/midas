@@ -509,7 +509,7 @@ struct StatusMenuTests {
     }
 
     @Test
-    func `attached dashboard still shows code review in providers pane`() {
+    func `attached dashboard keeps code review hidden in Midas providers pane`() {
         let settings = self.makeSettings()
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
@@ -518,7 +518,7 @@ struct StatusMenuTests {
         let pane = ProvidersPane(settings: settings, store: store)
 
         let model = pane._test_menuCardModel(for: .codex)
-        #expect(model.metrics.contains { $0.id == "code-review" && $0.percent == 88 })
+        #expect(model.metrics.contains { $0.id == "code-review" } == false)
     }
 
     @Test
@@ -1114,7 +1114,7 @@ extension StatusMenuTests {
     }
 
     @Test
-    func `shows open AI web submenus when history exists`() throws {
+    func `shows web usage history without restoring hidden Codex credits`() throws {
         self.disableMenuCardsForTesting()
         let settings = SettingsStore(
             configStore: testConfigStore(suiteName: "StatusMenuTests-history"),
@@ -1178,9 +1178,7 @@ extension StatusMenuTests {
         #expect(
             usageItem?.submenu?.items
                 .contains { ($0.representedObject as? String) == "usageBreakdownChart" } == true)
-        #expect(
-            creditsItem?.submenu?.items
-                .contains { ($0.representedObject as? String) == "creditsHistoryChart" } == true)
+        #expect(creditsItem == nil)
     }
 
     @Test
@@ -1237,7 +1235,7 @@ extension StatusMenuTests {
     }
 
     @Test
-    func `shows credits before cost in codex menu card sections`() throws {
+    func `shows cost while keeping subscription credits hidden in codex menu card sections`() {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
         settings.statusChecksEnabled = false
@@ -1301,9 +1299,8 @@ extension StatusMenuTests {
         let ids = menu.items.compactMap { $0.representedObject as? String }
         let creditsIndex = ids.firstIndex(of: "menuCardCredits")
         let costIndex = ids.firstIndex(of: "menuCardCost")
-        #expect(creditsIndex != nil)
+        #expect(creditsIndex == nil)
         #expect(costIndex != nil)
-        #expect(try #require(creditsIndex) < costIndex!)
     }
 
     @Test

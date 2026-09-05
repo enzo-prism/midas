@@ -316,6 +316,7 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
 
     @discardableResult
     func closeOpenMenusFromShortcutIfNeeded() -> Bool {
+        if self.midasAirCoordinator?.closePopoverIfShown() == true { return true }
         guard !self.openMenus.isEmpty else { return false }
 
         let menus = Array(self.openMenus.values)

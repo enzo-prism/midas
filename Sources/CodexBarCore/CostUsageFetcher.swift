@@ -172,23 +172,7 @@ public struct CostUsageFetcher: Sendable {
         if provider == .meta {
             return try await CostUsageScanExecutor.run { _ in
                 let summary = MuseSessionLogScanner.loadSummary(since: since, until: until, now: now)
-                let daily = Self.metaDailyReport(from: summary)
-                var snapshot = Self.tokenSnapshot(from: daily, now: now, historyDays: clampedHistoryDays)
-                let apiEquivalent = daily.data.compactMap(\.apiEquivalentCostUSD).reduce(0, +)
-                snapshot = CostUsageTokenSnapshot(
-                    sessionTokens: snapshot.sessionTokens,
-                    sessionCostUSD: snapshot.sessionCostUSD,
-                    sessionRequests: snapshot.sessionRequests,
-                    last30DaysTokens: snapshot.last30DaysTokens,
-                    last30DaysCostUSD: snapshot.last30DaysCostUSD,
-                    last30DaysAPIEquivalentCostUSD: apiEquivalent > 0 ? apiEquivalent : nil,
-                    last30DaysRequests: snapshot.last30DaysRequests,
-                    currencyCode: snapshot.currencyCode,
-                    historyDays: snapshot.historyDays,
-                    historyLabel: "Last \(clampedHistoryDays) days (local Muse log)",
-                    daily: snapshot.daily,
-                    updatedAt: snapshot.updatedAt)
-                return snapshot
+                return Self.metaTokenSnapshot(from: summary, now: now, historyDays: clampedHistoryDays)
             }
         }
 
@@ -275,7 +259,12 @@ public struct CostUsageFetcher: Sendable {
             return daily
         }
 
-        return Self.tokenSnapshot(from: daily, now: now, historyDays: clampedHistoryDays)
+        // Native Codex and merged Pi token logs are valued at API list rates, not billing receipts.
+        return Self.tokenSnapshot(
+            from: daily,
+            now: now,
+            historyDays: clampedHistoryDays,
+            costProvenance: provider == .codex ? .listPriceEstimate : .unknown)
     }
 
     static func loadCachedCodexTokenSnapshot(
@@ -328,9 +317,38 @@ public struct CostUsageFetcher: Sendable {
             return Self.tokenSnapshot(
                 from: CostUsageDailyReport.merged(reports),
                 now: now,
-                historyDays: clampedHistoryDays)
+                historyDays: clampedHistoryDays,
+                costProvenance: .listPriceEstimate)
         }
         return cachedSnapshot.flatMap(\.self)
+    }
+
+    /// Pure mapping preserves that local Muse costs are price estimates, never provider charges.
+    public static func metaTokenSnapshot(
+        from summary: MetaUsageSummary,
+        now: Date,
+        historyDays: Int) -> CostUsageTokenSnapshot
+    {
+        let clampedHistoryDays = max(1, min(365, historyDays))
+        let daily = Self.metaDailyReport(from: summary)
+        var snapshot = Self.tokenSnapshot(from: daily, now: now, historyDays: clampedHistoryDays)
+        let apiEquivalentValues = daily.data.compactMap(\.apiEquivalentCostUSD)
+        let apiEquivalent = apiEquivalentValues.isEmpty ? nil : apiEquivalentValues.reduce(0, +)
+        snapshot = CostUsageTokenSnapshot(
+            sessionTokens: snapshot.sessionTokens,
+            sessionCostUSD: snapshot.sessionCostUSD,
+            sessionRequests: snapshot.sessionRequests,
+            last30DaysTokens: snapshot.last30DaysTokens,
+            last30DaysCostUSD: snapshot.last30DaysCostUSD,
+            last30DaysAPIEquivalentCostUSD: apiEquivalent,
+            last30DaysRequests: snapshot.last30DaysRequests,
+            currencyCode: snapshot.currencyCode,
+            historyDays: snapshot.historyDays,
+            historyLabel: "Last \(clampedHistoryDays) days (local Muse log)",
+            costProvenance: .listPriceEstimate,
+            daily: snapshot.daily,
+            updatedAt: snapshot.updatedAt)
+        return snapshot
     }
 
     /// Daily token report built from local Muse session logs. Each priced day carries
@@ -560,7 +578,7 @@ public struct CostUsageFetcher: Sendable {
     /// containing "bigmodel" to preserve legacy behavior.
     private static func loadZaiDailyReport(
         environment: [String: String],
-        apiRegion: ZaiAPIRegion?,
+        apiRegion: ZaiAPIRegion? = nil,
         since: Date,
         until: Date,
         now: Date,

@@ -17,8 +17,8 @@
 
 /* Begin PBXFileReference section */
 		02F15F392AF9D502F0503F8F /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		0323764283F305CEA7FA609B /* midas */ = {isa = PBXFileReference; lastKnownFileType = folder; name = midas; path = ..; sourceTree = SOURCE_ROOT; };
 		50E5C7D39315A8DA5DC9D18A /* CodexBarWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarWidgetBundle.swift; sourceTree = "<group>"; };
-		51024200A9270D2ADBD935FC /* codex-bar */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "codex-bar"; path = ..; sourceTree = SOURCE_ROOT; };
 		549C61629C144C190B18EAD9 /* CodexBarWidgetProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarWidgetProvider.swift; sourceTree = "<group>"; };
 		84672F595D2C0B83323E2C54 /* CodexBarWidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexBarWidgetViews.swift; sourceTree = "<group>"; };
 		E430B27E4F28973A5E77EA3F /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -42,7 +42,7 @@
 		4FAD1E2FCD6C4AC65D308ABC /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				51024200A9270D2ADBD935FC /* codex-bar */,
+				0323764283F305CEA7FA609B /* midas */,
 			);
 			name = Packages;
 			sourceTree = "<group>";

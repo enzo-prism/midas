@@ -98,6 +98,12 @@ public enum UsageFormatter {
         return "in \(totalMinutes)m"
     }
 
+    /// Absolute month/day/time text that always includes the date (unlike
+    /// `resetDescription`, which collapses to time-only for same-day dates).
+    public static func absoluteDateTimeText(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.abbreviated).day().hour().minute().locale(self.currentLocale()))
+    }
+
     public static func resetDescription(from date: Date, now: Date = .init()) -> String {
         // Human-friendly phrasing: today / tomorrow / date+time.
         let calendar = Calendar.current

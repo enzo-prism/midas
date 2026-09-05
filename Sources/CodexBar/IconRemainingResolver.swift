@@ -16,11 +16,6 @@ enum IconRemainingResolver {
                 now: snapshot.updatedAt))
     }
 
-    private static func codexVisibleWindows(snapshot: UsageSnapshot) -> [RateWindow] {
-        let projection = self.codexProjection(snapshot: snapshot)
-        return projection.visibleRateLanes.compactMap { projection.rateWindow(for: $0) }
-    }
-
     static func resolvedWindows(
         snapshot: UsageSnapshot,
         style: IconStyle)
@@ -39,10 +34,8 @@ enum IconRemainingResolver {
                 secondary: windows.dropFirst().first)
         }
         if style == .codex {
-            let windows = self.codexVisibleWindows(snapshot: snapshot)
-            return (
-                primary: windows.first,
-                secondary: windows.dropFirst().first)
+            // Midas previews only the weekly quota; never substitute session usage or credits.
+            return (primary: self.codexProjection(snapshot: snapshot).rateWindow(for: .weekly), secondary: nil)
         }
         return (
             primary: snapshot.primary,
@@ -67,10 +60,8 @@ enum IconRemainingResolver {
                 secondary: windows.dropFirst().first?.remainingPercent)
         }
         if style == .codex {
-            let windows = self.codexVisibleWindows(snapshot: snapshot)
-            return (
-                primary: windows.first?.remainingPercent,
-                secondary: windows.dropFirst().first?.remainingPercent)
+            let windows = self.resolvedWindows(snapshot: snapshot, style: style)
+            return (primary: windows.primary?.remainingPercent, secondary: nil)
         }
         return (
             primary: snapshot.primary?.remainingPercent,
@@ -84,6 +75,9 @@ enum IconRemainingResolver {
         -> (primary: Double?, secondary: Double?)
     {
         let windows = Self.resolvedWindows(snapshot: snapshot, style: style)
+        if style == .codex {
+            return (primary: windows.primary?.remainingPercent, secondary: nil)
+        }
         return (
             primary: showUsed ? windows.primary?.usedPercent : windows.primary?.remainingPercent,
             secondary: showUsed ? windows.secondary?.usedPercent : windows.secondary?.remainingPercent)

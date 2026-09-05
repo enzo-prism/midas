@@ -180,9 +180,19 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
             accountId: credentials.accountId,
             env: context.env)
         let updatedAt = Date()
+        // Reset-credit expiries are a best-effort companion call: when it fails, the
+        // reconciler falls back to the count embedded in the usage body (no expiries)
+        // and the refresh still succeeds.
+        let resetCredits = await Self.loadResetCredits(
+            accessToken: credentials.accessToken,
+            accountId: credentials.accountId,
+            env: context.env,
+            fallbackAvailableCount: usage.rateLimitResetCredits?.availableCount,
+            updatedAt: updatedAt)
         return try Self.makeResult(
             usageResponse: usage,
             credentials: credentials,
+            resetCredits: resetCredits,
             updatedAt: updatedAt,
             sourceMode: context.sourceMode)
     }
@@ -223,9 +233,32 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         return CreditsSnapshot(remaining: balance, events: [], updatedAt: Date())
     }
 
+    private static func loadResetCredits(
+        accessToken: String,
+        accountId: String?,
+        env: [String: String],
+        fallbackAvailableCount: Int?,
+        updatedAt: Date) async -> CodexResetCreditsSnapshot?
+    {
+        do {
+            let response = try await CodexOAuthUsageFetcher.fetchResetCredits(
+                accessToken: accessToken,
+                accountId: accountId,
+                env: env)
+            return CodexResetCreditsSnapshot.fromResponse(
+                response,
+                fallbackAvailableCount: fallbackAvailableCount,
+                updatedAt: updatedAt)
+        } catch {
+            // Dedicated call failed: fromOAuth falls back to the usage-body count.
+            return nil
+        }
+    }
+
     private static func makeResult(
         usageResponse: CodexUsageResponse,
         credentials: CodexOAuthCredentials,
+        resetCredits: CodexResetCreditsSnapshot? = nil,
         updatedAt: Date,
         sourceMode: ProviderSourceMode) throws -> ProviderFetchResult
     {
@@ -233,6 +266,7 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         let reconciled = CodexReconciledState.fromOAuth(
             response: usageResponse,
             credentials: credentials,
+            resetCredits: resetCredits,
             updatedAt: updatedAt)
 
         if let reconciled {
@@ -242,18 +276,25 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
                 sourceLabel: "oauth")
         }
 
-        guard let credits else {
-            throw UsageError.noRateLimitsFound
-        }
-
         // Credits can still be useful when the OAuth API omits or partially
         // fails to decode rate-limit windows. Returning the partial OAuth result
         // prevents auto mode from escalating a usable response into CLI fallback.
+        // Reset credits ride along so the count stays visible even without windows.
+        // (fromOAuth is nil here by construction — no windows — so read the
+        // usage-body count directly instead of reconciling.)
+        let partialResetCredits = resetCredits
+            ?? usageResponse.rateLimitResetCredits?.availableCount.map {
+                CodexResetCreditsSnapshot.countOnly(availableCount: $0, updatedAt: updatedAt)
+            }
+        guard credits != nil || partialResetCredits != nil else {
+            throw UsageError.noRateLimitsFound
+        }
         return CodexOAuthFetchStrategy().makeResult(
             usage: UsageSnapshot(
                 primary: nil,
                 secondary: nil,
                 tertiary: nil,
+                codexResetCredits: partialResetCredits,
                 updatedAt: updatedAt,
                 identity: CodexReconciledState.oauthIdentity(
                     response: usageResponse,

@@ -1077,3 +1077,7 @@
 "language_vietnamese" = "Vietnamese";
 
 "Request quota: %@ / %@" = "Request quota: %@ / %@";
+
+"Rate Limit Resets" = "Rate Limit Resets";
+
+"You have no rate limit resets" = "You have no rate limit resets";

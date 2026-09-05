@@ -94,6 +94,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
 
     static var factory: Factory = StatusItemController.defaultFactory
 
+    var midasAirCoordinator: MidasAirCoordinator?
+
     let store: UsageStore
     let settings: SettingsStore
     lazy var menuCardRefreshMonitor = MenuCardRefreshMonitor { [weak self] provider in
@@ -792,51 +794,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         }
     }
 
-    private func attachMenus() {
-        if self.mergedMenu == nil {
-            self.mergedMenu = self.makeMenu()
-        }
-        if self.statusItem.menu != nil {
-            self.statusItem.menu = nil
-        }
-        if let button = self.statusItem.button {
-            button.target = self
-            button.action = #selector(self.showMergedMenu(_:))
-        }
-        self.prepareAttachedClosedMenusIfNeeded()
-    }
-
-    private func attachMenus(fallback: UsageProvider? = nil) {
-        for provider in UsageProvider.allCases {
-            // Only access/create the status item if it's actually needed
-            let shouldHaveItem = self.isEnabled(provider) || fallback == provider
-
-            if shouldHaveItem {
-                let item = self.lazyStatusItem(for: provider)
-
-                if self.isEnabled(provider) {
-                    if self.providerMenus[provider] == nil {
-                        self.providerMenus[provider] = self.makeMenu(for: provider)
-                    }
-                    let menu = self.providerMenus[provider]
-                    if item.menu !== menu {
-                        item.menu = menu
-                    }
-                } else if fallback == provider {
-                    if self.fallbackMenu == nil {
-                        self.fallbackMenu = self.makeMenu(for: nil)
-                    }
-                    if item.menu !== self.fallbackMenu {
-                        item.menu = self.fallbackMenu
-                    }
-                }
-            } else if let item = self.statusItems[provider] {
-                item.menu = nil
-            }
-        }
-        self.prepareAttachedClosedMenusIfNeeded()
-    }
-
     private func rebuildProviderStatusItems() {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
@@ -943,5 +900,60 @@ extension StatusItemController {
         }
         self.updateVisibility()
         self.updateIcons()
+    }
+}
+
+extension StatusItemController {
+    private func attachMenus() {
+        if self.usesMidasAir {
+            self.attachMidasAir(to: self.statusItem)
+            return
+        }
+        if self.mergedMenu == nil {
+            self.mergedMenu = self.makeMenu()
+        }
+        if self.statusItem.menu != nil {
+            self.statusItem.menu = nil
+        }
+        if let button = self.statusItem.button {
+            button.target = self
+            button.action = #selector(self.showMergedMenu(_:))
+        }
+        self.prepareAttachedClosedMenusIfNeeded()
+    }
+
+    private func attachMenus(fallback: UsageProvider? = nil) {
+        for provider in UsageProvider.allCases {
+            // Only access/create the status item if it's actually needed
+            let shouldHaveItem = self.isEnabled(provider) || fallback == provider
+
+            if shouldHaveItem {
+                let item = self.lazyStatusItem(for: provider)
+                if self.usesMidasAir {
+                    self.attachMidasAir(to: item)
+                    continue
+                }
+
+                if self.isEnabled(provider) {
+                    if self.providerMenus[provider] == nil {
+                        self.providerMenus[provider] = self.makeMenu(for: provider)
+                    }
+                    let menu = self.providerMenus[provider]
+                    if item.menu !== menu {
+                        item.menu = menu
+                    }
+                } else if fallback == provider {
+                    if self.fallbackMenu == nil {
+                        self.fallbackMenu = self.makeMenu(for: nil)
+                    }
+                    if item.menu !== self.fallbackMenu {
+                        item.menu = self.fallbackMenu
+                    }
+                }
+            } else if let item = self.statusItems[provider] {
+                item.menu = nil
+            }
+        }
+        self.prepareAttachedClosedMenusIfNeeded()
     }
 }

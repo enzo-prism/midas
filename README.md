@@ -5,10 +5,34 @@
 > **Project Midas** is my personal version of CodexBar, forked from
 > [steipete/CodexBar](https://github.com/steipete/CodexBar) (MIT-licensed — all credit to
 > Peter Steinberger and contributors) and modified for my own use. My additions so far:
-> Meta provider support, Cursor metered-dollar cost tracking, an Overview "Usage & Spend"
-> header with prior-period comparison, inline cost dashboards for Cursor/Meta, and simplified
-> Cursor/Codex tab layouts. Upstream releases, Homebrew, and codexbar.app references below
+> the Midas Air native interface, provider estimated spend and an all-provider estimated total,
+> Meta usage tracking, Cursor cost dashboards, Codex weekly remaining and rate-limit reset credits
+> (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
 > refer to the original CodexBar project, not this fork.
+
+## Midas Air
+
+Midas now opens a spacious native panel with warm neutral surfaces, a restrained gold accent,
+bundled provider logos, and prominent estimated spend beside remaining usage. Both overviews show
+the total across all enabled providers with usable estimates, including providers outside Favorites.
+Missing estimates are excluded and disclosed; currencies stay separate. These are usage-rate
+estimates, not a combined bill. Codex keeps an explicit weekly-remaining view. **Open Usage** opens
+a separate resizable window for history and costs. Settings use a stable sidebar, and the app
+has its own Midas icon and About page.
+
+Provider fetching, account storage, menu-bar icon preferences, and existing account actions
+remain in place. Right-click the menu-bar icon, or choose **Provider actions & accounts…**
+inside the panel, to access the original provider menu. Local Midas builds deliberately disable
+upstream CodexBar update checks. See [Midas Air implementation and local rebuild](docs/MIDAS_AIR.md).
+
+- [Midas quick start](docs/FORK_QUICK_START.md): build, verify, and run this fork.
+- [Menu-bar design research](docs/MIDAS_MENU_BAR_DESIGN.md): Ledger, Focus, and Constellation concepts,
+  state behavior, and animation recommendations. **Proposed; not implemented in the current app.**
+
+### Upstream CodexBar reference
+
+The badges, screenshots, and installation links below describe upstream CodexBar. To build Midas,
+use the fork quick start above; installing the upstream Homebrew cask does not install Midas.
 
 [![Latest release](https://img.shields.io/github/v/release/steipete/CodexBar?style=flat-square&color=0a0a0c)](https://github.com/steipete/CodexBar/releases/latest)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://github.com/steipete/CodexBar/releases/latest)
@@ -81,7 +105,7 @@ See [CLI configuration](docs/cli-configuration.md) for the full flow.
 
 ## Providers
 
-- [Codex](docs/codex.md) — OAuth API or local Codex CLI, plus optional OpenAI web dashboard extras.
+- [Codex](docs/codex.md) — OAuth API or local Codex CLI, plus optional OpenAI web dashboard extras. Midas also tracks on-demand rate-limit reset credits (count + per-credit expiries) via the OAuth source.
 - [OpenAI](docs/openai.md) — Admin API key usage/cost graphs with legacy credit-balance fallback.
 - [Claude](docs/claude.md) — OAuth API, browser cookies, or CLI PTY fallback; session and weekly usage where available.
 - [Cursor](docs/cursor.md) — Browser session cookies for plan + usage + billing resets.
