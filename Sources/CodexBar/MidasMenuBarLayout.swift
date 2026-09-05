@@ -19,7 +19,7 @@ enum MidasMenuBarLayout {
 
     static func width(title: String, orbit: Bool) -> CGFloat {
         let adornments = orbit ? self.orbitWidth : self.markWidth + self.badgeGap + self.badgeWidth
-        // Keep a bounded footprint even for pathological values; the full reading remains in the tooltip.
+        // Keep a bounded footprint even for pathological values; the full reading remains in accessibility text and the panel.
         return min(220, max(24, self.horizontalInset * 2 + self.readingGap + adornments + self.readingWidth(title)))
     }
 }
