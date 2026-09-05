@@ -1,4 +1,5 @@
 import AppKit
+import CodexBarCore
 import CoreText
 import QuartzCore
 
@@ -14,6 +15,12 @@ final class MidasMenuBarView: NSView {
     private let markLayer = CAShapeLayer()
     private let titleLayer = CATextLayer()
     private let badgeLayer = CALayer()
+    private let orbitLayer = CALayer()
+    private let orbitTrack = CAShapeLayer()
+    private let orbitProgress = CAShapeLayer()
+    private let orbitLogo = CALayer()
+    private let orbitSatellite = CALayer()
+    private let orbitDot = CAShapeLayer()
     private var presentation: MidasMenuBarPresentation?
     private var reduceMotion = false
     private var refreshAnimationAttempted = false
@@ -26,6 +33,12 @@ final class MidasMenuBarView: NSView {
         self.layer?.addSublayer(self.markLayer)
         self.layer?.addSublayer(self.titleLayer)
         self.layer?.addSublayer(self.badgeLayer)
+        self.layer?.addSublayer(self.orbitLayer)
+        self.orbitLayer.addSublayer(self.orbitTrack)
+        self.orbitLayer.addSublayer(self.orbitProgress)
+        self.orbitLayer.addSublayer(self.orbitLogo)
+        self.orbitLayer.addSublayer(self.orbitSatellite)
+        self.orbitSatellite.addSublayer(self.orbitDot)
         self.titleLayer.alignmentMode = .left
         self.titleLayer.truncationMode = .end
         self.setAccessibilityElement(false)
@@ -44,7 +57,16 @@ final class MidasMenuBarView: NSView {
         false
     }
 
-    static func geometry(in bounds: CGRect) -> Geometry {
+    static func geometry(in bounds: CGRect, orbit: Bool = false) -> Geometry {
+        if orbit {
+            let orb = CGRect(x: bounds.width - 25, y: (bounds.height - 18) / 2, width: 18, height: 18)
+            let reading = CGRect(
+                x: 7,
+                y: (bounds.height - 17) / 2,
+                width: max(0, orb.minX - 14),
+                height: 17)
+            return Geometry(mark: orb, title: reading, badge: orb)
+        }
         let mark = CGRect(x: 6, y: (bounds.height - 16) / 2, width: 16, height: 16)
         let badge = CGRect(x: bounds.width - 18, y: (bounds.height - 12) / 2, width: 12, height: 12)
         let title = CGRect(x: 28, y: (bounds.height - 17) / 2, width: max(0, badge.minX - 32), height: 17)
@@ -54,6 +76,11 @@ final class MidasMenuBarView: NSView {
     func update(presentation: MidasMenuBarPresentation, reduceMotion: Bool) {
         guard self.presentation != presentation || self.reduceMotion != reduceMotion else { return }
         let readingChanged = self.presentation.map { $0.title != presentation.title } ?? false
+        if self.presentation?.orbitProvider != presentation.orbitProvider {
+            self.badgeLayer.removeAllAnimations()
+            self.orbitSatellite.removeAllAnimations()
+            self.refreshAnimationAttempted = false
+        }
         if !presentation.isRefreshing { self.refreshAnimationAttempted = false }
         self.presentation = presentation
         self.reduceMotion = reduceMotion
@@ -82,18 +109,24 @@ final class MidasMenuBarView: NSView {
                 x: 0,
                 y: 0,
                 width: presentation.width,
-                height: self.bounds.height)).title.width
+                height: self.bounds.height), orbit: presentation.orbitProvider != nil).title.width
             let fittedSize = max(9, min(13, 13 * availableWidth / max(1, measuredWidth)))
             let font = NSFont.monospacedDigitSystemFont(ofSize: (fittedSize * 2).rounded(.down) / 2, weight: .medium)
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            self.markLayer.isHidden = presentation.orbitProvider != nil
+            self.badgeLayer.isHidden = presentation.orbitProvider != nil
+            self.orbitLayer.isHidden = presentation.orbitProvider == nil
             self.markLayer.fillColor = color.cgColor
+            self.titleLayer.alignmentMode = presentation.orbitProvider == nil ? .left : .right
             self.titleLayer.font = font as CTFont
             self.titleLayer.fontSize = font.pointSize
             self.titleLayer.foregroundColor = color.cgColor
             self.titleLayer.string = presentation.title
-            self.titleLayer.opacity = presentation.isStale && !highlighted ? 0.7 : 1
+            self.titleLayer.opacity = presentation.orbitProvider == nil && presentation
+                .isStale && !highlighted ? 0.7 : 1
             self.badgeLayer.contents = self.badgeImage(presentation: presentation, color: color)
+            self.configureOrbit(presentation, color: color)
             CATransaction.commit()
         }
         self.needsLayout = true
@@ -101,17 +134,27 @@ final class MidasMenuBarView: NSView {
 
     override func layout() {
         super.layout()
-        let geometry = Self.geometry(in: self.bounds)
+        let geometry = Self.geometry(in: self.bounds, orbit: self.presentation?.orbitProvider != nil)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         self.markLayer.frame = geometry.mark
         self.markLayer.path = Self.markPath()
         self.titleLayer.frame = geometry.title
         self.badgeLayer.frame = geometry.badge
+        self.orbitLayer.frame = geometry.mark
+        self.orbitTrack.frame = self.orbitLayer.bounds
+        self.orbitProgress.frame = self.orbitLayer.bounds
+        self.orbitLogo.frame = CGRect(x: 2.5, y: 2.5, width: 13, height: 13)
+        self.orbitSatellite.frame = self.orbitLayer.bounds
+        self.orbitDot.frame = CGRect(x: 7.5, y: 15, width: 3, height: 3)
         let scale = self.window?.backingScaleFactor ?? 2
         self.titleLayer.contentsScale = scale
         self.markLayer.contentsScale = scale
         self.badgeLayer.contentsScale = scale
+        self.orbitLogo.contentsScale = scale
+        self.orbitTrack.contentsScale = scale
+        self.orbitProgress.contentsScale = scale
+        self.orbitDot.contentsScale = scale
         CATransaction.commit()
     }
 
@@ -133,6 +176,7 @@ final class MidasMenuBarView: NSView {
         super.viewDidMoveToWindow()
         if self.window == nil {
             self.badgeLayer.removeAllAnimations()
+            self.orbitSatellite.removeAllAnimations()
             self.titleLayer.removeAllAnimations()
         } else {
             self.refreshAppearance()
@@ -142,6 +186,7 @@ final class MidasMenuBarView: NSView {
 
     var isRefreshAnimating: Bool {
         self.badgeLayer.animation(forKey: "refreshRotation") != nil
+            || self.orbitSatellite.animation(forKey: "refreshRotation") != nil
     }
 
     var isReadingAnimating: Bool {
@@ -153,6 +198,7 @@ final class MidasMenuBarView: NSView {
               self.window != nil
         else {
             self.badgeLayer.removeAnimation(forKey: "refreshRotation")
+            self.orbitSatellite.removeAnimation(forKey: "refreshRotation")
             return
         }
         guard !self.refreshAnimationAttempted else { return }
@@ -163,7 +209,49 @@ final class MidasMenuBarView: NSView {
         rotation.duration = 1
         rotation.repeatCount = 30
         rotation.isRemovedOnCompletion = true
-        self.badgeLayer.add(rotation, forKey: "refreshRotation")
+        let target = presentation.orbitProvider == nil ? self.badgeLayer : self.orbitSatellite
+        target.add(rotation, forKey: "refreshRotation")
+    }
+
+    /// Ring geometry measures remaining capacity; only its separate satellite can rotate.
+    private func configureOrbit(_ presentation: MidasMenuBarPresentation, color: NSColor) {
+        guard let provider = presentation.orbitProvider else { return }
+        let path = CGMutablePath()
+        path.addArc(
+            center: CGPoint(x: 9, y: 9),
+            radius: 8,
+            startAngle: .pi / 2,
+            endAngle: -.pi * 3 / 2,
+            clockwise: true)
+        let known = presentation.orbitRemainingPercent != nil
+        let tint = presentation.attention ? NSColor.systemOrange : color
+        for ring in [self.orbitTrack, self.orbitProgress] {
+            ring.path = path
+            ring.fillColor = nil
+            ring.lineWidth = 1.5
+            ring.lineCap = .butt
+        }
+        self.orbitTrack.strokeColor = color.withAlphaComponent(known ? 0.25 : 0.45).cgColor
+        self.orbitTrack.lineDashPattern = known ? nil : [2, 2]
+        self.orbitProgress.strokeColor = tint.cgColor
+        self.orbitProgress.strokeEnd = CGFloat(presentation.orbitRemainingPercent ?? 0) / 100
+        self.orbitLayer.opacity = presentation.isStale ? 0.65 : 1
+        self.orbitDot.path = presentation.attention
+            ? CGPath(rect: CGRect(x: 0, y: 0, width: 3, height: 3), transform: nil)
+            : CGPath(ellipseIn: CGRect(x: 0, y: 0, width: 3, height: 3), transform: nil)
+        self.orbitDot.fillColor = tint.cgColor
+        self.orbitDot.isHidden = !presentation.attention && !presentation.isRefreshing
+        if let source = MidasProviderLogoLoader.image(for: provider, size: 26, dark: false, role: .menuBar) {
+            let image = NSImage(size: NSSize(width: 22, height: 22))
+            image.lockFocus()
+            source.draw(in: NSRect(x: 0, y: 0, width: 22, height: 22))
+            color.setFill()
+            NSRect(x: 0, y: 0, width: 22, height: 22).fill(using: .sourceIn)
+            image.unlockFocus()
+            self.orbitLogo.contents = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        } else {
+            self.orbitLogo.contents = nil
+        }
     }
 
     private func badgeImage(presentation: MidasMenuBarPresentation, color: NSColor) -> CGImage? {

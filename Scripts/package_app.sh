@@ -125,16 +125,25 @@ fi
 
 BUNDLE_ID="com.steipete.codexbar"
 # Midas must never update itself from the upstream CodexBar feed.
-FEED_URL=""
-AUTO_CHECKS=false
+FEED_URL="https://github.com/enzo-prism/midas/releases/latest/download/Midas-appcast-arm64.xml"
+AUTO_CHECKS=true
+MIDAS_UPDATES_DISABLED=false
+# Current Midas downloads support Apple Silicon only; never deliver that archive to Intel builds.
+if [[ " ${ARCH_LIST[*]} " != " arm64 " ]]; then
+  FEED_URL=""
+  AUTO_CHECKS=false
+  MIDAS_UPDATES_DISABLED=true
+fi
 if [[ "$LOWER_CONF" == "debug" ]]; then
   BUNDLE_ID="com.steipete.codexbar.debug"
   FEED_URL=""
   AUTO_CHECKS=false
+  MIDAS_UPDATES_DISABLED=true
 fi
 if [[ "$SIGNING_MODE" == "adhoc" ]]; then
   FEED_URL=""
   AUTO_CHECKS=false
+  MIDAS_UPDATES_DISABLED=true
 fi
 WIDGET_BUNDLE_ID="${BUNDLE_ID}.widget"
 APP_TEAM_ID="${APP_TEAM_ID:-Y5PE65HELJ}"
@@ -197,9 +206,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key><string>Icon</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 Peter Steinberger. MIT License.</string>
     <key>MidasAirEnabled</key><true/>
-    <key>MidasUpdatesDisabled</key><true/>
+    <key>MidasUpdatesDisabled</key><${MIDAS_UPDATES_DISABLED}/>
     <key>SUFeedURL</key><string>${FEED_URL}</string>
-    <key>SUPublicEDKey</key><string>AGCY8w5vHirVfGGDGc8Szc5iuOqupZSh9pMj/Qs67XI=</string>
+    <key>SUPublicEDKey</key><string>Wamu4ydtrOgeiui2Synb1ixgdZcNwDOpE0TOCtDdEbA=</string>
     <key>SUEnableAutomaticChecks</key><${AUTO_CHECKS}/>
     <key>CodexBuildTimestamp</key><string>${BUILD_TIMESTAMP}</string>
     <key>CodexGitCommit</key><string>${GIT_COMMIT}</string>

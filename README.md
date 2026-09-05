@@ -18,12 +18,15 @@ the total across all enabled providers with usable estimates, including provider
 Missing estimates are excluded and disclosed; currencies stay separate. These are usage-rate
 estimates, not a combined bill. Codex keeps an explicit weekly-remaining view. **Open Usage** opens
 a separate resizable window for history and costs. Settings use a stable sidebar, and the app
-has its own Midas icon and About page.
+has its own Midas icon and About page. The **Orbit** menu bar places total token spend beside a
+single favorite provider’s remaining-capacity ring. Choose the favorite in **Settings → Display →
+Orbit provider**, or use the provider dropdown at the top of the panel; the dollar total still covers all enabled providers.
 
 Provider fetching, account storage, menu-bar icon preferences, and existing account actions
 remain in place. Right-click the menu-bar icon, or choose **Provider actions & accounts…**
-inside the panel, to access the original provider menu. Local Midas builds deliberately disable
-upstream CodexBar update checks. See [Midas Air implementation and local rebuild](docs/MIDAS_AIR.md).
+inside the panel, to access the original provider menu. Signed Midas builds offer **Check for Updates** at the top of the panel, with Sparkle’s
+Download → Install & Restart flow. Only the Midas release feed is used; upstream CodexBar
+updates stay disabled. See [Midas Air implementation and local rebuild](docs/MIDAS_AIR.md).
 
 - [Midas quick start](docs/FORK_QUICK_START.md): build, verify, and run this fork.
 - [Midas releases](https://github.com/enzo-prism/midas/releases): manual downloads for this fork.

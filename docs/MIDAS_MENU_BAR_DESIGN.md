@@ -4,7 +4,15 @@ September 4, 2026. Original design study with fictional values, followed by nati
 
 ## Implementation status
 
-Ledger, Focus, and Constellation are now implemented, with Ledger as the default and Legacy
+Orbit is now the default for new Midas installs and migrates existing Ledger users once. Its
+110-point status item puts the all-provider token-spend total before one favorite provider’s
+logo and an 18-point capacity ring. Settings → Display → Orbit provider selects the favorite.
+The ring stays static during refresh; a separate satellite communicates activity. Unknown capacity
+uses a dashed neutral track, while exhausted capacity is an empty solid track. Codex uses weekly
+remaining, Cursor uses actual quota, and Meta has no quota. The small monochrome menu-bar logo
+assets preserve identity without reusing full-color panel artwork at an unsuitable size.
+
+Ledger, Focus, and Constellation remain available, with Legacy
 preserving prior icon settings. The native renderer uses stable widths of 130, 120, and 190 points
 respectively, a passive Midas mark/text/badge view, and monospaced digits. Constellation uses compact
 separate readings rather than subpixel quota tracks. Mixed currencies display a currency count;
@@ -15,7 +23,8 @@ refreshes with cached data stay static. Changed readings fade over 180 ms. Reduc
 both effects. Attention and last-known/partial coverage use static badges. Data older than 15
 minutes is last-known; a once-per-minute freshness task updates that state. Low-quota thresholds
 are currently 10% without the hysteresis proposed below. Startup animation does not add the
-optional 400 ms delay. Orbit and Reset Horizon remain research directions.
+optional 400 ms delay. Reset Horizon remains a research direction. Orbit warnings and freshness
+are scoped to the favorite; token-spend refresh errors are disclosed separately in its tooltip.
 
 The following sections preserve the original design rationale; implementation details above
 take precedence where they differ. See [Midas Air](MIDAS_AIR.md) for operating instructions.

@@ -6,13 +6,23 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The current Midas distribution is version 0.33.2, build 84, tagged `v0.33.2-midas.1`.
+The current Midas distribution is version 0.33.3, build 85, tagged `v0.33.3-midas.1`.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
 and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
 
-Midas keeps upstream Sparkle updates disabled. Install this release manually from GitHub.
+Midas 0.33.3 enables Sparkle using a Midas-only feed and Ed25519 key. In the panel, click
+**Check for Updates**, then follow **Download → Install & Restart**. Automatic checks can be
+controlled in Settings → About. Older builds need one manual install to bootstrap this channel.
+The upstream CodexBar feed remains disabled. Debug, ad-hoc, and Intel builds cannot use this
+Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+
+## 0.33.3 changes
+
+- Switch the menu-bar circle provider directly from the panel’s top dropdown.
+- Add a visible Check for Updates action using Sparkle’s standard signed download/install flow.
+- Ship Orbit, the selected-provider ring, and concise 30-day token-count tooltips.
 
 ## 0.33.2 changes
 
@@ -36,7 +46,14 @@ runs only for upstream releases; fork maintainers may still invoke its artifact-
 7. Create a new final ZIP of the stapled app and a SHA-256 checksum. Never reuse the unstapled ZIP
    for distribution. Publish against the exact tested commit in `enzo-prism/midas` with an explicit
    architecture label. Include license notices and the existing bundled credits.
-8. Download the published asset, verify its SHA-256, and inspect the extracted app signature/ticket.
+8. Sign the final app ZIP using Sparkle’s `sign_update --account enzo-prism-midas`.
+   The private key remains in the login Keychain; never export it into the repository.
+   Generate `Midas-appcast-arm64.xml` using `Scripts/make_midas_appcast.py` with that signature,
+   the exact version/build/tag, and the final archive. Include this feed in **every** latest stable
+   GitHub release: installed Midas reads `/releases/latest/download/Midas-appcast-arm64.xml`.
+   Verify the archive signature with `sign_update --account enzo-prism-midas --verify` before publishing.
+   Never replace a release asset after signing it. Do not publish Intel archives on this feed.
+9. Download the published asset, verify its SHA-256, and inspect the extracted app signature/ticket.
    Extract into a clean temporary directory outside Documents to avoid File Provider metadata
    modifying signed bundles. Restart the local app from the same validated bundle and confirm its process remains running.
 

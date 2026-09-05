@@ -65,6 +65,40 @@ struct MidasMenuBarSettingsTests {
         #expect(MidasMenuBarMode.allCases.allSatisfy { !DisplayPane.menuBarPreview($0).isEmpty })
     }
 
+    @Test func orbitMigrationPromotesNewAndLedgerMidasDefaultsOnlyOnce() throws {
+        for initial in [nil, "ledger"] as [String?] {
+            let suite = "MidasOrbitMigration-\(UUID().uuidString)"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            if let initial { defaults.set(initial, forKey: "midasMenuBarMode") }
+            defaults.set("meta", forKey: "midasMenuBarFocusProvider")
+            #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: true) == .orbit)
+            #expect(defaults.string(forKey: "midasMenuBarFocusProvider") == "meta")
+            defaults.set("ledger", forKey: "midasMenuBarMode")
+            #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: true) == .ledger)
+        }
+    }
+
+    @Test func orbitMigrationPreservesExplicitAlternativeModes() throws {
+        for initial in [MidasMenuBarMode.focus, .constellation, .legacy, .orbit] {
+            let suite = "MidasOrbitPreservation-\(UUID().uuidString)"
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            defaults.set(initial.rawValue, forKey: "midasMenuBarMode")
+            #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: true) == initial)
+            #expect(defaults.bool(forKey: "midasMenuBarOrbitMigrationCompleted"))
+        }
+    }
+
+    @Test func nonMidasLaunchDoesNotConsumeOrbitMigration() throws {
+        let suite = "MidasOrbitOtherBundle-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: false) == .ledger)
+        #expect(!defaults.bool(forKey: "midasMenuBarOrbitMigrationCompleted"))
+        #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: true) == .orbit)
+    }
+
     private func makeSettings() throws -> (SettingsStore, UserDefaults, String) {
         let suite = "MidasMenuBarSettingsTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))

@@ -464,8 +464,9 @@ extension SettingsStore {
             openAIWebBatterySaverEnabled: openAIWebBatterySaverEnabled,
             providerStorageFootprintsEnabled: providerStorageFootprintsEnabled,
             jetbrainsIDEBasePath: jetbrainsIDEBasePath,
-            midasMenuBarMode: MidasMenuBarMode(rawValue: userDefaults.string(forKey: "midasMenuBarMode") ?? "") ??
-                .ledger,
+            midasMenuBarMode: Self.loadMidasMenuBarMode(
+                userDefaults: userDefaults,
+                isMidasApp: Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true),
             midasMenuBarFocusProvider: UsageProvider(
                 rawValue: userDefaults.string(forKey: "midasMenuBarFocusProvider") ?? "") ?? .codex,
             midasMenuBarHideSpend: userDefaults.object(forKey: "midasMenuBarHideSpend") as? Bool ?? false,
@@ -477,6 +478,20 @@ extension SettingsStore {
             providerDetectionCompleted: providerDetectionCompleted,
             appLanguageRaw: appLanguageRaw,
             terminalAppRaw: userDefaults.string(forKey: "terminalApp"))
+    }
+
+    /// Promote the original Midas default once; never overwrite an explicitly different mode.
+    static func loadMidasMenuBarMode(userDefaults: UserDefaults, isMidasApp: Bool) -> MidasMenuBarMode {
+        let stored = MidasMenuBarMode(rawValue: userDefaults.string(forKey: "midasMenuBarMode") ?? "")
+        guard isMidasApp else { return stored ?? .ledger }
+        let migrationKey = "midasMenuBarOrbitMigrationCompleted"
+        if !userDefaults.bool(forKey: migrationKey) {
+            let migrated: MidasMenuBarMode = stored == .ledger ? .orbit : (stored ?? .orbit)
+            userDefaults.set(migrated.rawValue, forKey: "midasMenuBarMode")
+            userDefaults.set(true, forKey: migrationKey)
+            return migrated
+        }
+        return stored ?? .orbit
     }
 
     private static func loadMenuBarMetricPreferences(userDefaults: UserDefaults) -> [String: String] {

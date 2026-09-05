@@ -22,7 +22,8 @@ extension StatusItemController {
             snapshot: snapshot,
             tokenSnapshot: token,
             isRefreshing: self.store.shouldShowRefreshingMenuCardIndicator(for: provider),
-            isStale: self.store.isStale(provider: provider) || self.store.tokenErrors[provider] != nil)
+            isStale: self.store.isStale(provider: provider)
+                || (self.settings.midasMenuBarMode != .orbit && self.store.tokenErrors[provider] != nil))
     }
 
     func updateMidasMenuBar() {
@@ -38,19 +39,25 @@ extension StatusItemController {
             self.menuCardRefreshMonitor.isManualRefreshInFlight
                 || (self.store.snapshot(for: provider) == nil && self.store.tokenSnapshot(for: provider) == nil)
         })
-        let incidents = providers.compactMap { provider -> String? in
+        let incidents = Dictionary(uniqueKeysWithValues: providers.compactMap { provider -> (UsageProvider, String)? in
             guard let status = self.store.statuses[provider],
                   status.indicator != .none, status.indicator != .unknown else { return nil }
             let name = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
-            return "\(name) service status: \(status.indicator.label)"
-        }
+            return (provider, "\(name) service status: \(status.indicator.label)")
+        })
         let presentation = MidasMenuBarPresentation(
             mode: self.settings.midasMenuBarMode,
             presentations: presentations,
             focusProvider: self.settings.midasMenuBarFocusProvider,
             refreshingProviders: visibleActivity,
             hideSpend: self.settings.midasMenuBarHideSpend,
-            incidentDescriptions: incidents)
+            incidentDescriptions: providers.compactMap { incidents[$0] },
+            incidentDescriptionsByProvider: incidents,
+            spendStatusDescriptions: providers.compactMap { provider in
+                guard self.store.tokenErrors[provider] != nil else { return nil }
+                let name = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
+                return "\(name) token spend: refresh failed; any displayed value is last known"
+            })
         self.statusItem.length = presentation.width
         button.image = nil
         button.title = ""
@@ -68,7 +75,19 @@ extension StatusItemController {
         view.update(
             presentation: presentation,
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        button.toolTip = presentation.tooltip
+        if self.settings.midasMenuBarMode == .orbit {
+            let tokens = Dictionary(uniqueKeysWithValues: providers.compactMap { provider in
+                let snapshot = self.store.tokenSnapshot(
+                    fromProviderSnapshot: self.store.snapshot(for: provider), provider: provider)
+                    ?? (UsageStore.tokenCostRequiresProviderSnapshot(provider)
+                        ? nil : self.store.tokenSnapshot(for: provider))
+                return snapshot.map { (provider, $0) }
+            })
+            button.toolTip = MidasTokenTooltip.text(
+                favorite: self.settings.midasMenuBarFocusProvider, providers: providers, snapshots: tokens)
+        } else {
+            button.toolTip = presentation.tooltip
+        }
         button.setAccessibilityTitle(presentation.accessibilityLabel)
         button.setAccessibilityLabel(presentation.accessibilityLabel)
         self.startMidasFreshnessUpdatesIfNeeded()

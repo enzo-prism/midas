@@ -2,7 +2,7 @@ import CodexBarCore
 import Foundation
 
 enum MidasMenuBarMode: String, CaseIterable, Identifiable {
-    case ledger, focus, constellation, legacy
+    case orbit, ledger, focus, constellation, legacy
 
     var id: String {
         self.rawValue
@@ -10,6 +10,7 @@ enum MidasMenuBarMode: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
+        case .orbit: "Orbit"
         case .ledger: "Ledger"
         case .focus: "Focus"
         case .constellation: "Constellation"
@@ -28,6 +29,8 @@ struct MidasMenuBarPresentation: Equatable {
     let isStale: Bool
     let isPartial: Bool
     let width: CGFloat
+    let orbitProvider: UsageProvider?
+    let orbitRemainingPercent: Double?
 
     init(
         title: String,
@@ -37,7 +40,9 @@ struct MidasMenuBarPresentation: Equatable {
         attention: Bool,
         isStale: Bool,
         width: CGFloat,
-        isPartial: Bool = false)
+        isPartial: Bool = false,
+        orbitProvider: UsageProvider? = nil,
+        orbitRemainingPercent: Double? = nil)
     {
         self.title = title
         self.accessibilityLabel = accessibilityLabel
@@ -47,6 +52,8 @@ struct MidasMenuBarPresentation: Equatable {
         self.isStale = isStale
         self.isPartial = isPartial
         self.width = width
+        self.orbitProvider = orbitProvider
+        self.orbitRemainingPercent = orbitRemainingPercent
     }
 
     init(
@@ -56,13 +63,15 @@ struct MidasMenuBarPresentation: Equatable {
         refreshingProviders: Set<UsageProvider>,
         hideSpend: Bool,
         now: Date = Date(),
-        incidentDescriptions: [String] = [])
+        incidentDescriptions: [String] = [],
+        incidentDescriptionsByProvider: [UsageProvider: String] = [:],
+        spendStatusDescriptions: [String] = [])
     {
         var seen = Set<UsageProvider>()
         let unique = presentations.filter { seen.insert($0.provider).inserted }
         let displayed: [MidasProviderPresentation]
         switch mode {
-        case .focus:
+        case .focus, .orbit:
             displayed = unique.filter { $0.provider == focusProvider }
         case .constellation:
             let priority: [UsageProvider] = [.codex, .cursor, .meta]
@@ -72,27 +81,33 @@ struct MidasMenuBarPresentation: Equatable {
         case .ledger, .legacy:
             displayed = unique
         }
+        let selectedIncidents = mode == .orbit
+            ? incidentDescriptionsByProvider[focusProvider].map { [$0] } ?? [] : incidentDescriptions
+        self.orbitProvider = mode == .orbit ? focusProvider : nil
+        self.orbitRemainingPercent = mode == .orbit
+            ? displayed.first.flatMap(Self.quota).map { min(100, max(0, $0.remainingPercent)) } : nil
         self.isRefreshing = displayed.contains { refreshingProviders.contains($0.provider) }
-        self.attention = !incidentDescriptions.isEmpty || displayed.contains { item in
+        self.attention = !selectedIncidents.isEmpty || displayed.contains { item in
             item.error != nil || Self.quota(item).map { $0.remainingPercent <= 10 } == true
                 || item.metrics.contains { metric in
                     item.provider != .meta && metric.id != "cursor-models" && metric.remainingPercent <= 10
                 }
         }
         let total = MidasTotalSpend(presentations: unique)
-        self.isStale = displayed.contains { Self.stale($0, now: now, includeSpend: !hideSpend) }
-        self.isPartial = mode == .ledger && !hideSpend && total.includedProviderCount > 0
+        self.isStale = displayed.contains { Self.stale($0, now: now, includeSpend: !hideSpend && mode != .orbit) }
+        self.isPartial = (mode == .ledger || mode == .orbit) && !hideSpend && total.includedProviderCount > 0
             && total.excludedProviderCount > 0
         switch mode {
-        case .ledger:
-            self.width = 130
+        case .ledger, .orbit:
+            self.width = mode == .orbit ? 110 : 130
             if hideSpend {
                 self.title = "••••"
             } else if total.totals.isEmpty {
                 self.title = "—"
             } else {
-                self.title = total.totals.count > 1 ? "≈\(total.totals.count) FX"
-                    : "≈" + Self.compactMoney(total.totals[0].amount, currency: total.totals[0].currency)
+                let prefix = mode == .orbit ? "" : "≈"
+                self.title = total.totals.count > 1 ? "\(prefix)\(total.totals.count) FX"
+                    : prefix + Self.compactMoney(total.totals[0].amount, currency: total.totals[0].currency)
             }
         case .focus:
             self.width = 120
@@ -112,14 +127,14 @@ struct MidasMenuBarPresentation: Equatable {
         }
         var descriptions = displayed.map { Self.describe($0, hideSpend: hideSpend, now: now) }
         if displayed.isEmpty {
-            descriptions.append(mode == .focus
+            descriptions.append(mode == .focus || mode == .orbit
                 ? "\(ProviderDefaults.metadata[focusProvider]?.displayName ?? focusProvider.rawValue): unavailable"
                 : "No enabled providers")
         }
         if mode == .constellation, unique.count > displayed.count {
             descriptions.append("\(unique.count - displayed.count) more providers in Midas")
         }
-        if !hideSpend, mode == .ledger {
+        if !hideSpend, mode == .ledger || mode == .orbit {
             let amounts = total.totals.map { "\($0.value) \($0.currency)" }.joined(separator: ", ")
             descriptions.insert(
                 amounts.isEmpty ? "Token spend (API rates) unavailable" : "Token spend (API rates): \(amounts)",
@@ -127,7 +142,15 @@ struct MidasMenuBarPresentation: Equatable {
             descriptions.append(total.periodText)
             descriptions.append(total.coverageText)
         }
-        descriptions.append(contentsOf: incidentDescriptions)
+        if mode == .orbit {
+            let name = ProviderDefaults.metadata[focusProvider]?.displayName ?? focusProvider.rawValue
+            descriptions.insert("Favorite: \(name)", at: 0)
+            descriptions
+                .append(hideSpend ? "Token spend hidden" :
+                    "Usage-rate estimate across enabled providers; not billed charges")
+        }
+        descriptions.append(contentsOf: selectedIncidents)
+        if !hideSpend { descriptions.append(contentsOf: spendStatusDescriptions) }
         if self.isRefreshing { descriptions.append("Refreshing; displaying available recorded values") }
         self.accessibilityLabel = "Midas. " + descriptions.joined(separator: ". ")
         self.tooltip = descriptions.joined(separator: "\n")

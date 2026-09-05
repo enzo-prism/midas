@@ -176,6 +176,10 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
             quit: { [weak self] in
                 self?.closePopoverIfShown()
                 self?.controller?.quit()
+            },
+            checkForUpdates: { [weak self] in
+                self?.closePopoverIfShown()
+                self?.controller?.updater.checkForUpdates(nil)
             })
     }
 

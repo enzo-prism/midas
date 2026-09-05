@@ -12,6 +12,7 @@ struct MidasPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             self.header.padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 16)
+            self.quickControls.padding(.horizontal, 24).padding(.bottom, 14)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     if let provider = self.navigation.provider {
@@ -62,6 +63,50 @@ struct MidasPanelView: View {
             }
             .menuStyle(.borderlessButton).fixedSize().help("More actions").accessibilityLabel("More actions")
         }
+    }
+
+    private var quickControls: some View {
+        HStack(spacing: 12) {
+            Menu {
+                ForEach(self.providers, id: \.self) { provider in
+                    Button {
+                        self.settings.midasMenuBarFocusProvider = provider
+                        self.settings.midasMenuBarMode = .orbit
+                    } label: {
+                        if provider == self.settings.midasMenuBarFocusProvider {
+                            Label(
+                                ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue,
+                                systemImage: "checkmark")
+                        } else {
+                            Text(ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue)
+                        }
+                    }
+                }
+                if self.providers.isEmpty {
+                    Button("Connect a provider…", action: self.actions.settings)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    MidasProviderLogo(provider: self.settings.midasMenuBarFocusProvider, size: 16)
+                    Text(ProviderDefaults.metadata[self.settings.midasMenuBarFocusProvider]?.displayName
+                        ?? self.settings.midasMenuBarFocusProvider.rawValue)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down").font(.caption2)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize(horizontal: false, vertical: true)
+            .help("Choose the provider shown in the menu-bar circle")
+            .accessibilityLabel("Menu-bar provider")
+            Spacer(minLength: 8)
+            Button(action: self.actions.checkForUpdates) {
+                Label("Check for Updates", systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(MidasTheme.accent)
+            .fixedSize()
+        }
+        .font(.caption)
     }
 
     private var providers: [UsageProvider] {

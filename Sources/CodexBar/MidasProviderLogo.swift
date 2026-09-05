@@ -35,7 +35,7 @@ struct MidasProviderLogo: View {
 @MainActor
 enum MidasProviderLogoLoader {
     enum Role: Hashable {
-        case panel
+        case panel, menuBar
     }
 
     struct CacheKey: Hashable {
@@ -57,12 +57,12 @@ enum MidasProviderLogoLoader {
         }
     }
 
-    static func image(for provider: UsageProvider, size: CGFloat, dark: Bool) -> NSImage? {
-        let key = CacheKey(provider: provider, role: .panel, size: size, dark: dark)
+    static func image(for provider: UsageProvider, size: CGFloat, dark: Bool, role: Role = .panel) -> NSImage? {
+        let key = CacheKey(provider: provider, role: role, size: size, dark: dark)
         if let cached = self.cache[key] {
             return cached.copy() as? NSImage
         }
-        let bundledName = self.resourceName(for: provider, dark: dark)
+        let bundledName = role == .panel ? self.resourceName(for: provider, dark: dark) : nil
         let name = bundledName ?? ProviderDescriptorRegistry.descriptor(for: provider).branding.iconResourceName
         let bundle: Bundle = {
             if let url = Bundle.main.url(forResource: "CodexBar_CodexBar", withExtension: "bundle"),

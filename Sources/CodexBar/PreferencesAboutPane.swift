@@ -74,24 +74,26 @@ struct AboutPane: View {
                         Toggle(L("check_updates_auto"), isOn: self.$autoUpdateEnabled)
                             .toggleStyle(.checkbox)
                             .frame(maxWidth: .infinity, alignment: .center)
-                        VStack(spacing: 6) {
-                            HStack(spacing: 12) {
-                                Text(L("update_channel"))
-                                Spacer()
-                                Picker("", selection: self.updateChannelBinding) {
-                                    ForEach(UpdateChannel.allCases) { channel in
-                                        Text(channel.displayName).tag(channel)
+                        if Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool != true {
+                            VStack(spacing: 6) {
+                                HStack(spacing: 12) {
+                                    Text(L("update_channel"))
+                                    Spacer()
+                                    Picker("", selection: self.updateChannelBinding) {
+                                        ForEach(UpdateChannel.allCases) { channel in
+                                            Text(channel.displayName).tag(channel)
+                                        }
                                     }
+                                    .pickerStyle(.menu)
+                                    .labelsHidden()
                                 }
-                                .pickerStyle(.menu)
-                                .labelsHidden()
-                            }
-                            .frame(maxWidth: 280)
-                            Text(self.updateChannel.description)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
                                 .frame(maxWidth: 280)
+                                Text(self.updateChannel.description)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .frame(maxWidth: 280)
+                            }
                         }
                         Button(L("check_for_updates")) { self.updater.checkForUpdates(nil) }
                     }

@@ -15,6 +15,7 @@ struct MidasActions {
     let openUsage: (UsageProvider?) -> Void
     let legacyMenu: () -> Void
     let quit: () -> Void
+    var checkForUpdates: () -> Void = {}
 }
 
 struct MidasQuotaMetric: Identifiable {

@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.33.3 — September 4, 2026
+
+- Add a quick circle-provider dropdown and visible Check for Updates action at the top of the panel.
+- Enable signed Midas-only Sparkle updates with Download and Install & Restart. Keep debug/ad-hoc/Intel builds off the Apple Silicon update channel.
+
+- Simplify Orbit’s hover tooltip to favorite-provider and all-provider token totals for the past 30 days, with missing coverage disclosed.
+
+- Add Orbit: total token spend followed by one favorite provider’s logo and remaining-capacity ring. Select the favorite in Display settings; Codex uses weekly capacity, and Meta shows a neutral unknown-quota ring.
+- Keep provider-specific warnings and refresh motion attached to the favorite; preserve privacy, missing-data distinctions, and other menu-bar modes.
+
 ## Midas 0.33.2 — September 4, 2026
 
 - Rename the primary spend label to “Token spend (API rates)” throughout provider cards, totals, menu-bar tooltips, and accessibility descriptions.

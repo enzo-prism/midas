@@ -201,6 +201,75 @@ struct MidasMenuBarPresentationTests {
             hideSpend: true).isStale)
     }
 
+    @Test func orbitPairsAllProviderSpendWithFavoriteWeeklyQuota() {
+        let model = self.model(.orbit, items: [
+            self.item(.codex, remaining: 72, amount: 10),
+            self.item(.cursor, amount: 20),
+        ])
+        #expect(model.title == "$30")
+        #expect(model.width == 110)
+        #expect(model.orbitProvider == .codex)
+        #expect(model.orbitRemainingPercent == 72)
+        #expect(model.tooltip.contains("Favorite: Codex"))
+        #expect(model.tooltip.contains("not billed charges"))
+        #expect(model.tooltip.contains("2 providers"))
+    }
+
+    @Test func orbitNeverSubstitutesAnAvailableProviderForMissingFavorite() {
+        let model = self.model(.orbit, items: [self.item(.cursor, amount: 20)])
+        #expect(model.title == "$20")
+        #expect(model.orbitProvider == .codex)
+        #expect(model.orbitRemainingPercent == nil)
+        #expect(model.tooltip.contains("Codex: unavailable"))
+    }
+
+    @Test func orbitRingIgnoresOtherProviderIncidentRefreshAndAge() {
+        let model = MidasMenuBarPresentation(
+            mode: .orbit,
+            presentations: [self.item(.codex, remaining: 72, amount: 10), self.item(.cursor, amount: 20, age: 1800)],
+            focusProvider: .codex,
+            refreshingProviders: [.cursor],
+            hideSpend: false,
+            now: self.now,
+            incidentDescriptions: ["Cursor outage"],
+            incidentDescriptionsByProvider: [.cursor: "Cursor outage"])
+        #expect(!model.attention)
+        #expect(!model.isRefreshing)
+        #expect(!model.isStale)
+        #expect(!model.tooltip.contains("Cursor outage"))
+    }
+
+    @Test func orbitRingReportsFavoriteIncidentWithoutChangingMeasuredQuota() {
+        let model = MidasMenuBarPresentation(
+            mode: .orbit,
+            presentations: [self.item(.codex, remaining: 72, amount: 10)],
+            focusProvider: .codex,
+            refreshingProviders: [.codex],
+            hideSpend: false,
+            now: self.now,
+            incidentDescriptionsByProvider: [.codex: "Codex service degraded"])
+        #expect(model.attention)
+        #expect(model.isRefreshing)
+        #expect(model.orbitRemainingPercent == 72)
+        #expect(model.tooltip.contains("Codex service degraded"))
+    }
+
+    @Test func orbitMetaRemainsNeutralAndPrivacyHidesAmounts() {
+        let model = MidasMenuBarPresentation(
+            mode: .orbit,
+            presentations: [self.item(.meta, amount: 42)],
+            focusProvider: .meta,
+            refreshingProviders: [],
+            hideSpend: true,
+            now: self.now)
+        #expect(model.orbitProvider == .meta)
+        #expect(model.orbitRemainingPercent == nil)
+        #expect(model.title == "••••")
+        #expect(!model.tooltip.contains("$"))
+        #expect(!model.accessibilityLabel.contains("$"))
+        #expect(model.tooltip.contains("Token spend hidden"))
+    }
+
     private func model(
         _ mode: MidasMenuBarMode,
         items: [MidasProviderPresentation],

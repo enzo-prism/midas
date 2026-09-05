@@ -1,4 +1,5 @@
 import AppKit
+import CodexBarCore
 import Foundation
 import Testing
 @testable import CodexBar
@@ -10,7 +11,9 @@ struct MidasMenuBarRenderTests {
         refreshing: Bool = false,
         attention: Bool = false,
         stale: Bool = false,
-        width: CGFloat = 132) -> MidasMenuBarPresentation
+        width: CGFloat = 132,
+        orbitProvider: UsageProvider? = nil,
+        remaining: Double? = nil) -> MidasMenuBarPresentation
     {
         MidasMenuBarPresentation(
             title: title,
@@ -19,7 +22,9 @@ struct MidasMenuBarRenderTests {
             isRefreshing: refreshing,
             attention: attention,
             isStale: stale,
-            width: width)
+            width: width,
+            orbitProvider: orbitProvider,
+            orbitRemainingPercent: remaining)
     }
 
     private func host(width: CGFloat = 132) -> (NSWindow, MidasMenuBarView) {
@@ -40,6 +45,31 @@ struct MidasMenuBarRenderTests {
         #expect(bounds.contains(geometry.mark))
         #expect(bounds.contains(geometry.title))
         #expect(bounds.contains(geometry.badge))
+    }
+
+    @Test func orbitKeepsAmountBeforeRingWithinNativeBar() {
+        let bounds = CGRect(x: 0, y: 0, width: 110, height: 24)
+        let geometry = MidasMenuBarView.geometry(in: bounds, orbit: true)
+        #expect(geometry.title.maxX + 7 == geometry.mark.minX)
+        #expect(bounds.contains(geometry.mark))
+        #expect(bounds.contains(geometry.title))
+        #expect(geometry.mark.height == 18)
+    }
+
+    @Test func orbitRefreshRespectsReduceMotionAndWarning() {
+        let (window, view) = self.host(width: 110)
+        defer { window.close() }
+        let active = self.presentation(refreshing: true, width: 110, orbitProvider: .codex, remaining: 72)
+        view.update(presentation: active, reduceMotion: false)
+        #expect(view.isRefreshAnimating)
+        view.update(presentation: active, reduceMotion: true)
+        #expect(!view.isRefreshAnimating)
+        view.update(presentation: self.presentation(
+            attention: true,
+            width: 110,
+            orbitProvider: .codex,
+            remaining: 8), reduceMotion: false)
+        #expect(!view.isRefreshAnimating)
     }
 
     @Test func adornmentNeverInterceptsNativeStatusButtonInteraction() {
@@ -88,6 +118,34 @@ struct MidasMenuBarRenderTests {
         guard let output = ProcessInfo.processInfo.environment["MIDAS_MENUBAR_PREVIEW_OUTPUT"] else { return }
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         let fixtures = [
+            ("orbit-codex", self.presentation("$13.9k", width: 110, orbitProvider: .codex, remaining: 72)),
+            ("orbit-cursor", self.presentation("$13.9k", width: 110, orbitProvider: .cursor, remaining: 54)),
+            ("orbit-meta-neutral", self.presentation("$13.9k", width: 110, orbitProvider: .meta)),
+            ("orbit-exhausted", self.presentation(
+                "$13.9k",
+                attention: true,
+                width: 110,
+                orbitProvider: .codex,
+                remaining: 0)),
+            ("orbit-low", self.presentation(
+                "$13.9k",
+                attention: true,
+                width: 110,
+                orbitProvider: .codex,
+                remaining: 8)),
+            ("orbit-refresh", self.presentation(
+                "$13.9k",
+                refreshing: true,
+                width: 110,
+                orbitProvider: .codex,
+                remaining: 72)),
+            ("orbit-stale", self.presentation(
+                "$13.9k",
+                stale: true,
+                width: 110,
+                orbitProvider: .codex,
+                remaining: 72)),
+            ("orbit-private", self.presentation("••••", width: 110, orbitProvider: .codex, remaining: 72)),
             ("ready", self.presentation()),
             ("large", self.presentation("$12,345.67")),
             ("ledger-wide", self.presentation("$123k + €45k", width: 130)),
@@ -109,7 +167,10 @@ struct MidasMenuBarRenderTests {
                 RunLoop.main.run(until: Date().addingTimeInterval(0.05))
                 let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
                 view.cacheDisplay(in: view.bounds, to: bitmap)
-                #expect(self.hasReadingPixels(bitmap, width: presentation.width))
+                #expect(self.hasReadingPixels(
+                    bitmap,
+                    width: presentation.width,
+                    orbit: presentation.orbitProvider != nil))
                 let data = try #require(bitmap.representation(using: .png, properties: [:]))
                 try data.write(to: URL(fileURLWithPath: output)
                     .appendingPathComponent("midas-menubar-\(name)-\(dark ? "dark" : "light").png"))
@@ -117,10 +178,10 @@ struct MidasMenuBarRenderTests {
         }
     }
 
-    private func hasReadingPixels(_ bitmap: NSBitmapImageRep, width: CGFloat) -> Bool {
+    private func hasReadingPixels(_ bitmap: NSBitmapImageRep, width: CGFloat, orbit: Bool) -> Bool {
         let scale = CGFloat(bitmap.pixelsWide) / width
         guard let background = bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB) else { return false }
-        let rect = MidasMenuBarView.geometry(in: CGRect(x: 0, y: 0, width: width, height: 24)).title
+        let rect = MidasMenuBarView.geometry(in: CGRect(x: 0, y: 0, width: width, height: 24), orbit: orbit).title
         for x in Int(rect.minX * scale)..<Int(rect.maxX * scale) {
             for y in 0..<bitmap.pixelsHigh {
                 guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }

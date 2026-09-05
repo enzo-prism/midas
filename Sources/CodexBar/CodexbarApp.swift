@@ -291,7 +291,8 @@ final class SparkleUpdaterController: NSObject, UpdaterProviding, SPUUpdaterDele
     }
 
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-        UpdateChannel.current.allowedSparkleChannels
+        if Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true { return [] }
+        return UpdateChannel.current.allowedSparkleChannels
     }
 }
 
@@ -314,9 +315,14 @@ private func isDeveloperIDSigned(bundleURL: URL) -> Bool {
 
 @MainActor
 private func makeUpdaterController() -> UpdaterProviding {
-    if Bundle.main.object(forInfoDictionaryKey: "MidasUpdatesDisabled") as? Bool == true {
-        return DisabledUpdaterController(
-            unavailableReason: "Midas updates are installed locally. Upstream CodexBar updates are disabled.")
+    if Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true {
+        guard Bundle.main.object(forInfoDictionaryKey: "MidasUpdatesDisabled") as? Bool != true,
+              MidasUpdateConfiguration.isValid(
+                  feedURL: Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+                  publicKey: Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String)
+        else {
+            return DisabledUpdaterController(unavailableReason: "Updates unavailable in this development build.")
+        }
     }
     let bundleURL = Bundle.main.bundleURL
     let isBundledApp = bundleURL.pathExtension == "app"
@@ -325,8 +331,10 @@ private func makeUpdaterController() -> UpdaterProviding {
     }
 
     if InstallOrigin.isHomebrewCask(appBundleURL: bundleURL) {
-        return DisabledUpdaterController(
-            unavailableReason: "Updates managed by Homebrew. Run: brew upgrade --cask steipete/tap/codexbar")
+        let reason = Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true
+            ? "This installation is managed by Homebrew. Install Midas from github.com/enzo-prism/midas/releases to use in-app updates."
+            : "Updates managed by Homebrew. Run: brew upgrade --cask steipete/tap/codexbar"
+        return DisabledUpdaterController(unavailableReason: reason)
     }
 
     guard isDeveloperIDSigned(bundleURL: bundleURL) else {

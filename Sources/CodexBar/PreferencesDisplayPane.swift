@@ -200,20 +200,32 @@ struct DisplayPane: View {
             Text("Previews use example values. Your saved legacy icon settings are preserved.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if self.settings.midasMenuBarMode == .focus {
+            if self.settings.midasMenuBarMode == .focus || self.settings.midasMenuBarMode == .orbit {
                 if self.activeProvidersInOrder.isEmpty {
-                    Text("Enable a provider in Providers to choose a focus.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(self.settings.midasMenuBarMode == .orbit ? "Orbit provider" : "Focus provider")
+                        Text("\(self.providerDisplayName(self.settings.midasMenuBarFocusProvider)) (not enabled)")
+                            .foregroundStyle(.secondary)
+                        Text("Enable a provider in Providers to choose your favorite.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
                 } else {
-                    Picker("Focus provider", selection: self.$settings.midasMenuBarFocusProvider) {
+                    Picker(
+                        self.settings.midasMenuBarMode == .orbit ? "Orbit provider" : "Focus provider",
+                        selection: self.$settings.midasMenuBarFocusProvider)
+                    {
                         if !self.activeProvidersInOrder.contains(self.settings.midasMenuBarFocusProvider) {
                             Text("\(self.providerDisplayName(self.settings.midasMenuBarFocusProvider)) (not enabled)")
                                 .tag(self.settings.midasMenuBarFocusProvider)
                                 .disabled(true)
                         }
                         ForEach(self.activeProvidersInOrder, id: \.self) { provider in
-                            Text(self.providerDisplayName(provider)).tag(provider)
+                            HStack(spacing: 8) {
+                                MidasProviderLogo(provider: provider, size: 16)
+                                Text(self.providerDisplayName(provider))
+                            }
+                            .tag(provider)
                         }
                     }
                     .pickerStyle(.menu)
@@ -230,6 +242,7 @@ struct DisplayPane: View {
 
     static func menuBarDescription(_ mode: MidasMenuBarMode) -> String {
         switch mode {
+        case .orbit: "Token spend (API rates) first, with an orb for your chosen provider’s remaining capacity."
         case .ledger: "A compact estimate of usage value, with source and coverage details inside Midas."
         case .focus: "Keep one provider in view. Codex always shows weekly capacity remaining."
         case .constellation: "Up to three enabled providers, prioritizing Codex, Cursor, and Meta."
@@ -239,6 +252,7 @@ struct DisplayPane: View {
 
     static func menuBarPreview(_ mode: MidasMenuBarMode) -> String {
         switch mode {
+        case .orbit: "$73.20 ◉"
         case .ledger: "✦ ≈$73.20"
         case .focus: "C 72%"
         case .constellation: "C 72% · U 38% · M —"

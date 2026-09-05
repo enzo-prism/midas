@@ -41,7 +41,15 @@ never substitutes session data when weekly data is missing. Cursor model spend s
 quota; actual request counts and independent usage pools remain separate. Meta can show local
 history when cost collection is disabled, without fabricating remaining capacity.
 
-The menu bar defaults to **Ledger**, a Midas mark and estimated-spend total. **Focus** pins one
+The menu bar defaults to **Orbit**: total token spend (API rates), followed by a ring around one
+favorite provider’s logo. Use the provider dropdown at the top of the panel, or **Settings → Display → Orbit provider**. The total includes all
+enabled providers, regardless of this selection. Codex’s ring uses weekly remaining, Cursor uses
+its real quota, and Meta uses a neutral dashed ring because it has no quota. A disabled or missing
+favorite retains its identity with unknown capacity; it never silently switches to another provider.
+An empty solid ring means exhausted capacity, while a dashed ring means unknown capacity.
+
+Existing Ledger users move to Orbit once. Other explicit modes and the selected provider remain
+unchanged; choosing Ledger again is respected. **Ledger** remains available. **Focus** pins one
 provider’s quota (Codex is always weekly remaining). **Constellation** shows up to three separate
 readings, prioritizing enabled Codex, Cursor, and Meta, then other enabled providers. All modes
 retain one stable-width native status item. Settings → Display offers these modes, focus-provider
@@ -52,13 +60,21 @@ refresh glyph for up to 30 seconds, while changed readings fade for 180 ms. Redu
 both effects. Static indicators disclose low quota, service incidents, last-known data, and partial
 estimate coverage. Freshness is checked once per minute without an idle animation loop.
 
-Left-click opens the overview for Ledger/Constellation or the pinned provider for Focus.
+Left-click opens the overview for Orbit/Ledger/Constellation or the pinned provider for Focus.
 Option-click opens Usage directly; right-click retains provider actions. The tooltip and accessible
 name include provider identity, exact readings, periods, coverage, and update times. Spend privacy
 also removes dollar amounts from those descriptions; the opened panel still shows spend.
 
 See [the design research](MIDAS_MENU_BAR_DESIGN.md) for the original alternatives and implementation
-notes. Orbit and Reset Horizon remain ideas for later work.
+notes. Orbit is now implemented; Reset Horizon remains an exploration.
+
+Orbit keeps spend fixed during state changes. A separate satellite moves only during the favorite’s
+active initial/manual refresh, never the capacity arc. Favorite warnings use an amber arc and static
+square marker; last-known capacity is dimmed. Other providers’ incidents never recolor this ring.
+Orbit’s hover tooltip contains only the past-30-day token counts for the favorite and all enabled
+providers. It discloses partial provider coverage in a short suffix. Shorter history and billing-cycle
+totals are unavailable rather than mislabeled as 30 days. Known zero counts remain zero. Quota,
+spend, provenance, and warning details remain in the overview and accessibility description.
 
 ## Local rebuild
 
@@ -104,10 +120,10 @@ artwork uses equivalent absolute cubic paths because CoreSVG truncated the origi
 paths. Preserve that conversion; transparent-border tests alone do not detect missing interior
 geometry. Logo regression tests also check the full square silhouette.
 
-Midas packages set `MidasUpdatesDisabled`, use an empty Sparkle feed, and disable automatic checks.
-The application checks that flag before constructing its updater. Midas is updated locally until
-it has a deliberate release channel; upstream CodexBar release links elsewhere in this inherited
-README are not Midas releases.
+Signed Apple Silicon Midas packages use their own Sparkle feed and public signing key. The app
+validates that exact configuration before constructing its updater. Debug, ad-hoc, and Intel
+packages keep `MidasUpdatesDisabled` and an empty feed. Upstream CodexBar release links elsewhere
+in this inherited README are not Midas releases.
 
 ## Implementation boundaries
 
@@ -125,3 +141,10 @@ Focused model tests cover quota direction, unavailable/stale states, account bou
 semantics, and logo caching. Native interactions and final signed-bundle launch should also be
 verified after changes. Tests must not initiate real Keychain/browser/provider probes unless
 explicitly authorized; follow the repository's AGENTS.md testing guidance.
+
+## Updates
+
+Click **Check for Updates** at the top of the panel for the standard Sparkle download and
+Install & Restart flow. Only signed Midas releases are accepted through the Midas-only feed.
+Settings → About provides automatic checks. Older releases need a one-time manual upgrade
+to 0.33.3 or later.
