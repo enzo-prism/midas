@@ -44,14 +44,17 @@ runs only for upstream releases; fork maintainers may still invoke its artifact-
 6. Staple with `xcrun stapler staple CodexBar.app`, then run `xcrun stapler validate` and
    `spctl --assess --type execute --verbose CodexBar.app`.
 7. Create a new final ZIP of the stapled app and a SHA-256 checksum. Never reuse the unstapled ZIP
-   for distribution. Publish against the exact tested commit in `enzo-prism/midas` with an explicit
-   architecture label. Include license notices and the existing bundled credits.
+   for distribution. Prepare the release against the exact tested commit in `enzo-prism/midas`
+   with an explicit architecture label. Include license notices and the existing bundled credits.
 8. Sign the final app ZIP using Sparkle’s `sign_update --account enzo-prism-midas`.
    The private key remains in the login Keychain; never export it into the repository.
    Generate `Midas-appcast-arm64.xml` using `Scripts/make_midas_appcast.py` with that signature,
    the exact version/build/tag, and the final archive. Include this feed in **every** latest stable
    GitHub release: installed Midas reads `/releases/latest/download/Midas-appcast-arm64.xml`.
    Verify the archive signature with `sign_update --account enzo-prism-midas --verify` before publishing.
+   Sign the XML feed too with `sign_update --account enzo-prism-midas <feed.xml>`, then verify it
+   using `--verify`. Generate final checksums after signing. Upload the archive, feed, checksums,
+   and matching dSYM as a draft; verify downloaded draft assets before publishing it as latest.
    Never replace a release asset after signing it. Do not publish Intel archives on this feed.
 9. Download the published asset, verify its SHA-256, and inspect the extracted app signature/ticket.
    Extract into a clean temporary directory outside Documents to avoid File Provider metadata

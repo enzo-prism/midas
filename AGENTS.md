@@ -10,7 +10,7 @@
 - Dev loop: `./Scripts/compile_and_run.sh` kills old instances, runs `swift build` + `swift test`, packages, relaunches `CodexBar.app`, and confirms it stays running.
 - Quick build/test: `swift build` (debug) or `swift build -c release`; `swift test` for the full XCTest suite.
 - Package locally: `./Scripts/package_app.sh` to refresh `CodexBar.app`, then restart with `pkill -x CodexBar || pkill -f CodexBar.app || true; open -n "$PWD/CodexBar.app"`.
-- Release flow: `./Scripts/release.sh`; app metadata lives in `.mac-release.env`, repo build/signing stays in `Scripts/sign-and-notarize.sh`, and validation steps live in `docs/RELEASING.md`.
+- Midas release flow: follow `docs/MIDAS_RELEASE.md`. Version/build metadata lives in `version.env`. The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target upstream CodexBar; do not use them unchanged for Midas. Signed packaging must pass the Midas `APP_TEAM_ID` and `APP_IDENTITY`.
 
 ## Coding Style & Naming
 - Enforce SwiftFormat/SwiftLint: run `swiftformat Sources Tests` and `swiftlint --strict`. 4-space indent, 120-char lines, explicit `self` is intentional—do not remove.
@@ -37,7 +37,7 @@
 - Run `./Scripts/compile_and_run.sh` only when UI/runtime behavior needs bundle-level validation; it builds, tests, packages, relaunches, and verifies the app stays running.
 - Widget/Tahoe UI issues: use Parallels macOS VM plus screenshots/clicks for autonomous verification.
 - Release script: keep it in the foreground; do not background it—wait until it finishes.
-- Sparkle release key: use `.mac-release.env` `MAC_RELEASE_SIGNING_KEY_FILE`, the legacy `AGCY8w5vHirVfGGDGc8Szc5iuOqupZSh9pMj/Qs67XI=` key. Do not use `sparkle-private-key-KEEP-SECURE.txt`; that is VibeTunnel's mismatched key.
+- Midas Sparkle signing: use the `enzo-prism-midas` Keychain account with Sparkle’s signing tools. Never use upstream CodexBar or VibeTunnel keys. Keep private keys out of the repository. Every latest stable release must include `Midas-appcast-arm64.xml`, pointing to the immutable, signed Midas archive.
 - Swift concurrency: treat sibling `async let` tasks as a review red flag when one child is required and another is optional/best-effort. Prefer sequential awaits or a drained `withThrowingTaskGroup` that surfaces required failures and explicitly contains optional failures; crash stacks mentioning `swift_task_dealloc` or `asyncLet_finish_after_task_completion` should trigger an audit of nearby `async let` usage.
 - Prefer modern SwiftUI/Observation macros: use `@Observable` models with `@State` ownership and `@Bindable` in views; avoid `ObservableObject`, `@ObservedObject`, and `@StateObject`.
 - Favor modern macOS 15+ APIs over legacy/deprecated counterparts when refactoring (Observation, new display link APIs, updated menu item styling, etc.).

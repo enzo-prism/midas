@@ -6,7 +6,8 @@ September 4, 2026. Original design study with fictional values, followed by nati
 
 Orbit is now the default for new Midas installs and migrates existing Ledger users once. Its
 110-point status item puts the all-provider token-spend total before one favorite provider’s
-logo and an 18-point capacity ring. Settings → Display → Orbit provider selects the favorite.
+logo and an 18-point capacity ring. The panel’s provider dropdown selects the favorite and switches to Orbit; Settings → Display →
+Orbit provider offers the same selection.
 The ring stays static during refresh; a separate satellite communicates activity. Unknown capacity
 uses a dashed neutral track, while exhausted capacity is an empty solid track. Codex uses weekly
 remaining, Cursor uses actual quota, and Meta has no quota. The small monochrome menu-bar logo
@@ -24,7 +25,8 @@ both effects. Attention and last-known/partial coverage use static badges. Data 
 minutes is last-known; a once-per-minute freshness task updates that state. Low-quota thresholds
 are currently 10% without the hysteresis proposed below. Startup animation does not add the
 optional 400 ms delay. Reset Horizon remains a research direction. Orbit warnings and freshness
-are scoped to the favorite; token-spend refresh errors are disclosed separately in its tooltip.
+are scoped to the favorite. Orbit’s hover tooltip contains only 30-day token counts and coverage;
+detailed spend and refresh status remain in the panel and accessibility description.
 
 The following sections preserve the original design rationale; implementation details above
 take precedence where they differ. See [Midas Air](MIDAS_AIR.md) for operating instructions.

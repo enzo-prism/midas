@@ -17,18 +17,31 @@ created by Peter Steinberger and contributors under the MIT license.
 ## Current features
 
 Midas Air provides a native overview panel, a resizable Usage window, sidebar settings, and
-bundled provider logos. Estimated spend and remaining capacity are prominent. The overview total
+bundled provider logos. Token spend (API rates) and remaining capacity are prominent. The overview total
 includes enabled providers outside Favorites and discloses missing estimates and mixed periods.
 Different currencies stay separate; usage-rate estimates are not billed charges.
 
-Codex shows weekly remaining in one centered menu-bar capsule, plus reset-credit details.
+Orbit shows total token spend beside one favorite provider’s capacity ring. Codex uses weekly
+remaining and retains reset-credit details in the panel.
 Cursor preserves actual usage pools and request counts. Meta supports local Muse usage history
 and cost estimates without inventing quota availability.
 
 See [Midas Air](MIDAS_AIR.md) for implementation boundaries and [Codex](codex.md) for provider
-behavior. Ledger, Focus, and Constellation are available in Settings → Display; Ledger is the
-default. The [menu-bar design research](MIDAS_MENU_BAR_DESIGN.md) records the alternatives and
+behavior. Orbit is the default; Ledger, Focus, Constellation, and Legacy remain available in
+Settings → Display. The [menu-bar design research](MIDAS_MENU_BAR_DESIGN.md) records the alternatives and
 implemented state behavior. Legacy restores the original icon preferences.
+
+## Switch providers and update
+
+Open Midas and use the provider dropdown at the top to change the menu-bar circle immediately.
+The dropdown selects Orbit; it does not change which providers contribute to the spend total.
+Hover over Orbit to see 30-day token counts for the favorite and all enabled providers.
+
+Click **Check for Updates** beside the provider dropdown, then **Download → Install & Restart**.
+Signed Apple Silicon builds use the Midas-only update feed. Builds older than 0.33.3 need a
+one-time manual install from [Midas releases](https://github.com/enzo-prism/midas/releases).
+See [the release procedure](MIDAS_RELEASE.md) before publishing; inherited upstream scripts are
+not the Midas release path.
 
 ## Build and verify
 

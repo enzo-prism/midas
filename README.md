@@ -31,9 +31,18 @@ updates stay disabled. See [Midas Air implementation and local rebuild](docs/MID
 - [Midas quick start](docs/FORK_QUICK_START.md): build, verify, and run this fork.
 - [Midas releases](https://github.com/enzo-prism/midas/releases): manual downloads for this fork.
   See the [Midas release procedure](docs/MIDAS_RELEASE.md) for signing and distribution.
-- [Menu-bar design research](docs/MIDAS_MENU_BAR_DESIGN.md): Ledger, Focus, and Constellation concepts,
-  state behavior, and animation decisions. **Ledger, Focus, and Constellation are implemented.**
-  Choose a style in Settings → Display. Ledger is the default; Legacy restores prior icon controls.
+- [Menu-bar design research](docs/MIDAS_MENU_BAR_DESIGN.md): Orbit and the historical alternatives,
+  state behavior, and animation decisions. **Orbit is the default**; Ledger, Focus, Constellation,
+  and Legacy remain available in Settings → Display.
+
+### Everyday controls
+
+- **Switch the circle’s provider:** click Midas, then choose a provider from the dropdown at the top.
+  This selects Orbit; the dollar total still includes all enabled providers.
+- **See token totals:** hover over Orbit for the favorite’s and all providers’ past-30-day counts.
+  Missing provider coverage is disclosed rather than counted as zero.
+- **Install updates:** click **Check for Updates** at the top of the panel, then follow Sparkle’s
+  **Download → Install & Restart** flow. Builds older than 0.33.3 need one manual upgrade.
 
 ### Upstream CodexBar reference
 

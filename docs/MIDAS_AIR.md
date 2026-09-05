@@ -62,7 +62,9 @@ estimate coverage. Freshness is checked once per minute without an idle animatio
 
 Left-click opens the overview for Orbit/Ledger/Constellation or the pinned provider for Focus.
 Option-click opens Usage directly; right-click retains provider actions. The tooltip and accessible
-name include provider identity, exact readings, periods, coverage, and update times. Spend privacy
+name retain detailed provider readings in non-Orbit modes. Orbit’s hover tooltip shows only
+past-30-day token counts and coverage; its accessibility description retains detailed status.
+Spend privacy
 also removes dollar amounts from those descriptions; the opened panel still shows spend.
 
 See [the design research](MIDAS_MENU_BAR_DESIGN.md) for the original alternatives and implementation
