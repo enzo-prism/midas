@@ -95,6 +95,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     static var factory: Factory = StatusItemController.defaultFactory
 
     var midasAirCoordinator: MidasAirCoordinator?
+    var midasMenuBarView: MidasMenuBarView?
+    var midasMenuBarFreshnessTask: Task<Void, Never>?
+    var observesMidasAccessibility = false
 
     let store: UsageStore
     let settings: SettingsStore
@@ -522,6 +525,10 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.observeStoreIconChanges()
+                if self.usesMidasMenuBar {
+                    self.updateMidasMenuBar()
+                    return
+                }
                 let signature = self.storeIconObservationSignature()
                 guard signature != self.lastObservedStoreIconWorkSignature else { return }
                 self.lastObservedStoreIconWorkSignature = signature
@@ -667,6 +674,14 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
+        if self.usesMidasMenuBar {
+            self.updateMidasMenuBar()
+            self.attachMenus()
+            self.updateAnimationState()
+            self.updateBlinkingState()
+            return
+        }
+        self.removeMidasMenuBar()
         MainThreadActivityBreadcrumb.push("updateIcons")
         self.scheduleMenuBarCountdownRefreshIfNeeded()
         self.lastObservedStoreIconWorkSignature = self.storeIconObservationSignature()
@@ -747,7 +762,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         let force = self.store.debugForceAnimation
         let mergeIcons = self.shouldMergeIcons
         if mergeIcons {
-            self.statusItem.isVisible = anyEnabled || force
+            self.statusItem.isVisible = anyEnabled || force || self.usesMidasMenuBar
             for provider in Array(self.statusItems.keys) {
                 self.removeProviderStatusItem(for: provider)
             }
@@ -838,7 +853,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     }
 
     var shouldMergeIcons: Bool {
-        self.settings.mergeIcons && self.store.enabledProvidersForDisplay().count > 1
+        self.usesMidasMenuBar || (self.settings.mergeIcons && self.store.enabledProvidersForDisplay().count > 1)
     }
 
     func switchAccountSubtitle(for target: UsageProvider) -> String? {

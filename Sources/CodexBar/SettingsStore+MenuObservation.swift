@@ -62,6 +62,9 @@ extension SettingsStore {
         _ = self.ampCookieSource
         _ = self.t3ChatCookieSource
         _ = self.ollamaCookieSource
+        _ = self.midasMenuBarMode
+        _ = self.midasMenuBarFocusProvider
+        _ = self.midasMenuBarHideSpend
         _ = self.mergeIcons
         _ = self.switcherShowsIcons
         _ = self.mergedOverviewSelectedProviders

@@ -464,6 +464,11 @@ extension SettingsStore {
             openAIWebBatterySaverEnabled: openAIWebBatterySaverEnabled,
             providerStorageFootprintsEnabled: providerStorageFootprintsEnabled,
             jetbrainsIDEBasePath: jetbrainsIDEBasePath,
+            midasMenuBarMode: MidasMenuBarMode(rawValue: userDefaults.string(forKey: "midasMenuBarMode") ?? "") ??
+                .ledger,
+            midasMenuBarFocusProvider: UsageProvider(
+                rawValue: userDefaults.string(forKey: "midasMenuBarFocusProvider") ?? "") ?? .codex,
+            midasMenuBarHideSpend: userDefaults.object(forKey: "midasMenuBarHideSpend") as? Bool ?? false,
             mergeIcons: mergeIcons,
             switcherShowsIcons: switcherShowsIcons,
             mergedMenuLastSelectedWasOverview: mergedMenuLastSelectedWasOverview,

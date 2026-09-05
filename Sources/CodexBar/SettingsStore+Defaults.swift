@@ -445,6 +445,30 @@ extension SettingsStore {
         }
     }
 
+    var midasMenuBarMode: MidasMenuBarMode {
+        get { self.defaultsState.midasMenuBarMode }
+        set {
+            self.defaultsState.midasMenuBarMode = newValue
+            self.userDefaults.set(newValue.rawValue, forKey: "midasMenuBarMode")
+        }
+    }
+
+    var midasMenuBarFocusProvider: UsageProvider {
+        get { self.defaultsState.midasMenuBarFocusProvider }
+        set {
+            self.defaultsState.midasMenuBarFocusProvider = newValue
+            self.userDefaults.set(newValue.rawValue, forKey: "midasMenuBarFocusProvider")
+        }
+    }
+
+    var midasMenuBarHideSpend: Bool {
+        get { self.defaultsState.midasMenuBarHideSpend }
+        set {
+            self.defaultsState.midasMenuBarHideSpend = newValue
+            self.userDefaults.set(newValue, forKey: "midasMenuBarHideSpend")
+        }
+    }
+
     var mergeIcons: Bool {
         get { self.defaultsState.mergeIcons }
         set {

@@ -3,6 +3,10 @@
 ## 0.33.1 — Unreleased
 
 ### Midas fork — September 4, 2026
+- Prepare Midas 0.33.1 build 83 for Apple Silicon distribution. Keep fork releases separate from upstream appcast and Homebrew workflows.
+- Keep Meta token activity accessible with spend hidden, and distinguish partial estimate coverage from stale readings.
+- Implement the Midas menu bar: Ledger shows a stable estimated-spend total, Focus pins one provider’s remaining quota, and Constellation shows up to three separate provider readings. Add persisted display settings, menu-bar spend privacy, exact accessible summaries, and Legacy mode preserving prior icon settings.
+- Animate only active initial/manual refreshes for at most 30 seconds; fade changed readings briefly, respect Reduce Motion, and use static low-quota, incident, last-known, and partial-coverage indicators.
 - Add Midas Air: native overview popover, resizable Usage window, sidebar settings, warm adaptive surfaces, local provider logos, and Midas application branding.
 - Make provider estimated spend and remaining capacity the primary readings; retain period, provenance, freshness, and independent quota constraints.
 - Add total estimated spend across all enabled providers in both overviews. Deduplicate providers, disclose unavailable estimates, keep currencies separate, and avoid counting secondary equivalents or metered balances twice.
@@ -12,7 +16,7 @@
 - Preserve provider account navigation and legacy actions, and disable upstream Sparkle updates in packaged Midas builds.
 - Add presentation, total-spend, logo geometry, navigation, Codex reset-credit, and provider regression coverage.
 - Use the Codex access-token expiry for OAuth refresh timing. Update isolated status probes to the CLI's `on-request` approval mode while retaining the read-only sandbox and ephemeral history/state configuration.
-- Document the proposed Ledger/Focus/Constellation menu-bar redesign and state/motion contract. The proposal is not implemented by this update.
+- Preserve the menu-bar research and document which concepts and state behaviors are implemented.
 
 ### Added
 - Codex (Midas): track on-demand rate-limit reset credits — headline available count plus per-credit expiry timestamps from the dedicated reset-credits endpoint, shown as a "Rate Limit Resets" row in the Codex menu card (hover for each credit's expiry) and in `codexbar usage` text/JSON output. The endpoint call is best-effort and never fails a refresh: when it errors, the display falls back to the usage-body count and states that expiry times are unavailable.

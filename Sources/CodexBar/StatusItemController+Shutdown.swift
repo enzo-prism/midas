@@ -4,6 +4,7 @@ extension StatusItemController {
     func prepareForAppShutdown() {
         guard !self.hasPreparedForAppShutdown else { return }
         self.hasPreparedForAppShutdown = true
+        self.removeMidasMenuBar()
         self.midasAirCoordinator?.shutdown()
         self.midasAirCoordinator = nil
         #if DEBUG

@@ -2,7 +2,7 @@
 
 Midas Air replaces the main menu presentation with one native SwiftUI popover hosted by the
 existing status-item controller. It keeps the provider engine, account coordinators, saved
-settings, and menu-bar icon modes intact. macOS 14 remains the minimum target.
+settings, and legacy menu-bar icon preferences intact. macOS 14 remains the minimum target.
 
 ## Everyday surfaces
 
@@ -41,9 +41,24 @@ never substitutes session data when weekly data is missing. Cursor model spend s
 quota; actual request counts and independent usage pools remain separate. Meta can show local
 history when cost collection is disabled, without fabricating remaining capacity.
 
-The new menu-bar Ledger, Focus, and Constellation directions are documented in
-[the design research](MIDAS_MENU_BAR_DESIGN.md). They remain proposals; the current menu-bar
-rendering still uses the inherited renderer with the Codex weekly-capsule update.
+The menu bar defaults to **Ledger**, a Midas mark and estimated-spend total. **Focus** pins one
+provider’s quota (Codex is always weekly remaining). **Constellation** shows up to three separate
+readings, prioritizing enabled Codex, Cursor, and Meta, then other enabled providers. All modes
+retain one stable-width native status item. Settings → Display offers these modes, focus-provider
+selection, menu-bar spend privacy, and **Legacy**, which restores saved original icon preferences.
+
+Cached background refreshes stay still. Active initial/manual requests can animate a separate
+refresh glyph for up to 30 seconds, while changed readings fade for 180 ms. Reduce Motion removes
+both effects. Static indicators disclose low quota, service incidents, last-known data, and partial
+estimate coverage. Freshness is checked once per minute without an idle animation loop.
+
+Left-click opens the overview for Ledger/Constellation or the pinned provider for Focus.
+Option-click opens Usage directly; right-click retains provider actions. The tooltip and accessible
+name include provider identity, exact readings, periods, coverage, and update times. Spend privacy
+also removes dollar amounts from those descriptions; the opened panel still shows spend.
+
+See [the design research](MIDAS_MENU_BAR_DESIGN.md) for the original alternatives and implementation
+notes. Orbit and Reset Horizon remain ideas for later work.
 
 ## Local rebuild
 
@@ -54,6 +69,11 @@ make check
 swift test
 ./Scripts/package_app.sh release
 ```
+
+For a signed local build, supply `APP_TEAM_ID` and `APP_IDENTITY` for the identity already used
+by the installed app. The packaging script's inherited default is the upstream developer's
+identity. Use `codesign -dvv CodexBar.app` to inspect the installed public signature, then pass
+the matching values when packaging; preserving the team also preserves the app-group identity.
 
 Packaging retains the `CodexBar.app` bundle directory and `CodexBar` executable for compatibility,
 while Finder/application display metadata says Midas. The existing bundle identifiers, app group,
@@ -94,6 +114,8 @@ README are not Midas releases.
 - `MidasAirCoordinator.swift`: native presentation lifetime and existing action routing.
 - `MidasPresentation.swift`: provider presentation and navigation state.
 - `MidasTotalSpend.swift`, `MidasTotalSpendView.swift`: estimate aggregation and shared total display.
+- `MidasMenuBarPresentation.swift`, `MidasMenuBarView.swift`: typed status readings and passive native rendering.
+- `StatusItemController+MidasMenuBar.swift`: status-item integration, activity filtering, and freshness updates.
 - `MidasPanelView.swift`, `MidasProviderDetailView.swift`: compact surfaces.
 - `MidasUsageWindowView.swift`, `MidasUsageHistoryView.swift`, `MidasCostPresentation.swift`: history and costs.
 - `MidasDesignSystem.swift`, `MidasProviderLogo.swift`: adaptive visual tokens and provider identity.

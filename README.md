@@ -26,8 +26,11 @@ inside the panel, to access the original provider menu. Local Midas builds delib
 upstream CodexBar update checks. See [Midas Air implementation and local rebuild](docs/MIDAS_AIR.md).
 
 - [Midas quick start](docs/FORK_QUICK_START.md): build, verify, and run this fork.
+- [Midas releases](https://github.com/enzo-prism/midas/releases): manual downloads for this fork.
+  See the [Midas release procedure](docs/MIDAS_RELEASE.md) for signing and distribution.
 - [Menu-bar design research](docs/MIDAS_MENU_BAR_DESIGN.md): Ledger, Focus, and Constellation concepts,
-  state behavior, and animation recommendations. **Proposed; not implemented in the current app.**
+  state behavior, and animation decisions. **Ledger, Focus, and Constellation are implemented.**
+  Choose a style in Settings → Display. Ledger is the default; Legacy restores prior icon controls.
 
 ### Upstream CodexBar reference
 

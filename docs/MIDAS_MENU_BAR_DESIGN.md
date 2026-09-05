@@ -1,6 +1,24 @@
 # Midas menu bar: research and proposed redesign
 
-September 4, 2026. Design study with fictional values; proposal only; these menu-bar concepts are not implemented in the current app.
+September 4, 2026. Original design study with fictional values, followed by native implementation.
+
+## Implementation status
+
+Ledger, Focus, and Constellation are now implemented, with Ledger as the default and Legacy
+preserving prior icon settings. The native renderer uses stable widths of 130, 120, and 190 points
+respectively, a passive Midas mark/text/badge view, and monospaced digits. Constellation uses compact
+separate readings rather than subpixel quota tracks. Mixed currencies display a currency count;
+the tooltip retains separate totals. Hidden spend is masked and excluded from accessibility text.
+
+Active initial/manual refreshes animate a separate glyph for at most 30 seconds; background
+refreshes with cached data stay static. Changed readings fade over 180 ms. Reduce Motion stops
+both effects. Attention and last-known/partial coverage use static badges. Data older than 15
+minutes is last-known; a once-per-minute freshness task updates that state. Low-quota thresholds
+are currently 10% without the hysteresis proposed below. Startup animation does not add the
+optional 400 ms delay. Orbit and Reset Horizon remain research directions.
+
+The following sections preserve the original design rationale; implementation details above
+take precedence where they differ. See [Midas Air](MIDAS_AIR.md) for operating instructions.
 
 ## Recommendation: Midas Ledger
 
@@ -130,6 +148,6 @@ Build a `MidasMenuBarPresentation` model with mode, selected provider/window, am
 4. Check live menu-bar placement, multiple displays, crowded/notched screens, keyboard access, left/right-click, panel dismissal, and the exact running binary after packaging. Native rendering fixtures alone cannot prove those behaviors.
 5. Run focused menu-bar/model regressions and required formatting/build checks. Keep provider probes out of a design-only verification pass unless explicitly authorized.
 
-The interactive study compares Ledger, Focus, and Constellation plus ten data states, privacy, and reduced motion. The critique pass added explicit estimate provenance, separated missing estimates from missing Codex quota, replaced low constellation fills with legible numbers, improved supporting type, and kept the brand mark still during refresh. It is a layout and interaction proposal, not a native rendering benchmark or a live account dashboard. The installed app remains the previously built version.
+The original interactive study compared Ledger, Focus, and Constellation plus ten data states, privacy, and reduced motion. Its critique pass added explicit estimate provenance, separated missing estimates from missing Codex quota, replaced low constellation fills with legible numbers, improved supporting type, and kept the brand mark still during refresh. That study is a layout proposal, not a native benchmark or live account dashboard; the app implementation is described above.
 
 Prototype verification: 30 concept/state combinations passed in headless Chromium, with no JavaScript errors. Refresh completion, panel toggling, masked-dollar accessibility text, reduced-motion CSS, and 375-pixel layout checks passed. Light and dark rendered previews were visually inspected. These results validate the prototype only; the native acceptance steps above remain necessary for app implementation.

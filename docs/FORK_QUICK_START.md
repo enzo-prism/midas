@@ -26,7 +26,9 @@ Cursor preserves actual usage pools and request counts. Meta supports local Muse
 and cost estimates without inventing quota availability.
 
 See [Midas Air](MIDAS_AIR.md) for implementation boundaries and [Codex](codex.md) for provider
-behavior. The [menu-bar design research](MIDAS_MENU_BAR_DESIGN.md) is a proposal, not shipped UI.
+behavior. Ledger, Focus, and Constellation are available in Settings → Display; Ledger is the
+default. The [menu-bar design research](MIDAS_MENU_BAR_DESIGN.md) records the alternatives and
+implemented state behavior. Legacy restores the original icon preferences.
 
 ## Build and verify
 
@@ -37,6 +39,10 @@ make check
 swift test
 ./Scripts/package_app.sh release
 ```
+
+Signed local builds must pass the appropriate `APP_TEAM_ID` and `APP_IDENTITY`; the packaging
+script inherits upstream signing defaults. Preserve the identity used by an existing installation.
+See [Midas Air](MIDAS_AIR.md#local-rebuild) for details.
 
 For a focused Midas regression pass:
 

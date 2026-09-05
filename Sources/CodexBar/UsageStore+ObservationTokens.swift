@@ -34,6 +34,9 @@ extension UsageStore {
     }
 
     var iconObservationToken: Int {
+        _ = self.tokenSnapshots
+        _ = self.tokenErrors
+        _ = self.tokenRefreshInFlight
         _ = self.snapshots
         _ = self.errors
         _ = self.credits

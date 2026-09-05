@@ -11,6 +11,7 @@ extension StatusItemController {
         2.7 / StatusItemController.loadingAnimationFPS
     private static let loadingAnimationMaxContinuousDuration: TimeInterval = 30.0
     func needsMenuBarIconAnimation() -> Bool {
+        guard !self.usesMidasMenuBar else { return false }
         if self.shouldMergeIcons {
             let primaryProvider = self.primaryProviderForUnifiedIcon()
             return self.shouldAnimate(provider: primaryProvider)
@@ -22,6 +23,10 @@ extension StatusItemController {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
+        if self.usesMidasMenuBar {
+            self.stopBlinking()
+            return
+        }
         // During the loading animation, blink ticks can overwrite the animated menu bar icon and cause flicker.
         if self.needsMenuBarIconAnimation() {
             self.stopBlinking()
@@ -249,6 +254,7 @@ extension StatusItemController {
         phase: Double?,
         bypassMergedMenuTrackingDeferral: Bool = false) -> Bool
     {
+        guard !self.usesMidasMenuBar else { return self.renderMidasMenuBarIcon() }
         guard let button = self.statusItem.button else { return false }
         if !bypassMergedMenuTrackingDeferral,
            self.deferMergedIconRenderDuringMenuTrackingIfNeeded() { return true }

@@ -28,6 +28,7 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
         self.closePopover()
         guard let controller = self.controller else { return }
         self.anchor = button
+        if controller.usesMidasMenuBar { self.navigation.provider = provider }
         if let provider { self.navigation.provider = provider }
         if let selected = self.navigation.provider,
            !controller.store.enabledProvidersForDisplay().contains(selected)
@@ -211,11 +212,14 @@ extension StatusItemController {
         button.target = self
         button.action = #selector(self.showMidasAir(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.setAccessibilityLabel("Midas")
+        if !self.usesMidasMenuBar { button.setAccessibilityLabel("Midas") }
     }
 
     @objc func showMidasAir(_ sender: NSStatusBarButton) {
-        let provider = self.statusItems.first { $0.value.button === sender }?.key
+        let focusEnabled = self.store.enabledProvidersForDisplay().contains(self.settings.midasMenuBarFocusProvider)
+        let provider = self.usesMidasMenuBar
+            ? (self.settings.midasMenuBarMode == .focus && focusEnabled ? self.settings.midasMenuBarFocusProvider : nil)
+            : self.statusItems.first { $0.value.button === sender }?.key
         if NSApp.currentEvent?.type == .rightMouseUp {
             self.midasAirCoordinator?.closePopoverIfShown()
             self.showMidasAdvancedMenu(from: sender, provider: provider)
@@ -223,6 +227,10 @@ extension StatusItemController {
         }
         if self.midasAirCoordinator == nil {
             self.midasAirCoordinator = MidasAirCoordinator(controller: self)
+        }
+        if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
+            self.midasAirCoordinator?.showUsage(provider: provider)
+            return
         }
         self.midasAirCoordinator?.toggle(from: sender, provider: provider)
     }

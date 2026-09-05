@@ -16,51 +16,56 @@ struct DisplayPane: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 16) {
-                SettingsSection(contentSpacing: 12) {
-                    Text(L("section_menu_bar"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    PreferenceToggleRow(
-                        title: L("merge_icons_title"),
-                        subtitle: L("merge_icons_subtitle"),
-                        binding: self.$settings.mergeIcons)
-                    PreferenceToggleRow(
-                        title: L("switcher_shows_icons_title"),
-                        subtitle: L("switcher_shows_icons_subtitle"),
-                        binding: self.$settings.switcherShowsIcons)
-                        .disabled(!self.settings.mergeIcons)
-                        .opacity(self.settings.mergeIcons ? 1 : 0.5)
-                    PreferenceToggleRow(
-                        title: L("show_most_used_provider_title"),
-                        subtitle: L("show_most_used_provider_subtitle"),
-                        binding: self.$settings.menuBarShowsHighestUsage)
-                        .disabled(!self.settings.mergeIcons)
-                        .opacity(self.settings.mergeIcons ? 1 : 0.5)
-                    PreferenceToggleRow(
-                        title: L("menu_bar_shows_percent_title"),
-                        subtitle: L("menu_bar_shows_percent_subtitle"),
-                        binding: self.$settings.menuBarShowsBrandIconWithPercent)
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L("display_mode_title"))
-                                .font(.body)
-                            Text(L("display_mode_subtitle"))
-                                .font(.footnote)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer()
-                        Picker(L("Display mode"), selection: self.$settings.menuBarDisplayMode) {
-                            ForEach(MenuBarDisplayMode.allCases) { mode in
-                                Text(mode.label).tag(mode)
+                if self.isMidasBundle {
+                    self.midasMenuBarSection
+                }
+                if self.showsLegacyControls {
+                    SettingsSection(contentSpacing: 12) {
+                        Text(L("section_menu_bar"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        PreferenceToggleRow(
+                            title: L("merge_icons_title"),
+                            subtitle: L("merge_icons_subtitle"),
+                            binding: self.$settings.mergeIcons)
+                        PreferenceToggleRow(
+                            title: L("switcher_shows_icons_title"),
+                            subtitle: L("switcher_shows_icons_subtitle"),
+                            binding: self.$settings.switcherShowsIcons)
+                            .disabled(!self.settings.mergeIcons)
+                            .opacity(self.settings.mergeIcons ? 1 : 0.5)
+                        PreferenceToggleRow(
+                            title: L("show_most_used_provider_title"),
+                            subtitle: L("show_most_used_provider_subtitle"),
+                            binding: self.$settings.menuBarShowsHighestUsage)
+                            .disabled(!self.settings.mergeIcons)
+                            .opacity(self.settings.mergeIcons ? 1 : 0.5)
+                        PreferenceToggleRow(
+                            title: L("menu_bar_shows_percent_title"),
+                            subtitle: L("menu_bar_shows_percent_subtitle"),
+                            binding: self.$settings.menuBarShowsBrandIconWithPercent)
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L("display_mode_title"))
+                                    .font(.body)
+                                Text(L("display_mode_subtitle"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
                             }
+                            Spacer()
+                            Picker(L("Display mode"), selection: self.$settings.menuBarDisplayMode) {
+                                ForEach(MenuBarDisplayMode.allCases) { mode in
+                                    Text(mode.label).tag(mode)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: 200)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: 200)
+                        .disabled(!self.settings.menuBarShowsBrandIconWithPercent)
+                        .opacity(self.settings.menuBarShowsBrandIconWithPercent ? 1 : 0.5)
                     }
-                    .disabled(!self.settings.menuBarShowsBrandIconWithPercent)
-                    .opacity(self.settings.menuBarShowsBrandIconWithPercent ? 1 : 0.5)
                 }
 
                 Divider()
@@ -70,62 +75,67 @@ struct DisplayPane: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
-                    PreferenceToggleRow(
-                        title: L("show_usage_as_used_title"),
-                        subtitle: L("show_usage_as_used_subtitle"),
-                        binding: self.$settings.usageBarsShowUsed)
-                    PreferenceToggleRow(
-                        title: L("show_quota_warning_markers_title"),
-                        subtitle: L("show_quota_warning_markers_subtitle"),
-                        binding: self.$settings.quotaWarningMarkersVisible)
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L("weekly_progress_work_days_title"))
-                                .font(.body)
-                            Text(L("weekly_progress_work_days_subtitle"))
-                                .font(.footnote)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer()
-                        Picker(L("weekly_progress_work_days_title"), selection: self.$settings.weeklyProgressWorkDays) {
-                            Text(L("Off")).tag(nil as Int?)
-                            Text(L("4 days")).tag(4 as Int?)
-                            Text(L("5 days")).tag(5 as Int?)
-                            Text(L("7 days")).tag(7 as Int?)
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: 100)
-                    }
-                    PreferenceToggleRow(
-                        title: L("show_reset_time_as_clock_title"),
-                        subtitle: L("show_reset_time_as_clock_subtitle"),
-                        binding: self.$settings.resetTimesShowAbsolute)
-                    PreferenceToggleRow(
-                        title: L("show_provider_changelog_links_title"),
-                        subtitle: L("show_provider_changelog_links_subtitle"),
-                        binding: self.$settings.providerChangelogLinksEnabled)
-                    PreferenceToggleRow(
-                        title: L("show_credits_extra_usage_title"),
-                        subtitle: L("show_credits_extra_usage_subtitle"),
-                        binding: self.$settings.showOptionalCreditsAndExtraUsage)
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L("multi_account_layout_title"))
-                                .font(.body)
-                            Text(L("multi_account_layout_subtitle"))
-                                .font(.footnote)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer()
-                        Picker(L("multi_account_layout_title"), selection: self.$settings.multiAccountMenuLayout) {
-                            ForEach(MultiAccountMenuLayout.allCases) { layout in
-                                Text(layout.label).tag(layout)
+                    if self.showsLegacyControls {
+                        PreferenceToggleRow(
+                            title: L("show_usage_as_used_title"),
+                            subtitle: L("show_usage_as_used_subtitle"),
+                            binding: self.$settings.usageBarsShowUsed)
+                        PreferenceToggleRow(
+                            title: L("show_quota_warning_markers_title"),
+                            subtitle: L("show_quota_warning_markers_subtitle"),
+                            binding: self.$settings.quotaWarningMarkersVisible)
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L("weekly_progress_work_days_title"))
+                                    .font(.body)
+                                Text(L("weekly_progress_work_days_subtitle"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
                             }
+                            Spacer()
+                            Picker(
+                                L("weekly_progress_work_days_title"),
+                                selection: self.$settings.weeklyProgressWorkDays)
+                            {
+                                Text(L("Off")).tag(nil as Int?)
+                                Text(L("4 days")).tag(4 as Int?)
+                                Text(L("5 days")).tag(5 as Int?)
+                                Text(L("7 days")).tag(7 as Int?)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: 100)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: 200)
+                        PreferenceToggleRow(
+                            title: L("show_reset_time_as_clock_title"),
+                            subtitle: L("show_reset_time_as_clock_subtitle"),
+                            binding: self.$settings.resetTimesShowAbsolute)
+                        PreferenceToggleRow(
+                            title: L("show_provider_changelog_links_title"),
+                            subtitle: L("show_provider_changelog_links_subtitle"),
+                            binding: self.$settings.providerChangelogLinksEnabled)
+                        PreferenceToggleRow(
+                            title: L("show_credits_extra_usage_title"),
+                            subtitle: L("show_credits_extra_usage_subtitle"),
+                            binding: self.$settings.showOptionalCreditsAndExtraUsage)
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L("multi_account_layout_title"))
+                                    .font(.body)
+                                Text(L("multi_account_layout_subtitle"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Spacer()
+                            Picker(L("multi_account_layout_title"), selection: self.$settings.multiAccountMenuLayout) {
+                                ForEach(MultiAccountMenuLayout.allCases) { layout in
+                                    Text(layout.label).tag(layout)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: 200)
+                        }
                     }
                     self.overviewProviderSelector
                 }
@@ -152,6 +162,90 @@ struct DisplayPane: View {
         }
     }
 
+    private var isMidasBundle: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true
+    }
+
+    private var showsLegacyControls: Bool {
+        !self.isMidasBundle || self.settings.midasMenuBarMode == .legacy
+    }
+
+    private var usesMergedOverview: Bool {
+        !self.showsLegacyControls || self.settings.mergeIcons
+    }
+
+    private var midasMenuBarSection: some View {
+        SettingsSection(contentSpacing: 16) {
+            Text("Midas menu bar")
+                .font(.headline)
+            Picker("Style", selection: self.$settings.midasMenuBarMode) {
+                ForEach(MidasMenuBarMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            HStack(spacing: 18) {
+                Text(Self.menuBarPreview(self.settings.midasMenuBarMode))
+                    .font(.system(size: 14, weight: .medium))
+                    .monospacedDigit()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityLabel("Illustrative menu bar preview")
+                Text(Self.menuBarDescription(self.settings.midasMenuBarMode))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("Previews use example values. Your saved legacy icon settings are preserved.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if self.settings.midasMenuBarMode == .focus {
+                if self.activeProvidersInOrder.isEmpty {
+                    Text("Enable a provider in Providers to choose a focus.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Focus provider", selection: self.$settings.midasMenuBarFocusProvider) {
+                        if !self.activeProvidersInOrder.contains(self.settings.midasMenuBarFocusProvider) {
+                            Text("\(self.providerDisplayName(self.settings.midasMenuBarFocusProvider)) (not enabled)")
+                                .tag(self.settings.midasMenuBarFocusProvider)
+                                .disabled(true)
+                        }
+                        ForEach(self.activeProvidersInOrder, id: \.self) { provider in
+                            Text(self.providerDisplayName(provider)).tag(provider)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+            if self.settings.midasMenuBarMode != .legacy {
+                PreferenceToggleRow(
+                    title: "Hide spend in the menu bar",
+                    subtitle: "Hide money in the status item and tooltip. Usage remains available in Midas.",
+                    binding: self.$settings.midasMenuBarHideSpend)
+            }
+        }
+    }
+
+    static func menuBarDescription(_ mode: MidasMenuBarMode) -> String {
+        switch mode {
+        case .ledger: "A compact estimate of usage value, with source and coverage details inside Midas."
+        case .focus: "Keep one provider in view. Codex always shows weekly capacity remaining."
+        case .constellation: "Up to three enabled providers, prioritizing Codex, Cursor, and Meta."
+        case .legacy: "Use the original provider icons, merging, and metric controls."
+        }
+    }
+
+    static func menuBarPreview(_ mode: MidasMenuBarMode) -> String {
+        switch mode {
+        case .ledger: "✦ ≈$73.20"
+        case .focus: "C 72%"
+        case .constellation: "C 72% · U 38% · M —"
+        case .legacy: "▰ ▰"
+        }
+    }
+
     private var overviewProviderSelector: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 12) {
@@ -169,7 +263,7 @@ struct DisplayPane: View {
                 }
             }
 
-            if !self.settings.mergeIcons {
+            if !self.usesMergedOverview {
                 Text(L("overview_enable_merge_icons_hint"))
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
@@ -231,7 +325,7 @@ struct DisplayPane: View {
     }
 
     private var showsOverviewConfigureButton: Bool {
-        self.settings.mergeIcons && !self.activeProvidersInOrder.isEmpty
+        self.usesMergedOverview && !self.activeProvidersInOrder.isEmpty
     }
 
     private var overviewProviderSelectionSummary: String {

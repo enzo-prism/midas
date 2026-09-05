@@ -1,3 +1,4 @@
+import CodexBarCore
 import Foundation
 
 struct SettingsDefaultsState {
@@ -44,6 +45,9 @@ struct SettingsDefaultsState {
     var openAIWebBatterySaverEnabled: Bool
     var providerStorageFootprintsEnabled: Bool
     var jetbrainsIDEBasePath: String
+    var midasMenuBarMode: MidasMenuBarMode
+    var midasMenuBarFocusProvider: UsageProvider
+    var midasMenuBarHideSpend: Bool
     var mergeIcons: Bool
     var switcherShowsIcons: Bool
     var mergedMenuLastSelectedWasOverview: Bool
