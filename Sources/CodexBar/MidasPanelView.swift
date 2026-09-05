@@ -12,7 +12,6 @@ struct MidasPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             self.header.padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 16)
-            self.quickControls.padding(.horizontal, 24).padding(.bottom, 14)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     if let provider = self.navigation.provider {
@@ -31,6 +30,8 @@ struct MidasPanelView: View {
                 .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
+            Divider().padding(.horizontal, 24)
+            self.quickControls.padding(.horizontal, 24).padding(.vertical, 14)
         }
         .frame(width: 400)
         .frame(maxHeight: .infinity)
@@ -42,8 +43,8 @@ struct MidasPanelView: View {
     private var header: some View {
         HStack(spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkle").foregroundStyle(MidasTheme.accent).accessibilityHidden(true)
-                Text("Midas").font(.system(size: 17, weight: .semibold, design: .rounded))
+                MidasPixelCrown()
+                Text("Midas").font(.system(size: 17, weight: .semibold))
             }
             Spacer()
             Button(action: self.actions.refresh) {
@@ -66,38 +67,46 @@ struct MidasPanelView: View {
     }
 
     private var quickControls: some View {
-        HStack(spacing: 12) {
-            Menu {
-                ForEach(self.providers, id: \.self) { provider in
-                    Button {
-                        self.settings.midasMenuBarFocusProvider = provider
-                        self.settings.midasMenuBarMode = .orbit
-                    } label: {
-                        if provider == self.settings.midasMenuBarFocusProvider {
-                            Label(
-                                ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue,
-                                systemImage: "checkmark")
-                        } else {
-                            Text(ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Favorite provider")
+                    .font(.caption2)
+                    .foregroundStyle(MidasTheme.secondaryText)
+                Menu {
+                    ForEach(self.providers, id: \.self) { provider in
+                        Button {
+                            self.settings.midasMenuBarFocusProvider = provider
+                            self.settings.midasMenuBarMode = .orbit
+                        } label: {
+                            if provider == self.settings.midasMenuBarFocusProvider {
+                                Label(
+                                    ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue,
+                                    systemImage: "checkmark")
+                            } else {
+                                Text(ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue)
+                            }
                         }
                     }
+                    if self.providers.isEmpty {
+                        Button("Connect a provider…", action: self.actions.settings)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        MidasProviderLogo(provider: self.settings.midasMenuBarFocusProvider, size: 16)
+                        Text(ProviderDefaults.metadata[self.settings.midasMenuBarFocusProvider]?.displayName
+                            ?? self.settings.midasMenuBarFocusProvider.rawValue)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down").font(.caption2)
+                    }
                 }
-                if self.providers.isEmpty {
-                    Button("Connect a provider…", action: self.actions.settings)
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    MidasProviderLogo(provider: self.settings.midasMenuBarFocusProvider, size: 16)
-                    Text(ProviderDefaults.metadata[self.settings.midasMenuBarFocusProvider]?.displayName
-                        ?? self.settings.midasMenuBarFocusProvider.rawValue)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down").font(.caption2)
-                }
+                .menuStyle(.borderlessButton)
+                .fixedSize(horizontal: false, vertical: true)
+                .help("Choose the provider shown in the menu-bar circle")
+                .accessibilityLabel("Favorite provider")
+                .accessibilityHint("Changes the provider shown in the menu-bar circle")
+                .accessibilityValue(ProviderDefaults.metadata[self.settings.midasMenuBarFocusProvider]?.displayName
+                    ?? self.settings.midasMenuBarFocusProvider.rawValue)
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize(horizontal: false, vertical: true)
-            .help("Choose the provider shown in the menu-bar circle")
-            .accessibilityLabel("Menu-bar provider")
             Spacer(minLength: 8)
             Button(action: self.actions.checkForUpdates) {
                 Label("Check for Updates", systemImage: "arrow.down.circle")
@@ -122,7 +131,7 @@ struct MidasPanelView: View {
         VStack(alignment: .leading, spacing: 24) {
             MidasTotalSpendView(presentations: self.providers.map(self.presentation))
             HStack {
-                Text(self.showsAllProviders ? "All providers" : "✨ Overview").font(.callout.weight(.medium))
+                Text(self.showsAllProviders ? "All providers" : "Overview").font(.callout.weight(.medium))
                 Spacer()
                 if !self.providers.isEmpty {
                     Button(self.showsAllProviders ? "Favorites" : "All providers") {
@@ -205,7 +214,7 @@ struct MidasOverviewMetrics: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(spend.title).font(.caption).foregroundStyle(MidasTheme.secondaryText)
                     Text(spend.value)
-                        .font(.system(size: 27, weight: .medium, design: .rounded))
+                        .font(.system(size: 27, weight: .medium))
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(spend.period).font(.caption)
@@ -225,7 +234,7 @@ struct MidasOverviewMetrics: View {
             } else if let metric = self.item.hero {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(metric.valueText)
-                        .font(.system(size: 27, weight: .medium, design: .rounded)).monospacedDigit()
+                        .font(.system(size: 27, weight: .medium)).monospacedDigit()
                     Text(metric.title).font(.caption).foregroundStyle(MidasTheme.secondaryText)
                     MidasRemainingBar(percent: metric.remainingPercent)
                 }

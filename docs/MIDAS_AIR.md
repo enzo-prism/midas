@@ -16,8 +16,17 @@ settings, and legacy menu-bar icon preferences intact. macOS 14 remains the mini
   provider-reported costs, and API-equivalent estimates are distinct meanings.
 - **Settings:** a stable sidebar preserving General, Providers, Display, Advanced, About,
   and the optional Debug pane. Its height is constrained for smaller screens.
-- **Branding:** a native gold-sparkle icon, Midas display names and support links, and explicit
+- **Branding:** a gold pixel crown beside the Midas wordmark, Midas display names and support links, and explicit
   acknowledgment of CodexBar's MIT-licensed foundation.
+
+## Typography and crown
+
+Midas uses native SF system typography with default letterforms, semibold headings, and
+monospaced digits for financial and quota readings. Amounts retain their one-line scaling for
+large values. The 18-point header crown uses a fixed grid of 2-point pixels. A 0.9-second
+highlight sweep repeats after a 2.4-second rest while the panel is open; closing the panel
+cancels the task. Reduce Motion shows a static crown, as does the Usage window sidebar.
+The crown is decorative and hidden from accessibility.
 
 ## Original provider menu
 
@@ -42,7 +51,7 @@ quota; actual request counts and independent usage pools remain separate. Meta c
 history when cost collection is disabled, without fabricating remaining capacity.
 
 The menu bar defaults to **Orbit**: total token spend (API rates), followed by a ring around one
-favorite provider’s logo. Use the provider dropdown at the top of the panel, or **Settings → Display → Orbit provider**. The total includes all
+favorite provider’s logo. Use the provider dropdown in the panel footer, or **Settings → Display → Orbit provider**. The total includes all
 enabled providers, regardless of this selection. Codex’s ring uses weekly remaining, Cursor uses
 its real quota, and Meta uses a neutral dashed ring because it has no quota. A disabled or missing
 favorite retains its identity with unknown capacity; it never silently switches to another provider.
@@ -146,7 +155,7 @@ explicitly authorized; follow the repository's AGENTS.md testing guidance.
 
 ## Updates
 
-Click **Check for Updates** at the top of the panel for the standard Sparkle download and
+Click **Check for Updates** in the panel footer for the standard Sparkle download and
 Install & Restart flow. Only signed Midas releases are accepted through the Midas-only feed.
 Settings → About provides automatic checks. Older releases need a one-time manual upgrade
 to 0.33.3 or later.

@@ -42,8 +42,8 @@ struct MidasUsageWindowView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles").foregroundStyle(MidasTheme.accent)
-                Text("Midas").font(.system(size: 23, weight: .semibold, design: .rounded))
+                MidasPixelCrown(animated: false)
+                Text("Midas").font(.system(size: 23, weight: .semibold))
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -111,7 +111,7 @@ struct MidasUsageWindowView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Overview")
-                        .font(.system(size: 29, weight: .semibold, design: .rounded))
+                        .font(.system(size: 29, weight: .semibold))
                     Text("Token spend (API rates), remaining capacity, and activity.")
                         .foregroundStyle(MidasTheme.secondaryText)
                 }
@@ -184,7 +184,7 @@ struct MidasUsageWindowView: View {
         VStack(alignment: .leading, spacing: 28) {
             HStack {
                 Text(self.showsCosts ? self.presentation(provider).name : "Spend & usage")
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .font(.system(size: 28, weight: .semibold))
                 Spacer()
                 Picker("View", selection: self.$showsCosts) {
                     Text("Usage").tag(false)

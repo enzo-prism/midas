@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The current Midas distribution is version 0.33.3, build 85, tagged `v0.33.3-midas.1`.
+The current Midas distribution is version 0.33.4, build 86, tagged `v0.33.4-midas.1`.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
 and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
 
@@ -18,9 +18,15 @@ Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
 
+## 0.33.4 changes
+
+- Sharper native SF typography across the panel, provider details, and Usage window.
+- A gold pixel crown with a subtle looping shimmer in the panel header; Reduce Motion keeps it static.
+- A fixed footer for Favorite provider and Check for Updates, with an explicit selector label.
+
 ## 0.33.3 changes
 
-- Switch the menu-bar circle provider directly from the panel’s top dropdown.
+- Switch the menu-bar circle provider directly from the panel’s provider dropdown.
 - Add a visible Check for Updates action using Sparkle’s standard signed download/install flow.
 - Ship Orbit, the selected-provider ring, and concise 30-day token-count tooltips.
 

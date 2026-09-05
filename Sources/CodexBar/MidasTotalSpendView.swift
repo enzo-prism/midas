@@ -13,13 +13,13 @@ struct MidasTotalSpendView: View {
             Text("Total token spend (API rates)")
                 .font(.callout).foregroundStyle(MidasTheme.secondaryText)
             if total.totals.isEmpty {
-                Text("—").font(.system(size: 42, weight: .semibold, design: .rounded))
+                Text("—").font(.system(size: 42, weight: .semibold))
                     .accessibilityLabel("Total token spend (API rates) unavailable")
             } else {
                 ForEach(total.totals) { currency in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(currency.value)
-                            .font(.system(size: 42, weight: .semibold, design: .rounded))
+                            .font(.system(size: 42, weight: .semibold))
                             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
                             .textSelection(.enabled)
                         if total.totals.count > 1 {

@@ -33,7 +33,7 @@ implemented state behavior. Legacy restores the original icon preferences.
 
 ## Switch providers and update
 
-Open Midas and use the provider dropdown at the top to change the menu-bar circle immediately.
+Open Midas and use the provider dropdown in the footer to change the menu-bar circle immediately.
 The dropdown selects Orbit; it does not change which providers contribute to the spend total.
 Hover over Orbit to see 30-day token counts for the favorite and all enabled providers.
 

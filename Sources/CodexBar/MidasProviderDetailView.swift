@@ -123,7 +123,7 @@ struct MidasProviderDetailView: View {
             Text(self.presentation.spend?.title ?? "Token spend (API rates)")
                 .font(.callout).foregroundStyle(MidasTheme.secondaryText)
             Text(self.presentation.spend?.value ?? "—")
-                .font(.system(size: 46, weight: .semibold, design: .rounded))
+                .font(.system(size: 46, weight: .semibold))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
                 .textSelection(.enabled)
             if let spend = self.presentation.spend {
@@ -151,7 +151,7 @@ struct MidasProviderDetailView: View {
                         Text(metric.title).font(.callout).foregroundStyle(MidasTheme.secondaryText)
                         Spacer(minLength: 4)
                         Text(metric.valueText)
-                            .font(.system(size: 28, weight: .semibold, design: .rounded)).monospacedDigit()
+                            .font(.system(size: 28, weight: .semibold)).monospacedDigit()
                             .foregroundStyle(metric.isExhausted ? MidasTheme.warning : MidasTheme.text)
                             .minimumScaleFactor(0.65).lineLimit(1)
                     }

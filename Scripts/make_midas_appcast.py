@@ -14,6 +14,7 @@ parser.add_argument("--build", required=True, type=int)
 parser.add_argument("--tag", required=True)
 parser.add_argument("--signature", required=True)
 parser.add_argument("--output", required=True, type=pathlib.Path)
+parser.add_argument("--description", default="A new signed Midas update is available.")
 args = parser.parse_args()
 if not re.fullmatch(r"\d+\.\d+\.\d+", args.version) or args.build <= 0:
     parser.error("Expected a stable numeric version and positive build")
@@ -33,7 +34,7 @@ ET.SubElement(item, "title").text = f"Midas {args.version}"
 ET.SubElement(item, f"{{{SPARKLE}}}version").text = str(args.build)
 ET.SubElement(item, f"{{{SPARKLE}}}shortVersionString").text = args.version
 ET.SubElement(item, f"{{{SPARKLE}}}minimumSystemVersion").text = "14.0"
-ET.SubElement(item, "description").text = "Orbit provider switching, concise token totals, and signed Midas updates."
+ET.SubElement(item, "description").text = args.description
 ET.SubElement(item, "enclosure", {
     "url": f"https://github.com/enzo-prism/midas/releases/download/{args.tag}/{args.archive.name}",
     "length": str(args.archive.stat().st_size),

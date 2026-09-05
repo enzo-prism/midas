@@ -10,7 +10,7 @@ struct MidasUsageHistoryView: View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(self.showsCosts ? self.model.money(self.model.totalCost) : self.number(self.model.totalTokens))
-                    .font(.system(size: 38, weight: .medium, design: .rounded))
+                    .font(.system(size: 38, weight: .medium))
                     .monospacedDigit()
                     .textSelection(.enabled)
                 Text(self.showsCosts ? self.model.costLabel : "Recorded tokens")

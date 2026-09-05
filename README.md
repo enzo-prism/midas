@@ -10,6 +10,10 @@
 > (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
 > refer to the original CodexBar project, not this fork.
 
+Midas 0.33.4 adds sharper native typography, a subtly animated pixel crown, and a fixed footer
+with clearly labeled **Favorite provider** and **Check for Updates** controls. Reduce Motion
+keeps the crown static.
+
 ## Midas Air
 
 Midas now opens a spacious native panel with warm neutral surfaces, a restrained gold accent,
@@ -20,11 +24,11 @@ estimates, not a combined bill. Codex keeps an explicit weekly-remaining view. *
 a separate resizable window for history and costs. Settings use a stable sidebar, and the app
 has its own Midas icon and About page. The **Orbit** menu bar places total token spend beside a
 single favorite provider’s remaining-capacity ring. Choose the favorite in **Settings → Display →
-Orbit provider**, or use the provider dropdown at the top of the panel; the dollar total still covers all enabled providers.
+Orbit provider**, or use the provider dropdown in the panel footer; the dollar total still covers all enabled providers.
 
 Provider fetching, account storage, menu-bar icon preferences, and existing account actions
 remain in place. Right-click the menu-bar icon, or choose **Provider actions & accounts…**
-inside the panel, to access the original provider menu. Signed Midas builds offer **Check for Updates** at the top of the panel, with Sparkle’s
+inside the panel, to access the original provider menu. Signed Midas builds offer **Check for Updates** in the panel footer, with Sparkle’s
 Download → Install & Restart flow. Only the Midas release feed is used; upstream CodexBar
 updates stay disabled. See [Midas Air implementation and local rebuild](docs/MIDAS_AIR.md).
 
@@ -37,11 +41,11 @@ updates stay disabled. See [Midas Air implementation and local rebuild](docs/MID
 
 ### Everyday controls
 
-- **Switch the circle’s provider:** click Midas, then choose a provider from the dropdown at the top.
+- **Switch the circle’s provider:** click Midas, then choose a provider from the dropdown in the footer.
   This selects Orbit; the dollar total still includes all enabled providers.
 - **See token totals:** hover over Orbit for the favorite’s and all providers’ past-30-day counts.
   Missing provider coverage is disclosed rather than counted as zero.
-- **Install updates:** click **Check for Updates** at the top of the panel, then follow Sparkle’s
+- **Install updates:** click **Check for Updates** in the panel footer, then follow Sparkle’s
   **Download → Install & Restart** flow. Builds older than 0.33.3 need one manual upgrade.
 
 ### Upstream CodexBar reference
