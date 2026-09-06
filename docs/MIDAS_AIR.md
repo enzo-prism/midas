@@ -23,9 +23,12 @@ settings, and legacy menu-bar icon preferences intact. macOS 14 remains the mini
 
 Midas uses native SF system typography with default letterforms, semibold headings, and
 monospaced digits for financial and quota readings. Amounts retain their one-line scaling for
-large values. The 18-point header crown uses a fixed grid of 2-point pixels. A 0.9-second
-highlight sweep repeats after a 2.4-second rest while the panel is open; closing the panel
-cancels the task. Reduce Motion shows a static crown, as does the Usage window sidebar.
+large values. The 18-point header crown uses a fixed grid of 2-point pixels. A comet-style
+highlight sweep (bright head, two-column warm trail, 90ms per column) repeats after a
+3.2-second rest while the panel is open, then a single crown tooth sparkles for 260ms;
+closing the panel cancels the task. Reduce Motion shows a static crown, as does the Usage
+window sidebar. Exact opacities live in `MidasPixelCrown.sweepOpacity` and are covered by
+`MidasPixelCrownTests`.
 The crown is decorative and hidden from accessibility.
 
 ## Original provider menu
