@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The current Midas distribution is version 0.33.5, build 87, tagged `v0.33.5-midas.1`.
+The current Midas distribution is version 0.33.6, build 88, tagged `v0.33.6-midas.1`.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
 and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
 
@@ -17,6 +17,11 @@ The upstream CodexBar feed remains disabled. Debug, ad-hoc, and Intel builds can
 Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+
+## 0.33.6 changes
+
+- Brighten the pixel crown with a crisp highlight, warm trail, and a single-point sparkle.
+- Give the crown a longer rest between loops; Reduce Motion keeps it static.
 
 ## 0.33.5 changes
 
