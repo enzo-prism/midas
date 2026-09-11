@@ -44,7 +44,8 @@ struct MidasSpendSetupView: View {
             HStack {
                 Text("Set up accounts & spend").font(.title2.bold())
                 Spacer()
-                Button("Done") { self.dismiss() }.disabled(self.isWorking)
+                Button("Done") { self.dismiss() }
+                    .disabled(self.coordinator.isAuthenticatingManagedAccount)
             }
             Text("Connect once on each Mac. Midas combines available estimates into your 30-day dollar total.")
                 .foregroundStyle(.secondary)
@@ -77,7 +78,7 @@ struct MidasSpendSetupView: View {
             let rate = self.settings.midasCloudUSDPerMillionTokens
             self.rateText = rate > 0 ? rate.formatted(.number.grouping(.never)) : ""
         }
-        .interactiveDismissDisabled(self.isWorking)
+        .interactiveDismissDisabled(self.coordinator.isAuthenticatingManagedAccount)
     }
 
     private var accountsSection: some View {
@@ -198,7 +199,10 @@ struct MidasSpendSetupView: View {
             _ = try await self.coordinator.authenticateManagedAccount(existingAccountID: existingID, timeout: 300)
             self.settings.invalidateCodexAccountReconciliationSnapshotCache()
             self.enableTracking()
-            await self.store.refresh(forceTokenUsage: true)
+            await ProviderInteractionContext.$current.withValue(.userInitiated) {
+                await self.store.refreshCodexAccountScopedState(allowDisabled: true)
+            }
+            await self.store.refreshMidasCloudUsage(force: true)
             self.message = "Account connected. Add another account or choose your dollar estimate below."
         } catch {
             self.message = (error as? ManagedCodexAccountServiceError)?.userFacingMessage ?? error.localizedDescription
@@ -212,7 +216,7 @@ struct MidasSpendSetupView: View {
         self.enableTracking()
         self.settings.midasCloudUSDPerMillionTokens = rate
         self.message = "Refreshing connected accounts…"
-        await self.store.refresh(forceTokenUsage: true)
+        await self.store.refreshMidasCloudUsage(force: true)
         self.message = "Settings saved. Available estimates are included in your total; review account coverage above."
     }
 }
