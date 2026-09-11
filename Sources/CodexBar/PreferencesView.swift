@@ -48,6 +48,7 @@ enum PreferencesTab: String, CaseIterable, Hashable {
 @MainActor
 struct PreferencesView: View {
     @State private var showsSpendSetup = false
+    @State private var spendSetupProvider: UsageProvider?
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
     let updater: UpdaterProviding
@@ -139,12 +140,12 @@ struct PreferencesView: View {
         .tint(MidasTheme.accent)
         .id(self.settings.appLanguage)
         .frame(width: PreferencesTab.defaultWidth, height: self.availableHeight)
-        .sheet(isPresented: self.$showsSpendSetup) {
+        .sheet(isPresented: self.$showsSpendSetup, onDismiss: self.finishSpendSetup) {
             MidasSpendSetupView(
                 settings: self.settings,
                 store: self.store,
                 coordinator: self.managedCodexAccountCoordinator,
-                openProvider: { self.selection.showProvider($0) })
+                openProvider: { self.spendSetupProvider = $0 })
         }
         .onAppear {
             self.ensureValidTabSelection()
@@ -154,6 +155,13 @@ struct PreferencesView: View {
         }
         .onChange(of: self.settings.debugMenuEnabled) { _, _ in
             self.ensureValidTabSelection()
+        }
+    }
+
+    private func finishSpendSetup() {
+        if let provider = self.spendSetupProvider {
+            self.spendSetupProvider = nil
+            self.selection.showProvider(provider)
         }
     }
 
