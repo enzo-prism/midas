@@ -2,14 +2,17 @@ import CodexBarCore
 import Foundation
 
 extension UsageStore {
-    func refreshMidasCloudUsage(force: Bool) async {
+    func refreshMidasCloudUsage(
+        force: Bool,
+        loader: (([String: String], Date) async throws -> CodexCloudAccountUsage)? = nil) async
+    {
         guard self.settings.costUsageEnabled, self.isEnabled(.codex) else {
             self.tokenSnapshots[.codex] = nil
             return
         }
         guard !self.midasCloudRefreshInFlight else { return }
         let accounts = self.settings.codexVisibleAccountProjection.visibleAccounts
-        let signature = accounts.map(\.id).sorted().joined(separator: "|")
+        let signature = Self.cloudAccountSignature(accounts)
         let now = Date()
         if !force, self.lastTokenFetchScope[.codex] == "cloud:" + signature,
            let last = self.lastTokenFetchAt[.codex], now.timeIntervalSince(last) < 300 { return }
@@ -22,7 +25,7 @@ extension UsageStore {
         let stored = self.settings.codexAccountReconciliationSnapshot.storedAccounts
         var results = self.lastTokenFetchScope[.codex] == "cloud:" + signature
             ? self.midasCloudAccounts.filter { key, _ in accounts.contains { $0.id == key } }
-            : Self.loadCloudCache(signature: signature)
+            : (SettingsStore.isRunningTests ? [:] : Self.loadCloudCache(signature: signature))
         var errors: [String: String] = [:]
         for account in accounts {
             if Task.isCancelled { return }
@@ -31,7 +34,11 @@ extension UsageStore {
                 environment["CODEX_HOME"] = saved.managedHomePath
             }
             do {
-                results[account.id] = try await CodexCloudUsageFetcher.fetch(env: environment, now: now)
+                if let loader {
+                    results[account.id] = try await loader(environment, now)
+                } else {
+                    results[account.id] = try await CodexCloudUsageFetcher.fetch(env: environment, now: now)
+                }
             } catch {
                 if error is CancellationError { return }
                 errors[account.id] = error.localizedDescription
@@ -43,7 +50,7 @@ extension UsageStore {
               == signature else { return }
         self.midasCloudAccounts = results
         self.midasCloudErrors = errors
-        Self.saveCloudCache(results, signature: signature)
+        if !SettingsStore.isRunningTests { Self.saveCloudCache(results, signature: signature) }
         self.lastTokenFetchAt[.codex] = now
         self.lastTokenFetchScope[.codex] = "cloud:" + signature
         self.tokenSnapshots[.codex] = Self.cloudTokenSnapshot(

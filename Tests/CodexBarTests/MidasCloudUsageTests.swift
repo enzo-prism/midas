@@ -6,7 +6,9 @@ import Testing
 struct MidasCloudUsageTests {
     private let now = Date(timeIntervalSince1970: 1_789_171_200) // 2026-09-12 00:00 UTC
 
-    private func usage(_ tokens: Int, date: String = "2026-09-10") throws -> CodexCloudAccountUsage {
+    private func usage(
+        _ tokens: Int, date: String = "2026-09-10", asOf: Date? = nil) throws -> CodexCloudAccountUsage
+    {
         let profile: [String: Any] = [
             "stats": ["daily_usage_buckets": [["start_date": date, "tokens": tokens]]],
             "metadata": ["stats_as_of": "2026-09-11"],
@@ -18,7 +20,46 @@ struct MidasCloudUsageTests {
         return try CodexCloudAccountUsage.parse(
             profile: JSONSerialization.data(withJSONObject: profile),
             breakdown: JSONSerialization.data(withJSONObject: breakdown),
-            now: self.now)
+            now: asOf ?? self.now)
+    }
+
+    @MainActor @Test func refreshPublishesFetchedAccountHistory() async throws {
+        let suite = "MidasCloudRefresh-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: testConfigStore(suiteName: suite, reset: false),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore(),
+            tokenAccountStore: InMemoryTokenAccountStore())
+        settings._test_managedCodexAccountStoreURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "test@example.com",
+            authFingerprint: "test",
+            codexHomePath: "/nonexistent",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-test"))
+        settings.costUsageEnabled = true
+        settings.midasCloudUsageEnabled = true
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing,
+            environmentBase: [:])
+        store._test_widgetSnapshotSaveOverride = { _ in }
+        let usage = try self.usage(
+            1_000_000,
+            date: CodexCloudAccountUsage.window(now: Date()).end,
+            asOf: Date())
+        #expect(settings.codexVisibleAccountProjection.visibleAccounts.count == 1)
+        await store.refreshMidasCloudUsage(force: true, loader: { _, _ in usage })
+        #expect(store.midasCloudAccounts.count == 1)
+        #expect(store.tokenSnapshots[.codex]?.last30DaysTokens == 1_000_000)
+        #expect(store.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true)
+        #expect(store.midasCloudErrors.isEmpty)
     }
 
     @Test func cloudTokensCombineWithoutPricingPercentages() throws {
