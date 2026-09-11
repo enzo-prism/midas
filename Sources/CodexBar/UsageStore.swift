@@ -96,6 +96,9 @@ final class UsageStore {
     var accountSnapshots: [UsageProvider: [TokenAccountUsageSnapshot]] = [:]
     var codexAccountSnapshots: [CodexAccountUsageSnapshot] = []
     var kiloScopeSnapshots: [KiloScopeSnapshot] = []
+    var midasCloudAccounts: [String: CodexCloudAccountUsage] = [:]
+    var midasCloudErrors: [String: String] = [:]
+    @ObservationIgnored var midasCloudRefreshInFlight = false
     var tokenSnapshots: [UsageProvider: CostUsageTokenSnapshot] = [:]
     var priorSpendTotals: [UsageProvider: [String: Double]] = [:]
     var priorSpendFullWindow: [UsageProvider: Bool] = [:]
@@ -1475,6 +1478,11 @@ extension UsageStore {
 
         if let override = self._test_tokenUsageRefreshOverride {
             await override(provider, force)
+            return
+        }
+
+        if provider == .codex, self.settings.midasCloudUsageEnabled {
+            await self.refreshMidasCloudUsage(force: force)
             return
         }
 

@@ -24,7 +24,37 @@ extension StatusItemController {
             isRefreshing: self.store.shouldShowRefreshingMenuCardIndicator(for: provider),
             isStale: self.store.isStale(provider: provider)
                 || (self.settings.midasMenuBarMode != .orbit && self.store.tokenErrors[provider] != nil))
-        if provider == .codex, self.settings.midasTrackAllAccounts, result.spend != nil {
+        if provider == .codex, self.settings.midasCloudUsageEnabled {
+            let rows = self.midasAccountPresentations(for: .codex).map { account in
+                MidasCloudUsagePresentation.Account(
+                    id: account.id,
+                    name: account.presentation.account,
+                    usage: self.store.midasCloudAccounts[account.id],
+                    error: self.store.midasCloudErrors[account.id])
+            }
+            let cloudToken = self.store.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true ? token : nil
+            let rate = self.settings.midasCloudUSDPerMillionTokens
+            result.spend = nil
+            if rate > 0, let amount = cloudToken?.last30DaysCostUSD, amount.isFinite,
+               let updatedAt = cloudToken?.updatedAt
+            {
+                result.spend = MidasSpendPresentation(
+                    title: "Estimated inference spend (blended rate)",
+                    value: amount.formatted(.currency(code: "USD")),
+                    period: "Last 30 days",
+                    detail: "Reported cloud tokens × $\(rate) per million tokens. "
+                        + "A user-configured approximation, not measured API-rate spend or a bill. "
+                        + "Missing account histories and reporting delays are excluded.",
+                    updatedAt: updatedAt,
+                    amount: amount,
+                    currency: "USD",
+                    secondaryValue: nil,
+                    secondaryLabel: nil,
+                    isEstimate: true)
+            }
+            result.cloudUsage = MidasCloudUsagePresentation(
+                accounts: rows, tokens: cloudToken?.last30DaysTokens, hasEstimate: result.spend != nil)
+        } else if provider == .codex, self.settings.midasTrackAllAccounts, result.spend != nil {
             result.spend?.detail = "Combined local Codex history across accounts, counted once. "
                 + "Other devices and account-by-account cost attribution are unavailable. "
                 + "This is an API-rate estimate, not a bill."

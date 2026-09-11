@@ -211,6 +211,7 @@ struct MidasOverviewMetrics: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let cloud = self.item.cloudUsage { MidasCloudUsageView(summary: cloud) }
             if let spend = self.item.spend {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(spend.title).font(.caption).foregroundStyle(MidasTheme.secondaryText)

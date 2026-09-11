@@ -259,6 +259,23 @@ extension SettingsStore {
         set { self.kiroMenuBarDisplayModeRaw = newValue.rawValue }
     }
 
+    var midasCloudUsageEnabled: Bool {
+        get { self.defaultsState.midasCloudUsageEnabled }
+        set {
+            self.defaultsState.midasCloudUsageEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "midasCloudUsageEnabled")
+        }
+    }
+
+    var midasCloudUSDPerMillionTokens: Double {
+        get { self.defaultsState.midasCloudUSDPerMillionTokens }
+        set {
+            let rate = newValue.isFinite && newValue > 0 ? min(newValue, 1000) : 0
+            self.defaultsState.midasCloudUSDPerMillionTokens = rate
+            self.userDefaults.set(rate, forKey: "midasCloudUSDPerMillionTokens")
+        }
+    }
+
     var midasTrackAllAccounts: Bool {
         get { self.defaultsState.midasTrackAllAccounts }
         set {

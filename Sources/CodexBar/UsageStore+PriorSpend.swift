@@ -19,6 +19,7 @@ extension UsageStore {
     }
 
     func refreshPriorSpend(_ provider: UsageProvider, force: Bool = false) async {
+        guard !(provider == .codex && self.settings.midasCloudUsageEnabled) else { return }
         guard ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.supportsTokenCost else { return }
         let now = Date()
         if !force,

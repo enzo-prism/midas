@@ -447,6 +447,8 @@ extension SettingsStore {
             menuBarDisplayModeRaw: menuBarDisplayModeRaw,
             kiroMenuBarDisplayModeRaw: kiroMenuBarDisplayModeRaw,
             historicalTrackingEnabled: historicalTrackingEnabled,
+            midasCloudUsageEnabled: userDefaults.bool(forKey: "midasCloudUsageEnabled"),
+            midasCloudUSDPerMillionTokens: userDefaults.double(forKey: "midasCloudUSDPerMillionTokens"),
             midasTrackAllAccounts: userDefaults.bool(forKey: "midasTrackAllAccounts"),
             multiAccountMenuLayoutRaw: multiAccountMenuLayoutRaw,
             menuBarMetricPreferencesRaw: resolvedPreferences,

@@ -28,6 +28,8 @@ extension SettingsStore {
         _ = self.menuBarDisplayMode
         _ = self.kiroMenuBarDisplayMode
         _ = self.historicalTrackingEnabled
+        _ = self.midasCloudUsageEnabled
+        _ = self.midasCloudUSDPerMillionTokens
         _ = self.midasTrackAllAccounts
         _ = self.multiAccountMenuLayout
         _ = self.menuBarMetricPreferencesRaw

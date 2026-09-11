@@ -15,7 +15,7 @@ extension UsageStore {
     }
 
     func hydrateCachedTokenSnapshots(now: Date = Date()) {
-        guard self.settings.costUsageEnabled else { return }
+        guard self.settings.costUsageEnabled, !self.settings.midasCloudUsageEnabled else { return }
         guard self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata).contains(.codex) else {
             return
         }

@@ -15,6 +15,9 @@ struct MidasProviderDetailView: View {
                     .foregroundStyle(MidasTheme.warning)
                     .help(exhausted.resetText ?? "Wait for this limit to reset before continuing.")
             }
+            if let cloud = self.presentation.cloudUsage {
+                MidasCloudUsageView(summary: cloud, showsAccounts: true)
+            }
             self.spendHeadline
             if self.actions.accountPresentations(self.presentation.provider).count > 1 {
                 MidasAccountUsageView(accounts: self.actions.accountPresentations(self.presentation.provider))

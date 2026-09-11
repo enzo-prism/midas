@@ -28,6 +28,8 @@ struct SettingsDefaultsState {
     var menuBarDisplayModeRaw: String?
     var kiroMenuBarDisplayModeRaw: String?
     var historicalTrackingEnabled: Bool
+    var midasCloudUsageEnabled: Bool
+    var midasCloudUSDPerMillionTokens: Double
     var midasTrackAllAccounts: Bool
     var multiAccountMenuLayoutRaw: String
     var menuBarMetricPreferencesRaw: [String: String]

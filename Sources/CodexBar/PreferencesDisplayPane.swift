@@ -179,10 +179,28 @@ struct DisplayPane: View {
             Text("Midas menu bar")
                 .font(.headline)
             Toggle("Track all connected accounts", isOn: self.$settings.midasTrackAllAccounts)
-            Text(
-                "Refresh every connected account. Codex token spend includes local history across accounts once; "
-                    + "quota stays separate for each account.")
+            Text("Refresh every connected account; quotas stay separate for each account.")
                 .font(.caption).foregroundStyle(.secondary)
+            Toggle("Use OpenAI cloud token history", isOn: self.$settings.midasCloudUsageEnabled)
+                .onChange(of: self.settings.midasCloudUsageEnabled) { _, _ in
+                    self.store.tokenSnapshots[.codex] = nil
+                    self.store.lastTokenFetchAt[.codex] = nil
+                    self.store.scheduleTokenRefresh(force: true)
+                }
+            Text("Reads each account’s reported usage across devices. Personal accounts do not expose "
+                + "input/cache/output token counts for API-rate pricing. Cloud data may be delayed.")
+                .font(.caption).foregroundStyle(.secondary)
+            if self.settings.midasCloudUsageEnabled {
+                TextField(
+                    "Optional blended USD per million tokens (0 = no dollar estimate)",
+                    value: self.$settings.midasCloudUSDPerMillionTokens,
+                    format: .number)
+                    .onChange(of: self.settings.midasCloudUSDPerMillionTokens) { _, _ in
+                        self.store.scheduleTokenRefresh(force: true)
+                    }
+                Text("A positive rate enables a modeled approximation, not a provider-reported cost.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Picker("Style", selection: self.$settings.midasMenuBarMode) {
                 ForEach(MidasMenuBarMode.allCases) { mode in
                     Text(mode.label).tag(mode)

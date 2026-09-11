@@ -135,6 +135,7 @@ struct MidasProviderPresentation {
     let financialSummary: String?
     let financialLabel: String?
     var activitySummary: String?
+    var cloudUsage: MidasCloudUsagePresentation?
     var spend: MidasSpendPresentation?
     let isRefreshing: Bool
     let isStale: Bool
