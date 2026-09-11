@@ -47,6 +47,7 @@ enum PreferencesTab: String, CaseIterable, Hashable {
 
 @MainActor
 struct PreferencesView: View {
+    @State private var showsSpendSetup = false
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
     let updater: UpdaterProviding
@@ -113,6 +114,8 @@ struct PreferencesView: View {
                         .accessibilityAddTraits(self.selection.tab == tab ? .isSelected : [])
                     }
                 }
+                Button("Set up accounts & spend") { self.showsSpendSetup = true }
+                    .buttonStyle(.borderedProminent)
                 Spacer()
                 Text("Made for a little more clarity.")
                     .font(.caption2)
@@ -136,6 +139,13 @@ struct PreferencesView: View {
         .tint(MidasTheme.accent)
         .id(self.settings.appLanguage)
         .frame(width: PreferencesTab.defaultWidth, height: self.availableHeight)
+        .sheet(isPresented: self.$showsSpendSetup) {
+            MidasSpendSetupView(
+                settings: self.settings,
+                store: self.store,
+                coordinator: self.managedCodexAccountCoordinator,
+                openProvider: { self.selection.showProvider($0) })
+        }
         .onAppear {
             self.ensureValidTabSelection()
             NSApp.windows.first {
