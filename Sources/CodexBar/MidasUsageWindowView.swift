@@ -158,14 +158,17 @@ struct MidasUsageWindowView: View {
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }
-                MidasOverviewMetrics(item: item)
+                MidasOverviewMetrics(item: item, accounts: self.actions.accountPresentations(item.provider))
                 HStack(alignment: .top, spacing: 6) {
                     if item.isRefreshing {
                         ProgressView().controlSize(.mini)
                     } else if item.error != nil || item.isStale {
                         Image(systemName: "exclamationmark.circle").foregroundStyle(MidasTheme.warning)
                     }
-                    Text(item.error != nil ? "Needs attention" : item.hero?.resetText ?? item.freshness)
+                    Text(item
+                        .error != nil ? "Needs attention" :
+                        (self.actions.accountPresentations(item.provider).count > 1 ? nil : item.hero?.resetText) ??
+                        item.freshness)
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                         .multilineTextAlignment(.leading)
                 }

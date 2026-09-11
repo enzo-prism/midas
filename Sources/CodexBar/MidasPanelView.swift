@@ -185,13 +185,13 @@ struct MidasPanelView: View {
                     if item.isRefreshing { ProgressView().controlSize(.mini) }
                     Image(systemName: "chevron.right").font(.caption2).foregroundStyle(MidasTheme.secondaryText)
                 }
-                MidasOverviewMetrics(item: item)
+                MidasOverviewMetrics(item: item, accounts: self.actions.accountPresentations(item.provider))
                 if item.error != nil || item.isStale {
                     Label(
                         item.error == nil ? "Last known usage" : "Needs attention",
                         systemImage: "exclamationmark.circle")
                         .font(.caption2).foregroundStyle(MidasTheme.warning)
-                } else if let reset = item.hero?.resetText {
+                } else if self.actions.accountPresentations(item.provider).count < 2, let reset = item.hero?.resetText {
                     Text(reset).font(.caption2).foregroundStyle(MidasTheme.secondaryText)
                 }
             }
@@ -207,6 +207,7 @@ struct MidasPanelView: View {
 /// Shared overview hierarchy: a labeled money source, then capacity or token activity.
 struct MidasOverviewMetrics: View {
     let item: MidasProviderPresentation
+    var accounts: [MidasAccountPresentation] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -226,11 +227,16 @@ struct MidasOverviewMetrics: View {
                     }
                 }
                 .help(spend.detail)
-                if let metric = self.item.hero {
+                if self.accounts.count > 1 {
+                    MidasAccountOverviewBars(accounts: self.accounts)
+                } else if let metric = self.item.hero {
                     self.quota(metric)
                 } else if let activity = self.item.activitySummary {
                     Text(activity).font(.callout).foregroundStyle(MidasTheme.secondaryText)
                 }
+            } else if self.accounts.count > 1 {
+                MidasAccountOverviewBars(accounts: self.accounts)
+                self.fallbackSpend
             } else if let metric = self.item.hero {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(metric.valueText)

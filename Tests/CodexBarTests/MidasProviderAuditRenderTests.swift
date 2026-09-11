@@ -54,8 +54,7 @@ struct MidasProviderAuditRenderTests {
                     accountEmail: "account-\(index)@example.com",
                     accountOrganization: nil,
                     loginMethod: "Pro"))
-            var presentation = try self.presentation(provider: .codex, snapshot: snapshot, now: now)
-            presentation.spend = nil
+            let presentation = try self.presentation(provider: .codex, snapshot: snapshot, now: now)
             return MidasAccountPresentation(id: "\(index)", isPrimary: index == 0, presentation: presentation)
         }
         for scheme in [ColorScheme.light, .dark] {
@@ -63,6 +62,13 @@ struct MidasProviderAuditRenderTests {
                 MidasAccountUsageView(accounts: accounts).padding(24).frame(width: 400)
                     .background(MidasTheme.background).environment(\.colorScheme, scheme),
                 name: "multiple-accounts",
+                scheme: scheme,
+                output: output)
+            try self.export(
+                MidasOverviewMetrics(item: accounts[0].presentation, accounts: accounts)
+                    .padding(24).frame(width: 400)
+                    .background(MidasTheme.background).environment(\.colorScheme, scheme),
+                name: "multiple-accounts-overview",
                 scheme: scheme,
                 output: output)
         }
