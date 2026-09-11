@@ -21,7 +21,7 @@ struct ProviderSidebarListView: View {
                 .padding(.top, 8)
 
             ScrollView {
-                LazyVStack(spacing: 0) {
+                VStack(spacing: 0) {
                     if self.providers.isEmpty {
                         Text(L("No matching providers"))
                             .font(.caption)

@@ -168,11 +168,7 @@ struct CodexProviderImplementation: ProviderImplementation {
                 options: cookieOptions,
                 isVisible: { context.settings.openAIWebAccessEnabled },
                 onChange: nil,
-                trailingText: {
-                    guard let entry = CookieHeaderCache.load(provider: .codex) else { return nil }
-                    let when = entry.storedAt.relativeDescription()
-                    return "Cached: \(entry.sourceLabel) • \(when)"
-                }),
+                trailingText: nil),
         ]
     }
 

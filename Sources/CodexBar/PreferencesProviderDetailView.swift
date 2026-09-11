@@ -100,7 +100,7 @@ struct ProviderDetailView<SupplementaryContent: View>: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
                 let labelWidth = self.detailLabelWidth
                 ProviderDetailHeaderView(
                     provider: self.provider,
