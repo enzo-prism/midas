@@ -153,7 +153,8 @@ extension SettingsStore {
     }
 
     var codexResolvedActiveSourceState: CodexResolvedActiveSource {
-        CodexActiveSourceResolver.resolve(from: self.codexAccountReconciliationSnapshot)
+        CodexActiveSourceResolver.resolve(
+            from: self.codexAccountReconciliationSnapshot, preferManagedAccounts: self.midasTrackAllAccounts)
     }
 
     @discardableResult
@@ -245,7 +246,9 @@ extension SettingsStore {
             self.cachedCodexAccountMenuProjection = CachedCodexAccountMenuProjection(
                 activeSource: activeSource,
                 loadedAt: loadedAt,
-                projection: CodexVisibleAccountProjection.make(from: snapshot))
+                projection: CodexVisibleAccountProjection.make(
+                    from: snapshot,
+                    preferManagedAccounts: self.midasTrackAllAccounts))
         }
         return snapshot
     }
@@ -286,7 +289,9 @@ extension SettingsStore {
         }
 
         let now = Date()
-        let projection = CodexVisibleAccountProjection.make(from: snapshot)
+        let projection = CodexVisibleAccountProjection.make(
+            from: snapshot,
+            preferManagedAccounts: self.midasTrackAllAccounts)
         let previousProjection = self.cachedCodexAccountMenuProjection.flatMap { cached in
             cached.activeSource == activeSource ? cached.projection : nil
         }
@@ -312,7 +317,9 @@ extension SettingsStore {
     }
 
     var codexVisibleAccountProjection: CodexVisibleAccountProjection {
-        CodexVisibleAccountProjection.make(from: self.codexAccountReconciliationSnapshot)
+        CodexVisibleAccountProjection.make(
+            from: self.codexAccountReconciliationSnapshot,
+            preferManagedAccounts: self.midasTrackAllAccounts)
     }
 
     var codexVisibleAccounts: [CodexVisibleAccount] {
@@ -660,7 +667,8 @@ extension SettingsStore {
     {
         let reconciliationSnapshot = self.codexAccountReconciliationSnapshot(
             activeSourceOverride: activeSourceOverride)
-        let resolvedActiveSource = CodexActiveSourceResolver.resolve(from: reconciliationSnapshot)
+        let resolvedActiveSource = CodexActiveSourceResolver.resolve(
+            from: reconciliationSnapshot, preferManagedAccounts: self.midasTrackAllAccounts)
         return CodexProviderSettingsBuilder.make(input: CodexProviderSettingsBuilderInput(
             usageDataSource: self.codexUsageDataSource,
             cookieSource: self.codexSnapshotCookieSource(tokenOverride: tokenOverride),

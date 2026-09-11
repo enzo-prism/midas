@@ -15,14 +15,17 @@ public struct CodexResolvedActiveSource: Equatable, Sendable {
 }
 
 public enum CodexActiveSourceResolver {
-    public static func resolve(from snapshot: CodexAccountReconciliationSnapshot) -> CodexResolvedActiveSource {
+    public static func resolve(
+        from snapshot: CodexAccountReconciliationSnapshot,
+        preferManagedAccounts: Bool = false) -> CodexResolvedActiveSource
+    {
         let persistedSource = snapshot.activeSource
         let resolvedSource: CodexActiveSource = switch persistedSource {
         case .liveSystem:
             .liveSystem
         case let .managedAccount(id):
             if let activeStoredAccount = snapshot.activeStoredAccount {
-                self.matchesLiveSystemAccount(
+                !preferManagedAccounts && self.matchesLiveSystemAccount(
                     storedAccount: activeStoredAccount,
                     snapshot: snapshot,
                     liveSystemAccount: snapshot.liveSystemAccount) ? .liveSystem : .managedAccount(id: id)

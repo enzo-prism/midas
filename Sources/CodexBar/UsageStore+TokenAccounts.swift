@@ -228,7 +228,9 @@ extension UsageStore {
         self.settings.invalidateCodexAccountReconciliationSnapshotCache()
         let snapshot = self.settings.codexAccountReconciliationSnapshot
         return Self.codexVisibleAccountProjectionWithFreshManagedAuthFingerprints(
-            CodexVisibleAccountProjection.make(from: snapshot),
+            CodexVisibleAccountProjection.make(
+                from: snapshot,
+                preferManagedAccounts: self.settings.midasTrackAllAccounts),
             snapshot: snapshot,
             requireLiveManagedAuthFor: accountIDs)
     }

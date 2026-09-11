@@ -99,8 +99,12 @@ extension DefaultCodexAccountReconciler {
 }
 
 extension CodexVisibleAccountProjection {
-    public static func make(from snapshot: CodexAccountReconciliationSnapshot) -> CodexVisibleAccountProjection {
-        let resolvedActiveSource = CodexActiveSourceResolver.resolve(from: snapshot).resolvedSource
+    public static func make(
+        from snapshot: CodexAccountReconciliationSnapshot,
+        preferManagedAccounts: Bool = false) -> CodexVisibleAccountProjection
+    {
+        let resolvedActiveSource = CodexActiveSourceResolver.resolve(
+            from: snapshot, preferManagedAccounts: preferManagedAccounts).resolvedSource
         var drafts: [VisibleAccountDraft] = []
 
         for storedAccount in snapshot.storedAccounts {
@@ -129,14 +133,18 @@ extension CodexVisibleAccountProjection {
                 drafts[exactIndex] = VisibleAccountDraft(
                     email: existingDraft.email,
                     workspaceLabel: liveWorkspaceLabel ?? existingDraft.workspaceLabel,
-                    workspaceAccountID: liveSystemAccount.workspaceAccountID ?? existingDraft.workspaceAccountID,
-                    authFingerprint: liveSystemAccount.authFingerprint ?? existingDraft.authFingerprint,
+                    workspaceAccountID: preferManagedAccounts
+                        ? existingDraft.workspaceAccountID
+                        : (liveSystemAccount.workspaceAccountID ?? existingDraft.workspaceAccountID),
+                    authFingerprint: preferManagedAccounts
+                        ? existingDraft.authFingerprint
+                        : (liveSystemAccount.authFingerprint ?? existingDraft.authFingerprint),
                     storedAccountID: existingDraft.storedAccountID,
-                    selectionSource: .liveSystem,
+                    selectionSource: preferManagedAccounts ? existingDraft.selectionSource : .liveSystem,
                     isLive: true,
                     canReauthenticate: existingDraft.canReauthenticate,
                     canRemove: existingDraft.canRemove,
-                    identity: liveIdentity)
+                    identity: preferManagedAccounts ? existingDraft.identity : liveIdentity)
             } else if let existingIndex = drafts.firstIndex(where: { draft in
                 CodexIdentityMatcher.matches(
                     draft.identity,
@@ -149,14 +157,18 @@ extension CodexVisibleAccountProjection {
                 drafts[existingIndex] = VisibleAccountDraft(
                     email: existingDraft.email,
                     workspaceLabel: liveWorkspaceLabel ?? existingDraft.workspaceLabel,
-                    workspaceAccountID: liveSystemAccount.workspaceAccountID ?? existingDraft.workspaceAccountID,
-                    authFingerprint: liveSystemAccount.authFingerprint ?? existingDraft.authFingerprint,
+                    workspaceAccountID: preferManagedAccounts
+                        ? existingDraft.workspaceAccountID
+                        : (liveSystemAccount.workspaceAccountID ?? existingDraft.workspaceAccountID),
+                    authFingerprint: preferManagedAccounts
+                        ? existingDraft.authFingerprint
+                        : (liveSystemAccount.authFingerprint ?? existingDraft.authFingerprint),
                     storedAccountID: existingDraft.storedAccountID,
-                    selectionSource: .liveSystem,
+                    selectionSource: preferManagedAccounts ? existingDraft.selectionSource : .liveSystem,
                     isLive: true,
                     canReauthenticate: existingDraft.canReauthenticate,
                     canRemove: existingDraft.canRemove,
-                    identity: liveIdentity)
+                    identity: preferManagedAccounts ? existingDraft.identity : liveIdentity)
             } else {
                 drafts.append(VisibleAccountDraft(
                     email: normalizedEmail,
@@ -177,7 +189,7 @@ extension CodexVisibleAccountProjection {
             let id = Self.visibleAccountID(for: draft, emailGroupSize: groupedByEmail[draft.email]?.count ?? 0)
             let isActive = switch resolvedActiveSource {
             case .liveSystem:
-                draft.selectionSource == .liveSystem
+                draft.isLive
             case let .managedAccount(id):
                 draft.selectionSource == .managedAccount(id: id)
             }
