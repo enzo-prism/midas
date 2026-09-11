@@ -66,12 +66,13 @@ extension UsageStore {
 
     func shouldFetchAllTokenAccounts(provider: UsageProvider, accounts: [ProviderTokenAccount]) -> Bool {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return false }
-        return self.settings.multiAccountMenuLayout == .stacked && accounts.count > 1
+        return (self.settings.midasTrackAllAccounts || self.settings.multiAccountMenuLayout == .stacked) && accounts
+            .count > 1
     }
 
     func shouldFetchAllCodexVisibleAccounts() -> Bool {
         let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
-        return self.settings.multiAccountMenuLayout == .stacked &&
+        return (self.settings.midasTrackAllAccounts || self.settings.multiAccountMenuLayout == .stacked) &&
             projection.visibleAccounts.count > 1
     }
 
@@ -492,6 +493,7 @@ extension UsageStore {
         _ accounts: [ProviderTokenAccount],
         selected: ProviderTokenAccount?) -> [ProviderTokenAccount]
     {
+        if self.settings.midasTrackAllAccounts { return accounts }
         let limit = Self.tokenAccountMenuSnapshotLimit
         if accounts.count <= limit { return accounts }
         var limited = Array(accounts.prefix(limit))
@@ -511,6 +513,7 @@ extension UsageStore {
             accounts,
             snapshots: snapshots,
             activeVisibleAccountID: activeVisibleAccountID)
+        if self.settings.midasTrackAllAccounts { return accounts }
         let limit = Self.tokenAccountMenuSnapshotLimit
         if accounts.count <= limit { return accounts }
         var limited = Array(accounts.prefix(limit))

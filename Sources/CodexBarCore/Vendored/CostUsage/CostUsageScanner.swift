@@ -20,6 +20,7 @@ enum CostUsageScanner {
     }
 
     struct Options {
+        var codexAdditionalSessionsRoots: [URL] = []
         var codexSessionsRoot: URL?
         var claudeProjectsRoots: [URL]?
         var cacheRoot: URL?
@@ -502,11 +503,14 @@ enum CostUsageScanner {
     }
 
     private static func codexSessionsRoots(options: Options) -> [URL] {
-        let root = self.defaultCodexSessionsRoot(options: options)
-        if let archived = self.codexArchivedSessionsRoot(sessionsRoot: root) {
-            return [root, archived]
-        }
-        return [root]
+        var seen = Set<String>()
+        return ([self.defaultCodexSessionsRoot(options: options)] + options.codexAdditionalSessionsRoots)
+            .flatMap { root -> [URL] in
+                if let archived = self.codexArchivedSessionsRoot(sessionsRoot: root) { return [root, archived] }
+                return [root]
+            }
+            .map { $0.resolvingSymlinksInPath().standardizedFileURL }
+            .filter { seen.insert($0.path).inserted }
     }
 
     private static func codexArchivedSessionsRoot(sessionsRoot: URL) -> URL? {

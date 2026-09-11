@@ -16,6 +16,9 @@ struct MidasProviderDetailView: View {
                     .help(exhausted.resetText ?? "Wait for this limit to reset before continuing.")
             }
             self.spendHeadline
+            if self.actions.accountPresentations(self.presentation.provider).count > 1 {
+                MidasAccountUsageView(accounts: self.actions.accountPresentations(self.presentation.provider))
+            }
             self.hero
             if !self.presentation.metrics.isEmpty {
                 VStack(alignment: .leading, spacing: 16) {

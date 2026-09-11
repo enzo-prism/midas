@@ -16,6 +16,7 @@ struct MidasActions {
     let legacyMenu: () -> Void
     let quit: () -> Void
     var checkForUpdates: () -> Void = {}
+    var accountPresentations: (UsageProvider) -> [MidasAccountPresentation] = { _ in [] }
 }
 
 struct MidasQuotaMetric: Identifiable {
@@ -50,7 +51,7 @@ struct MidasSpendPresentation {
     let title: String
     let value: String
     let period: String
-    let detail: String
+    var detail: String
     let updatedAt: Date
     let amount: Double
     let currency: String
@@ -67,7 +68,7 @@ struct MidasSpendPresentation {
         let provenance = onlyMetered ? CostProvenance.vendorMetered : CostProvenance.forWindow(
             snapshot: snapshot.costProvenance, hasWindowCosts: true, includesMetered: false)
         let title: String
-        let detail: String
+        var detail: String
         switch provenance {
         case .listPriceEstimate:
             title = "Token spend (API rates)"
@@ -284,4 +285,11 @@ struct MidasProviderPresentation {
         }
         return nil
     }
+}
+
+/// Quota is account-owned; provider-level token history must never be repeated per account.
+struct MidasAccountPresentation: Identifiable {
+    let id: String
+    let isPrimary: Bool
+    let presentation: MidasProviderPresentation
 }

@@ -178,6 +178,11 @@ struct DisplayPane: View {
         SettingsSection(contentSpacing: 16) {
             Text("Midas menu bar")
                 .font(.headline)
+            Toggle("Track all connected accounts", isOn: self.$settings.midasTrackAllAccounts)
+            Text(
+                "Refresh every connected account. Codex token spend includes local history across accounts once; "
+                    + "quota stays separate for each account.")
+                .font(.caption).foregroundStyle(.secondary)
             Picker("Style", selection: self.$settings.midasMenuBarMode) {
                 ForEach(MidasMenuBarMode.allCases) { mode in
                     Text(mode.label).tag(mode)

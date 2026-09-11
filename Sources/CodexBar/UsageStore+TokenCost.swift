@@ -28,6 +28,7 @@ extension UsageStore {
             guard let snapshot = await self.costUsageFetcher.loadCachedCodexTokenSnapshot(
                 now: now,
                 codexHomePath: scope.codexHomePath,
+                codexAdditionalHomePaths: scope.additionalHomes,
                 historyDays: historyDays)
             else {
                 return
@@ -70,16 +71,22 @@ extension UsageStore {
         self.tokenRefreshInFlight.contains(provider)
     }
 
-    func tokenCostScope(for provider: UsageProvider) -> (codexHomePath: String?, signature: String) {
+    func tokenCostScope(for provider: UsageProvider)
+    -> (codexHomePath: String?, additionalHomes: [String], signature: String) {
         guard provider == .codex else {
-            return (nil, provider.rawValue)
+            return (nil, [], provider.rawValue)
+        }
+        if self.settings.midasTrackAllAccounts {
+            let homes = self.settings.codexAccountReconciliationSnapshot.storedAccounts
+                .map(\.managedHomePath).sorted()
+            return (nil, homes, "codex:all:" + homes.joined(separator: "|"))
         }
         let homePath = self.settings.activeManagedCodexRemoteHomePath?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let homePath, !homePath.isEmpty else {
-            return (nil, "codex:ambient")
+            return (nil, [], "codex:ambient")
         }
-        return (homePath, "codex:managed:\(homePath)")
+        return (homePath, [], "codex:managed:\(homePath)")
     }
 
     func tokenSnapshot(

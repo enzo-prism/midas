@@ -40,6 +40,34 @@ struct MidasProviderAuditRenderTests {
         }
     }
 
+    @Test @MainActor func exportMultipleAccountsWhenRequested() throws {
+        guard let output = ProcessInfo.processInfo.environment["MIDAS_AUDIT_PREVIEW_OUTPUT"] else { return }
+        try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+        let now = Date()
+        let accounts = try [96.0, 2.0].enumerated().map { index, used in
+            let snapshot = UsageSnapshot(
+                primary: nil,
+                secondary: self.window(used, minutes: 10080),
+                updatedAt: now,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .codex,
+                    accountEmail: "account-\(index)@example.com",
+                    accountOrganization: nil,
+                    loginMethod: "Pro"))
+            var presentation = try self.presentation(provider: .codex, snapshot: snapshot, now: now)
+            presentation.spend = nil
+            return MidasAccountPresentation(id: "\(index)", isPrimary: index == 0, presentation: presentation)
+        }
+        for scheme in [ColorScheme.light, .dark] {
+            try self.export(
+                MidasAccountUsageView(accounts: accounts).padding(24).frame(width: 400)
+                    .background(MidasTheme.background).environment(\.colorScheme, scheme),
+                name: "multiple-accounts",
+                scheme: scheme,
+                output: output)
+        }
+    }
+
     private func metaSnapshot(now: Date) -> UsageSnapshot {
         UsageSnapshot(
             primary: self.window(0, minutes: 1440, description: "2.4K today"),

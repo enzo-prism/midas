@@ -43,11 +43,13 @@ public struct CostUsageFetcher: Sendable {
     public func loadCachedCodexTokenSnapshot(
         now: Date = Date(),
         codexHomePath: String? = nil,
+        codexAdditionalHomePaths: [String] = [],
         historyDays: Int = 30) async -> CostUsageTokenSnapshot?
     {
         await Self.loadCachedCodexTokenSnapshot(
             now: now,
             codexHomePath: codexHomePath,
+            codexAdditionalHomePaths: codexAdditionalHomePaths,
             historyDays: historyDays,
             scannerOptions: self.scannerOptionsOverride())
     }
@@ -59,6 +61,7 @@ public struct CostUsageFetcher: Sendable {
         forceRefresh: Bool = false,
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
+        codexAdditionalHomePaths: [String] = [],
         historyDays: Int = 30,
         refreshPricingInBackground: Bool = true,
         zaiAPIRegion: ZaiAPIRegion? = nil,
@@ -71,6 +74,7 @@ public struct CostUsageFetcher: Sendable {
             forceRefresh: forceRefresh,
             allowVertexClaudeFallback: allowVertexClaudeFallback,
             codexHomePath: codexHomePath,
+            codexAdditionalHomePaths: codexAdditionalHomePaths,
             historyDays: historyDays,
             refreshPricingInBackground: refreshPricingInBackground,
             zaiAPIRegion: zaiAPIRegion,
@@ -86,6 +90,7 @@ public struct CostUsageFetcher: Sendable {
         forceRefresh: Bool = false,
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
+        codexAdditionalHomePaths: [String] = [],
         historyDays: Int = 30,
         refreshPricingInBackground: Bool = true,
         automaticCodexScanByteLimit _: Int64?,
@@ -99,6 +104,7 @@ public struct CostUsageFetcher: Sendable {
             forceRefresh: forceRefresh,
             allowVertexClaudeFallback: allowVertexClaudeFallback,
             codexHomePath: codexHomePath,
+            codexAdditionalHomePaths: codexAdditionalHomePaths,
             historyDays: historyDays,
             refreshPricingInBackground: refreshPricingInBackground,
             zaiAPIRegion: zaiAPIRegion,
@@ -116,6 +122,7 @@ public struct CostUsageFetcher: Sendable {
         forceRefresh: Bool = false,
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
+        codexAdditionalHomePaths: [String] = [],
         historyDays: Int = 30,
         refreshPricingInBackground: Bool = true,
         zaiAPIRegion: ZaiAPIRegion? = nil,
@@ -183,6 +190,11 @@ public struct CostUsageFetcher: Sendable {
         {
             options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
                 .appendingPathComponent("sessions", isDirectory: true)
+        }
+        if provider == .codex {
+            options.codexAdditionalSessionsRoots = codexAdditionalHomePaths.map {
+                URL(fileURLWithPath: $0, isDirectory: true).appendingPathComponent("sessions", isDirectory: true)
+            }
         }
         if provider == .codex || provider == .claude {
             let pricingCacheRoot = options.cacheRoot
@@ -270,6 +282,7 @@ public struct CostUsageFetcher: Sendable {
     static func loadCachedCodexTokenSnapshot(
         now: Date = Date(),
         codexHomePath: String? = nil,
+        codexAdditionalHomePaths: [String] = [],
         historyDays: Int = 30,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil) async -> CostUsageTokenSnapshot?
     {
@@ -286,7 +299,10 @@ public struct CostUsageFetcher: Sendable {
             let until = now
             let since = Calendar.current.date(byAdding: .day, value: -(clampedHistoryDays - 1), to: now) ?? now
             let range = CostUsageScanner.CostUsageDayRange(since: since, until: until)
-            let options = overrideScannerOptions ?? CostUsageScanner.Options()
+            var options = overrideScannerOptions ?? CostUsageScanner.Options()
+            options.codexAdditionalSessionsRoots = codexAdditionalHomePaths.map {
+                URL(fileURLWithPath: $0, isDirectory: true).appendingPathComponent("sessions", isDirectory: true)
+            }
             let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: options.cacheRoot)
             var reports: [CostUsageDailyReport] = []
 

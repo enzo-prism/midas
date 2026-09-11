@@ -48,6 +48,7 @@ extension UsageStore {
                         forceRefresh: force,
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
                         codexHomePath: costScope.codexHomePath,
+                        codexAdditionalHomePaths: costScope.additionalHomes,
                         historyDays: Self.priorSpendHistoryDays,
                         zaiAPIRegion: zaiRegion,
                         cursorSettings: self.cursorCostSettings(for: provider))

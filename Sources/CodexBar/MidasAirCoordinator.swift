@@ -143,17 +143,7 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
                 isRefreshing: false,
                 isStale: false)
         }
-        let snapshot = controller.store.snapshot(for: provider)
-        let projected = controller.store.tokenSnapshot(fromProviderSnapshot: snapshot, provider: provider)
-        let token = projected ?? (UsageStore.tokenCostRequiresProviderSnapshot(provider)
-            ? nil : controller.store.tokenSnapshot(for: provider))
-        return .make(
-            provider: provider,
-            card: controller.menuCardModel(for: provider),
-            snapshot: snapshot,
-            tokenSnapshot: token,
-            isRefreshing: controller.store.shouldShowRefreshingMenuCardIndicator(for: provider),
-            isStale: controller.store.isStale(provider: provider))
+        return controller.midasProviderPresentation(for: provider)
     }
 
     private var actions: MidasActions {
@@ -180,6 +170,9 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
             checkForUpdates: { [weak self] in
                 self?.closePopoverIfShown()
                 self?.controller?.updater.checkForUpdates(nil)
+            },
+            accountPresentations: { [weak self] provider in
+                self?.controller?.midasAccountPresentations(for: provider) ?? []
             })
     }
 

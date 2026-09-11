@@ -22,6 +22,7 @@ struct MidasMenuBarSettingsTests {
     @Test func allPreferencesPersistAndReload() throws {
         let (settings, defaults, suite) = try self.makeSettings()
         defer { defaults.removePersistentDomain(forName: suite) }
+        settings.midasTrackAllAccounts = true
         settings.midasMenuBarMode = .constellation
         settings.midasMenuBarFocusProvider = .meta
         settings.midasMenuBarHideSpend = true
@@ -29,6 +30,7 @@ struct MidasMenuBarSettingsTests {
         #expect(defaults.string(forKey: "midasMenuBarFocusProvider") == "meta")
         #expect(defaults.bool(forKey: "midasMenuBarHideSpend"))
         let reloaded = self.store(defaults: defaults, suite: suite)
+        #expect(reloaded.midasTrackAllAccounts)
         #expect(reloaded.midasMenuBarMode == .constellation)
         #expect(reloaded.midasMenuBarFocusProvider == .meta)
         #expect(reloaded.midasMenuBarHideSpend)
@@ -128,5 +130,35 @@ struct MidasMenuBarSettingsTests {
             self.value = true
             self.lock.unlock()
         }
+    }
+}
+
+extension MidasMenuBarSettingsTests {
+    @Test func trackingAllAccountsDoesNotDependOnMenuLayout() throws {
+        let (settings, defaults, suite) = try self.makeSettings()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        settings.multiAccountMenuLayout = .segmented
+        settings.midasTrackAllAccounts = true
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing,
+            environmentBase: [:])
+        let accounts = (0..<8).map { index in
+            ProviderTokenAccount(
+                id: UUID(),
+                label: "Fixture \(index)",
+                token: "fixture-\(index)",
+                addedAt: 0,
+                lastUsed: nil)
+        }
+        #expect(store.shouldFetchAllTokenAccounts(provider: .openai, accounts: accounts))
+        #expect(store.limitedTokenAccounts(accounts, selected: accounts.first).count == 8)
+        #expect(store.tokenCostScope(for: .codex).codexHomePath == nil)
+        #expect(store.tokenCostScope(for: .codex).signature.hasPrefix("codex:all:"))
+        settings.midasTrackAllAccounts = false
+        #expect(!store.shouldFetchAllTokenAccounts(provider: .openai, accounts: accounts))
+        #expect(store.limitedTokenAccounts(accounts, selected: accounts.first).count == 6)
     }
 }

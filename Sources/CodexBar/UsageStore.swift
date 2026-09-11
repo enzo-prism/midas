@@ -43,6 +43,7 @@ extension UsageStore {
         for implementation in ProviderCatalog.all {
             implementation.observeSettings(self.settings)
         }
+        _ = self.settings.midasTrackAllAccounts
         _ = self.settings.multiAccountMenuLayout
         _ = self.settings.tokenAccountsByProvider
         _ = self.settings.mergeIcons
@@ -1571,6 +1572,7 @@ extension UsageStore {
                         forceRefresh: force,
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
                         codexHomePath: costScope.codexHomePath,
+                        codexAdditionalHomePaths: costScope.additionalHomes,
                         historyDays: historyDays,
                         zaiAPIRegion: zaiRegion,
                         cursorSettings: self.cursorCostSettings(for: provider))
@@ -1584,6 +1586,9 @@ extension UsageStore {
                 return snapshot
             }
 
+            guard self.tokenCostScope(for: provider).signature == costScope.signature,
+                  self.settings.costUsageHistoryDays == historyDays,
+                  self.settings.costUsageEnabled, self.isEnabled(provider) else { return }
             guard !snapshot.daily.isEmpty else {
                 self.tokenSnapshots.removeValue(forKey: provider)
                 self.tokenErrors[provider] = Self.tokenCostNoDataMessage(for: provider)
@@ -1608,6 +1613,8 @@ extension UsageStore {
             self.persistWidgetSnapshot(reason: "token-usage")
         } catch {
             if error is CancellationError { return }
+            guard self.tokenCostScope(for: provider).signature == costScope.signature,
+                  self.settings.costUsageHistoryDays == historyDays else { return }
             let duration = Date().timeIntervalSince(startedAt)
             let msg = error.localizedDescription
             let durationText = String(format: "%.2f", duration)

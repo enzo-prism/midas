@@ -16,7 +16,7 @@ extension StatusItemController {
         let projected = self.store.tokenSnapshot(fromProviderSnapshot: snapshot, provider: provider)
         let token = projected ?? (UsageStore.tokenCostRequiresProviderSnapshot(provider)
             ? nil : self.store.tokenSnapshot(for: provider))
-        return .make(
+        var result = MidasProviderPresentation.make(
             provider: provider,
             card: self.menuCardModel(for: provider),
             snapshot: snapshot,
@@ -24,6 +24,12 @@ extension StatusItemController {
             isRefreshing: self.store.shouldShowRefreshingMenuCardIndicator(for: provider),
             isStale: self.store.isStale(provider: provider)
                 || (self.settings.midasMenuBarMode != .orbit && self.store.tokenErrors[provider] != nil))
+        if provider == .codex, self.settings.midasTrackAllAccounts, result.spend != nil {
+            result.spend?.detail = "Combined local Codex history across accounts, counted once. "
+                + "Other devices and account-by-account cost attribution are unavailable. "
+                + "This is an API-rate estimate, not a bill."
+        }
+        return result
     }
 
     func updateMidasMenuBar() {

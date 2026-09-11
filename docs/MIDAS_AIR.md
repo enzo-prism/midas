@@ -163,3 +163,11 @@ Click **Check for Updates** in the panel footer for the standard Sparkle downloa
 Install & Restart flow. Only signed Midas releases are accepted through the Midas-only feed.
 Settings → About provides automatic checks. Older releases need a one-time manual upgrade
 to 0.33.3 or later.
+
+## Multiple accounts
+
+Settings → Display → Track all connected accounts refreshes every configured account independently of the legacy menu layout. In Codex details, connected accounts show separate weekly/session limits and errors. The selected account controls the menu-bar ring; quota percentages are never summed.
+
+When enabled, Codex cost history scans the ambient Codex home and every managed account home, including archived sessions, in one scanner pass. Existing session/file deduplication prevents copied history from multiplying the total. Root changes invalidate the cache; late results from a previous scope cannot replace current results. The combined provider estimate contributes once to the existing Codex + Cursor + Meta total.
+
+This is local-history coverage, not an account-wide billing export. Older session logs do not establish an account-by-account cost split; activity on other devices is absent unless its logs are present here. Cursor uses its connected web-session history, and Meta uses local Muse history. Adding account credentials alone cannot manufacture missing token records.

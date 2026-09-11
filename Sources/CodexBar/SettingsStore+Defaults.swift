@@ -259,6 +259,14 @@ extension SettingsStore {
         set { self.kiroMenuBarDisplayModeRaw = newValue.rawValue }
     }
 
+    var midasTrackAllAccounts: Bool {
+        get { self.defaultsState.midasTrackAllAccounts }
+        set {
+            self.defaultsState.midasTrackAllAccounts = newValue
+            self.userDefaults.set(newValue, forKey: "midasTrackAllAccounts")
+        }
+    }
+
     var multiAccountMenuLayout: MultiAccountMenuLayout {
         get { MultiAccountMenuLayout(rawValue: self.defaultsState.multiAccountMenuLayoutRaw) ?? .segmented }
         set {
