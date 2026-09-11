@@ -96,7 +96,7 @@ struct MidasMenuBarPresentation: Equatable {
         let total = MidasTotalSpend(presentations: unique)
         self.isStale = displayed.contains { Self.stale($0, now: now, includeSpend: !hideSpend && mode != .orbit) }
         self.isPartial = (mode == .ledger || mode == .orbit) && !hideSpend && total.includedProviderCount > 0
-            && total.excludedProviderCount > 0
+            && total.hasIncompleteCoverage
         switch mode {
         case .ledger, .orbit:
             if hideSpend {
@@ -134,7 +134,7 @@ struct MidasMenuBarPresentation: Equatable {
         if !hideSpend, mode == .ledger || mode == .orbit {
             let amounts = total.totals.map { "\($0.value) \($0.currency)" }.joined(separator: ", ")
             descriptions.insert(
-                amounts.isEmpty ? "Token spend (API rates) unavailable" : "Token spend (API rates): \(amounts)",
+                amounts.isEmpty ? "Estimated inference spend unavailable" : "Estimated inference spend: \(amounts)",
                 at: 0)
             descriptions.append(total.periodText)
             descriptions.append(total.coverageText)

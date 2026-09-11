@@ -7,7 +7,7 @@ struct MidasPanelView: View {
     @Bindable var navigation: MidasNavigationState
     let presentation: (UsageProvider) -> MidasProviderPresentation
     let actions: MidasActions
-    @State private var showsAllProviders = false
+    @State private var showsPeriodPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,8 +30,6 @@ struct MidasPanelView: View {
                 .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
-            Divider().padding(.horizontal, 24)
-            self.quickControls.padding(.horizontal, 24).padding(.vertical, 14)
         }
         .frame(width: 400)
         .frame(maxHeight: .infinity)
@@ -47,127 +45,65 @@ struct MidasPanelView: View {
                 Text("Midas").font(.system(size: 17, weight: .semibold))
             }
             Spacer()
-            Button(action: self.actions.refresh) {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(MidasQuietButtonStyle()).help("Refresh usage")
-            .accessibilityLabel("Refresh usage").keyboardShortcut("r", modifiers: .command)
+            Button(action: self.actions.refresh) { Image(systemName: "arrow.clockwise") }
+                .buttonStyle(MidasQuietButtonStyle()).help("Refresh usage")
+                .accessibilityLabel("Refresh usage").keyboardShortcut("r", modifiers: .command)
             Button(action: self.actions.settings) { Image(systemName: "gearshape") }
                 .buttonStyle(MidasQuietButtonStyle()).help("Settings")
                 .accessibilityLabel("Settings").keyboardShortcut(",", modifiers: .command)
             Menu {
-                Button("Provider actions & accounts…", action: self.actions.legacyMenu)
-                Divider()
-                Button("Quit Midas", action: self.actions.quit).keyboardShortcut("q", modifiers: .command)
-            } label: {
-                Image(systemName: "ellipsis")
-            }
-            .menuStyle(.borderlessButton).fixedSize().help("More actions").accessibilityLabel("More actions")
-        }
-    }
-
-    private var quickControls: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Favorite provider")
-                    .font(.caption2)
-                    .foregroundStyle(MidasTheme.secondaryText)
-                Menu {
+                Menu("Menu-bar provider") {
                     ForEach(self.providers, id: \.self) { provider in
                         Button {
                             self.settings.midasMenuBarFocusProvider = provider
-                            self.settings.midasMenuBarMode = .orbit
                         } label: {
-                            if provider == self.settings.midasMenuBarFocusProvider {
-                                Label(
-                                    ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue,
-                                    systemImage: "checkmark")
-                            } else {
-                                Text(ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue)
-                            }
+                            Text(ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue)
                         }
                     }
-                    if self.providers.isEmpty {
-                        Button("Connect a provider…", action: self.actions.settings)
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        MidasProviderLogo(provider: self.settings.midasMenuBarFocusProvider, size: 16)
-                        Text(ProviderDefaults.metadata[self.settings.midasMenuBarFocusProvider]?.displayName
-                            ?? self.settings.midasMenuBarFocusProvider.rawValue)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down").font(.caption2)
-                    }
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize(horizontal: false, vertical: true)
-                .help("Choose the provider shown in the menu-bar circle")
-                .accessibilityLabel("Favorite provider")
-                .accessibilityHint("Changes the provider shown in the menu-bar circle")
-                .accessibilityValue(ProviderDefaults.metadata[self.settings.midasMenuBarFocusProvider]?.displayName
-                    ?? self.settings.midasMenuBarFocusProvider.rawValue)
-            }
-            Spacer(minLength: 8)
-            Button(action: self.actions.checkForUpdates) {
-                Label("Check for Updates", systemImage: "arrow.down.circle")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(MidasTheme.accent)
-            .fixedSize()
+                Button("Provider actions & accounts…", action: self.actions.legacyMenu)
+                Button("Check for Updates…", action: self.actions.checkForUpdates)
+                Divider()
+                Button("Quit Midas", action: self.actions.quit).keyboardShortcut("q", modifiers: .command)
+            } label: { Image(systemName: "ellipsis") }
+                .menuStyle(.borderlessButton).fixedSize().help("More actions").accessibilityLabel("More actions")
         }
-        .font(.caption)
     }
 
     private var providers: [UsageProvider] {
         self.store.enabledProvidersForDisplay()
     }
 
-    private var visibleProviders: [UsageProvider] {
-        if self.showsAllProviders { return self.providers }
-        return self.settings.resolvedMergedOverviewProviders(activeProviders: self.providers, maxVisibleProviders: 5)
-    }
-
     private var overview: some View {
         VStack(alignment: .leading, spacing: 24) {
-            MidasTotalSpendView(presentations: self.providers.map(self.presentation))
-            HStack {
-                Text(self.showsAllProviders ? "All providers" : "Overview").font(.callout.weight(.medium))
-                Spacer()
-                if !self.providers.isEmpty {
-                    Button(self.showsAllProviders ? "Favorites" : "All providers") {
-                        self.showsAllProviders.toggle()
-                    }
-                    .buttonStyle(.plain).font(.caption).foregroundStyle(MidasTheme.accent)
+            MidasTotalSpendView(
+                presentations: self.providers.map(self.presentation),
+                periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label,
+                periodAction: { self.showsPeriodPicker = true })
+                .popover(isPresented: self.$showsPeriodPicker) {
+                    MidasSpendPeriodPicker(settings: self.settings, store: self.store)
                 }
-            }
-            if self.visibleProviders.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(self.providers.isEmpty ? "Make room for your favorite tools." : "Choose your favorites.")
-                        .font(.headline)
-                    Text(self.providers
-                        .isEmpty ? "Connect a provider to see its usage here." :
-                        "Your connected providers are in All providers.")
-                        .font(.callout).foregroundStyle(MidasTheme.secondaryText)
-                    Button(self.providers.isEmpty ? "Connect a provider" : "All providers") {
-                        if self.providers.isEmpty { self.actions.settings() } else { self.showsAllProviders = true }
-                    }.buttonStyle(.borderedProminent)
-                }
-                .padding(.vertical, 24)
+            if self.providers.isEmpty {
+                Button("Connect an account", action: self.actions.settings)
+                    .buttonStyle(.borderedProminent).padding(.vertical, 16)
             } else {
-                VStack(spacing: 22) {
-                    ForEach(self.visibleProviders, id: \.self) { provider in
+                VStack(spacing: 20) {
+                    ForEach(self.providers, id: \.self) { provider in
+                        Divider()
                         self.providerRow(self.presentation(provider))
                     }
                 }
             }
             Button { self.actions.openUsage(nil) } label: {
                 HStack {
-                    Label("Open Usage", systemImage: "chart.xyaxis.line")
+                    Text("Spend history")
                     Spacer()
                     Image(systemName: "arrow.up.right")
                 }
-                .font(.callout.weight(.medium)).padding(12)
-                .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                .font(.callout.weight(.medium))
+                .foregroundStyle(MidasTheme.secondaryText)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -176,26 +112,28 @@ struct MidasPanelView: View {
     private func providerRow(_ item: MidasProviderPresentation) -> some View {
         Button { self.navigation.provider = item.provider } label: {
             VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    MidasProviderLogo(provider: item.provider, size: 28)
+                HStack(spacing: 10) {
+                    MidasProviderLogo(provider: item.provider, size: 22)
                         .fixedSize().accessibilityHidden(true)
                     Text(item.name).font(.system(size: 15, weight: .semibold))
                         .lineLimit(2).multilineTextAlignment(.leading)
                     Spacer(minLength: 8)
                     if item.isRefreshing { ProgressView().controlSize(.mini) }
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(MidasTheme.secondaryText)
+                    Text(item.spend.flatMap { $0.isEstimate ? MidasOverviewMoney.format(
+                        $0.amount,
+                        currency: $0.currency) : nil } ?? "—")
+                        .font(.system(size: 21, weight: .medium)).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                        .accessibilityLabel("Estimated inference spend")
+                        .accessibilityValue(item.spend.flatMap { $0.isEstimate ? $0.value : nil } ?? "Unavailable")
                 }
                 MidasOverviewMetrics(item: item, accounts: self.actions.accountPresentations(item.provider))
-                if item.error != nil || item.isStale {
-                    Label(
-                        item.error == nil ? "Last known usage" : "Needs attention",
-                        systemImage: "exclamationmark.circle")
-                        .font(.caption2).foregroundStyle(MidasTheme.warning)
-                } else if self.actions.accountPresentations(item.provider).count < 2, let reset = item.hero?.resetText {
-                    Text(reset).font(.caption2).foregroundStyle(MidasTheme.secondaryText)
+                if item.spend?.isEstimate != true {
+                    Text(item.spendUnavailableReason ?? "Estimate unavailable")
+                        .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -204,74 +142,38 @@ struct MidasPanelView: View {
     }
 }
 
-/// Shared overview hierarchy: a labeled money source, then capacity or token activity.
+/// Capacity belongs to each account; money is shown once in the provider heading.
 struct MidasOverviewMetrics: View {
     let item: MidasProviderPresentation
     var accounts: [MidasAccountPresentation] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let cloud = self.item.cloudUsage { MidasCloudUsageView(summary: cloud) }
-            if let spend = self.item.spend {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(spend.title).font(.caption).foregroundStyle(MidasTheme.secondaryText)
-                    Text(spend.value)
-                        .font(.system(size: 27, weight: .medium))
-                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(spend.period).font(.caption)
-                        .foregroundStyle(MidasTheme.secondaryText)
-                        .multilineTextAlignment(.leading)
-                    if let secondary = spend.secondaryValue, let label = spend.secondaryLabel {
-                        Text("\(label): \(secondary)")
-                            .font(.caption).foregroundStyle(MidasTheme.secondaryText)
-                    }
-                }
-                .help(spend.detail)
-                if self.accounts.count > 1 {
-                    MidasAccountOverviewBars(accounts: self.accounts)
-                } else if let metric = self.item.hero {
-                    self.quota(metric)
-                } else if let activity = self.item.activitySummary {
-                    Text(activity).font(.callout).foregroundStyle(MidasTheme.secondaryText)
-                }
-            } else if self.accounts.count > 1 {
+        VStack(alignment: .leading, spacing: 10) {
+            if self.accounts.count > 1 {
                 MidasAccountOverviewBars(accounts: self.accounts)
-                self.fallbackSpend
-            } else if let metric = self.item.hero {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(metric.valueText)
-                        .font(.system(size: 27, weight: .medium)).monospacedDigit()
-                    Text(metric.title).font(.caption).foregroundStyle(MidasTheme.secondaryText)
-                    MidasRemainingBar(percent: metric.remainingPercent)
+            } else if self.item.hero != nil || !self.item.metrics.isEmpty {
+                ForEach(MidasAccountQuotaLayout.overviewMetrics(self.item)) { selected in
+                    MidasAccountQuotaBar(metric: selected)
                 }
-                self.fallbackSpend
+                if self.item.isStale || self.item.error != nil {
+                    Text("Stale").font(.caption).foregroundStyle(MidasTheme.warning)
+                }
             } else {
-                Text(self.item.activitySummary ?? self.item.summary)
-                    .font(.system(size: 15, weight: .medium))
-                    .multilineTextAlignment(.leading)
-                self.fallbackSpend
+                Text(self.item.error != nil ? "Needs attention" : "Limit unavailable")
+                    .font(.caption)
+                    .foregroundStyle(self.item.error != nil ? MidasTheme.warning : MidasTheme.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
 
-    private var fallbackSpend: some View {
-        Text(self.item.financialSummary.map { "\(self.item.financialLabel ?? "Provider usage"): \($0)" }
-            ?? "Spend unavailable")
-            .font(.caption2).foregroundStyle(MidasTheme.secondaryText)
-    }
-
-    private func quota(_ metric: MidasQuotaMetric) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(metric.title).foregroundStyle(MidasTheme.secondaryText)
-                Spacer()
-                Text(metric.valueText).monospacedDigit()
-                    .foregroundStyle(metric.isExhausted ? MidasTheme.warning : MidasTheme.text)
-            }
-            .font(.callout)
-            MidasRemainingBar(percent: metric.remainingPercent)
+/// Keep estimates scannable without rounding a nonzero amount down to zero.
+enum MidasOverviewMoney {
+    static func format(_ amount: Double, currency: String) -> String {
+        if amount > 0, amount < 0.01 {
+            return "<" + 0.01.formatted(.currency(code: currency))
         }
+        return amount.formatted(.currency(code: currency).precision(.fractionLength(amount < 1 ? 2 : 0)))
     }
 }

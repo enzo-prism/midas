@@ -4,6 +4,15 @@ import Testing
 @testable import CodexBarCore
 
 struct MidasTotalSpendTests {
+    @Test func partialHistoryRemainsPartialWhenEveryProviderHasAnEstimate() {
+        var item = self.item(.codex, amount: 12)
+        item.spend?.coverageNote = "Incomplete month"
+        let total = MidasTotalSpend(presentations: [item])
+        #expect(total.excludedProviderCount == 0)
+        #expect(total.hasIncompleteCoverage)
+        #expect(total.totals.first?.amount == 12)
+    }
+
     @Test func sumsPrimaryEstimatesAcrossEverySuppliedProvider() throws {
         let total = MidasTotalSpend(presentations: [
             self.item(

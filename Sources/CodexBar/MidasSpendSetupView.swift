@@ -90,6 +90,14 @@ struct MidasSpendSetupView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(account.displayName).fontWeight(.medium)
+                        TextField("Short name (optional)", text: Binding(
+                            get: { self.settings.midasAccountAliases["codex:" + account.id] ?? "" },
+                            set: { value in
+                                self.settings.midasAccountAliases["codex:" + account.id] =
+                                    String(value.prefix(40))
+                            }))
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Short name for " + account.displayName)
                         Text(self.accountStatus(account)).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()

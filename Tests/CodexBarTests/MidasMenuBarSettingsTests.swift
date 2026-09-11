@@ -23,6 +23,8 @@ struct MidasMenuBarSettingsTests {
         let (settings, defaults, suite) = try self.makeSettings()
         defer { defaults.removePersistentDomain(forName: suite) }
         settings.midasTrackAllAccounts = true
+        settings.midasSpendPeriodSelection = "2026-08"
+        settings.midasAccountAliases = ["codex:fixture": "Personal"]
         settings.midasMenuBarMode = .constellation
         settings.midasMenuBarFocusProvider = .meta
         settings.midasMenuBarHideSpend = true
@@ -31,6 +33,8 @@ struct MidasMenuBarSettingsTests {
         #expect(defaults.bool(forKey: "midasMenuBarHideSpend"))
         let reloaded = self.store(defaults: defaults, suite: suite)
         #expect(reloaded.midasTrackAllAccounts)
+        #expect(reloaded.midasSpendPeriodSelection == "2026-08")
+        #expect(reloaded.midasAccountAliases == ["codex:fixture": "Personal"])
         #expect(reloaded.midasMenuBarMode == .constellation)
         #expect(reloaded.midasMenuBarFocusProvider == .meta)
         #expect(reloaded.midasMenuBarHideSpend)

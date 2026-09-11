@@ -21,6 +21,7 @@ struct MidasTotalSpend {
     let excludedProviderCount: Int
     let providerCount: Int
     let oldestUpdate: Date?
+    let hasIncompleteCoverage: Bool
 
     init(presentations: [MidasProviderPresentation]) {
         var seenProviders = Set<String>()
@@ -48,6 +49,11 @@ struct MidasTotalSpend {
         self.includedProviderCount = included
         self.excludedProviderCount = unique.count - included
         self.oldestUpdate = updates.min()
+        self.hasIncompleteCoverage = included < unique.count || unique.contains {
+            $0.spend?.coverageNote != nil || $0.cloudUsage?.accounts.contains {
+                $0.error != nil || $0.usage?.totalTokens == nil
+            } == true
+        }
         if periods.count == 1, let period = periods.first {
             self.periodText = period
         } else if periods.isEmpty {

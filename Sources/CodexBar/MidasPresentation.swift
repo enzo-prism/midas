@@ -25,6 +25,7 @@ struct MidasQuotaMetric: Identifiable {
     let remainingPercent: Double
     let resetText: String?
     let helpText: String?
+    var resetsAt: Date?
 
     var valueText: String {
         "\(Int(self.remainingPercent.rounded()))% left"
@@ -58,6 +59,7 @@ struct MidasSpendPresentation {
     let secondaryValue: String?
     let secondaryLabel: String?
     var isEstimate: Bool = false
+    var coverageNote: String?
 
     static func make(provider: UsageProvider, snapshot: CostUsageTokenSnapshot?) -> Self? {
         guard let snapshot else { return nil }
@@ -137,6 +139,7 @@ struct MidasProviderPresentation {
     var activitySummary: String?
     var cloudUsage: MidasCloudUsagePresentation?
     var spend: MidasSpendPresentation?
+    var spendUnavailableReason: String?
     let isRefreshing: Bool
     let isStale: Bool
     let updatedAt: Date?
@@ -186,10 +189,11 @@ struct MidasProviderPresentation {
                     resetText: card?.metrics.first(where: { $0.id == "primary" })?.resetText ?? session.resetsAt.map {
                         "Resets \(UsageFormatter.resetCountdownDescription(from: $0, now: Date()))"
                     } ?? session.resetDescription,
-                    helpText: session.resetsAt?.formatted(date: .complete, time: .shortened)), at: 0)
+                    helpText: session.resetsAt?.formatted(date: .complete, time: .shortened),
+                    resetsAt: session.resetsAt), at: 0)
             }
         }
-        let hero: MidasQuotaMetric?
+        var hero: MidasQuotaMetric?
         if provider == .codex,
            let snapshot,
            let weekly = IconRemainingResolver.resolvedWindows(snapshot: snapshot, style: .codex).primary,
@@ -203,9 +207,19 @@ struct MidasProviderPresentation {
                 title: "This week",
                 remainingPercent: min(100, max(0, weekly.remainingPercent)),
                 resetText: resetText,
-                helpText: weekly.resetsAt?.formatted(date: .complete, time: .shortened))
+                helpText: weekly.resetsAt?.formatted(date: .complete, time: .shortened),
+                resetsAt: weekly.resetsAt)
         } else {
             hero = provider == .codex ? nil : quotaMetrics.first
+        }
+        if provider != .codex {
+            for index in quotaMetrics.indices {
+                if quotaMetrics[index].id == "primary" { quotaMetrics[index].resetsAt = snapshot?.primary?.resetsAt }
+                if quotaMetrics[index]
+                    .id == "secondary" { quotaMetrics[index].resetsAt = snapshot?.secondary?.resetsAt }
+            }
+            if hero?.id == "primary" { hero?.resetsAt = snapshot?.primary?.resetsAt }
+            if hero?.id == "secondary" { hero?.resetsAt = snapshot?.secondary?.resetsAt }
         }
         // A provider's setup hint is not a measured balance or usage summary.
         let creditsText = card?.creditsText == ProviderDefaults.metadata[provider]?.creditsHint
@@ -293,4 +307,5 @@ struct MidasAccountPresentation: Identifiable {
     let id: String
     let isPrimary: Bool
     let presentation: MidasProviderPresentation
+    var displayName: String?
 }

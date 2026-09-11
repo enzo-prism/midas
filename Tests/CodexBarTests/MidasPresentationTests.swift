@@ -34,14 +34,22 @@ struct MidasPresentationTests {
     }
 
     @Test func missingWeeklyNeverFallsBackToSession() {
-        let snapshot = UsageSnapshot(primary: self.window(10, minutes: 300), secondary: nil, updatedAt: Date())
+        let snapshot = UsageSnapshot(
+            primary: self.window(10, minutes: 300),
+            secondary: nil,
+            updatedAt: Date())
         #expect(self.present(snapshot).hero == nil)
         #expect(self.present(snapshot).summary == "Weekly usage unavailable")
     }
 
     @Test func weeklyInPrimarySlotUsesWeeklySemantics() {
-        let snapshot = UsageSnapshot(primary: self.window(40, minutes: 10080), secondary: nil, updatedAt: Date())
+        let reset = Date().addingTimeInterval(3600)
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 40, windowMinutes: 10080, resetsAt: reset, resetDescription: nil),
+            secondary: nil,
+            updatedAt: Date())
         #expect(self.present(snapshot).hero?.remainingPercent == 60)
+        #expect(self.present(snapshot).hero?.resetsAt == reset)
     }
 
     @Test func exhaustedIsDifferentFromUnknown() {

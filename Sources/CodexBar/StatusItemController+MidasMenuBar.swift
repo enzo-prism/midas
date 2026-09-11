@@ -59,7 +59,7 @@ extension StatusItemController {
                 + "Other devices and account-by-account cost attribution are unavailable. "
                 + "This is an API-rate estimate, not a bill."
         }
-        return result
+        return self.midasPeriodPresentation(result, token: token)
     }
 
     func updateMidasMenuBar() {

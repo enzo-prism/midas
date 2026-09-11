@@ -12,6 +12,7 @@ struct MidasCloudUsagePresentation {
     let accounts: [Account]
     let tokens: Int?
     let hasEstimate: Bool
+    var period = "Last 30 days · UTC"
 
     var coverage: String {
         let reported = self.accounts.count { $0.usage?.totalTokens != nil }
@@ -27,20 +28,12 @@ struct MidasCloudUsageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Cloud token usage · all devices").font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            Text("Reported tokens · all devices").font(.caption).foregroundStyle(MidasTheme.secondaryText)
             Text(self.summary.tokens.map { $0.formatted(.number.notation(.compactName)) + " tokens" }
                 ?? "History unavailable")
                 .font(.system(size: 24, weight: .medium)).monospacedDigit()
-            Text("Last 30 days · UTC").font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            Text(self.summary.period).font(.caption).foregroundStyle(MidasTheme.secondaryText)
             Text(self.summary.coverage).font(.caption2).foregroundStyle(MidasTheme.secondaryText)
-            Text("Cloud history can lag; an empty account history is not treated as zero.")
-                .font(.caption2).foregroundStyle(MidasTheme.secondaryText)
-            if !self.summary.hasEstimate {
-                Text(
-                    "Cloud spend unavailable: OpenAI does not report "
-                        + "input/cache/output token counts for these accounts.")
-                    .font(.caption2).foregroundStyle(MidasTheme.secondaryText)
-            }
             if self.showsAccounts {
                 ForEach(self.summary.accounts) { account in
                     VStack(alignment: .leading, spacing: 5) {
@@ -48,19 +41,26 @@ struct MidasCloudUsageView: View {
                         Text(account.usage?.totalTokens.map { $0.formatted() + " reported tokens" }
                             ?? "Token history pending or unavailable")
                         if let error = account.error {
-                            Text(error).foregroundStyle(MidasTheme.warning)
+                            DisclosureGroup("Refresh failed") {
+                                Text(error).textSelection(.enabled)
+                            }
+                            .foregroundStyle(MidasTheme.warning)
                         }
                         if let usage = account.usage {
                             Text("Stats as of \(usage.statsAsOf)").foregroundStyle(MidasTheme.secondaryText)
                             if !usage.models.isEmpty {
-                                Text("Model usage (provider \(usage.modelUnits) units, not token counts)")
-                                    .foregroundStyle(MidasTheme.secondaryText)
-                                ForEach(usage.models, id: \.model) { model in
-                                    HStack {
-                                        Text(model.model)
-                                        Spacer()
-                                        Text(model.value.formatted(.number.precision(.fractionLength(2))))
-                                    }
+                                DisclosureGroup("Model usage") {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Provider \(usage.modelUnits) units; not token counts.")
+                                            .foregroundStyle(MidasTheme.secondaryText)
+                                        ForEach(usage.models, id: \.model) { model in
+                                            HStack {
+                                                Text(model.model)
+                                                Spacer()
+                                                Text(model.value.formatted(.number.precision(.fractionLength(2))))
+                                            }
+                                        }
+                                    }.padding(.top, 6)
                                 }
                             }
                         }

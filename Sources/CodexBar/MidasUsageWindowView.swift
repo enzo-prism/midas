@@ -9,6 +9,7 @@ struct MidasUsageWindowView: View {
     let presentation: (UsageProvider) -> MidasProviderPresentation
     let actions: MidasActions
     @State private var showsCosts = false
+    @State private var showsPeriodPicker = false
     @State private var period: MidasCostPresentation.Period = .month
 
     private var providers: [UsageProvider] {
@@ -112,15 +113,19 @@ struct MidasUsageWindowView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Overview")
                         .font(.system(size: 29, weight: .semibold))
-                    Text("Token spend (API rates), remaining capacity, and activity.")
-                        .foregroundStyle(MidasTheme.secondaryText)
                 }
                 Spacer()
                 Button(action: self.actions.refresh) { Image(systemName: "arrow.clockwise") }
                     .help("Refresh usage")
                     .accessibilityLabel("Refresh usage")
             }
-            MidasTotalSpendView(presentations: self.providers.map(self.presentation))
+            MidasTotalSpendView(
+                presentations: self.providers.map(self.presentation),
+                periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label,
+                periodAction: { self.showsPeriodPicker = true })
+                .popover(isPresented: self.$showsPeriodPicker) {
+                    MidasSpendPeriodPicker(settings: self.settings, store: self.store)
+                }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 16))
@@ -138,9 +143,6 @@ struct MidasUsageWindowView: View {
                         self.overviewCard(self.presentation(provider))
                     }
                 }
-                Text("Each provider has its own limits and reset periods. Select one to explore usage and costs.")
-                    .font(.callout)
-                    .foregroundStyle(MidasTheme.secondaryText)
             }
         }
     }
@@ -158,19 +160,16 @@ struct MidasUsageWindowView: View {
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }
+                Text(item.spend.flatMap {
+                    $0.isEstimate ? MidasOverviewMoney.format($0.amount, currency: $0.currency) : nil
+                } ?? "—")
+                    .font(.system(size: 28, weight: .medium)).monospacedDigit()
+                    .accessibilityLabel("Estimated inference spend")
+                    .accessibilityValue(item.spend?.value ?? "Unavailable")
                 MidasOverviewMetrics(item: item, accounts: self.actions.accountPresentations(item.provider))
-                HStack(alignment: .top, spacing: 6) {
-                    if item.isRefreshing {
-                        ProgressView().controlSize(.mini)
-                    } else if item.error != nil || item.isStale {
-                        Image(systemName: "exclamationmark.circle").foregroundStyle(MidasTheme.warning)
-                    }
-                    Text(item
-                        .error != nil ? "Needs attention" :
-                        (self.actions.accountPresentations(item.provider).count > 1 ? nil : item.hero?.resetText) ??
-                        item.freshness)
+                if item.spend?.isEstimate != true {
+                    Text(item.spendUnavailableReason ?? "Estimate unavailable")
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
-                        .multilineTextAlignment(.leading)
                 }
             }
             .padding(20)

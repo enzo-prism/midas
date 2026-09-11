@@ -30,6 +30,8 @@ struct SettingsDefaultsState {
     var historicalTrackingEnabled: Bool
     var midasCloudUsageEnabled: Bool
     var midasCloudUSDPerMillionTokens: Double
+    var midasSpendPeriodSelection: String
+    var midasAccountAliases: [String: String]
     var midasTrackAllAccounts: Bool
     var multiAccountMenuLayoutRaw: String
     var menuBarMetricPreferencesRaw: [String: String]

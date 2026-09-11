@@ -276,6 +276,22 @@ extension SettingsStore {
         }
     }
 
+    var midasSpendPeriodSelection: String {
+        get { self.defaultsState.midasSpendPeriodSelection }
+        set {
+            self.defaultsState.midasSpendPeriodSelection = newValue
+            self.userDefaults.set(newValue, forKey: "midasSpendPeriodSelection")
+        }
+    }
+
+    var midasAccountAliases: [String: String] {
+        get { self.defaultsState.midasAccountAliases }
+        set {
+            self.defaultsState.midasAccountAliases = newValue
+            self.userDefaults.set(newValue, forKey: "midasAccountAliases")
+        }
+    }
+
     var midasTrackAllAccounts: Bool {
         get { self.defaultsState.midasTrackAllAccounts }
         set {

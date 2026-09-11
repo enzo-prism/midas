@@ -449,6 +449,8 @@ extension SettingsStore {
             historicalTrackingEnabled: historicalTrackingEnabled,
             midasCloudUsageEnabled: userDefaults.bool(forKey: "midasCloudUsageEnabled"),
             midasCloudUSDPerMillionTokens: userDefaults.double(forKey: "midasCloudUSDPerMillionTokens"),
+            midasSpendPeriodSelection: userDefaults.string(forKey: "midasSpendPeriodSelection") ?? "currentMonth",
+            midasAccountAliases: userDefaults.dictionary(forKey: "midasAccountAliases") as? [String: String] ?? [:],
             midasTrackAllAccounts: userDefaults.bool(forKey: "midasTrackAllAccounts"),
             multiAccountMenuLayoutRaw: multiAccountMenuLayoutRaw,
             menuBarMetricPreferencesRaw: resolvedPreferences,
