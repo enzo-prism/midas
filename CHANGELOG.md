@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.35.1 — September 12, 2026
+
+- Anchor the spend-period dropdown to its button in the overview and Usage window.
+- Add clear hover, pressed, open, selected, and keyboard-focus states with larger option rows.
+- Preview date ranges and support arrow-key navigation, Return to select, and Escape to dismiss.
+- Show an empty-history state, retain the selected historical month, and validate recorded dates.
+- Use displayed providers’ history to populate historical month choices.
+
+Build 104. Period changes affect spend estimates; quota reset schedules are unchanged.
+
 ## Midas 0.35.0 — September 12, 2026
 
 - Guide new users through Services, Accounts, and Overview; preserve progress and open the menu-bar overview on completion.
@@ -12,7 +22,7 @@
 - Keep provider settings responsive by deferring navigation, rendering panes lazily, and avoiding display-time Keychain reads.
 - Respect account privacy throughout onboarding and retain existing provider credentials and settings.
 
-This source targets build 103. Public availability is determined by the signed assets on the latest GitHub release, not by this changelog.
+Version 0.35.0 was released as build 103. Public availability is determined by the signed assets on the latest GitHub release, not by this changelog.
 
 ## Midas 0.33.3 — September 4, 2026
 

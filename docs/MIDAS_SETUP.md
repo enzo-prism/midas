@@ -54,3 +54,15 @@ still have history pending or unavailable. For Codex, use the account's reconnec
 connection has expired. If tokens appear but dollars do not, inspect Codex estimate options:
 automatic pricing needs a usable priced sample, or you can supply your own blended rate.
 Finishing setup does not wait for every provider request; background refresh continues.
+
+## Choosing a spend period
+
+Click the calendar button below the total to choose **This month**, **Last 30 days**, or a recorded month.
+The dropdown is anchored to the button and previews each date range. Gold marks the selected option;
+hover, press, and keyboard focus have distinct feedback. Use Up/Down to move, Return to select,
+and Escape or the close button to dismiss. Selecting a period updates the label and spend totals.
+
+Recorded months come from valid daily history for displayed providers. Earlier months scroll when
+needed; an empty-history message appears when none are available. A selected historical month remains
+selectable if its cached history disappears. Recorded history can be incomplete, and changing the
+spend period does not change provider quota reset schedules.

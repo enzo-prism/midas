@@ -3,7 +3,7 @@ import SwiftUI
 struct MidasTotalSpendView: View {
     let presentations: [MidasProviderPresentation]
     var periodLabel: String?
-    var periodAction: (() -> Void)?
+    var periodControl: AnyView?
     @State private var showsCoverage = false
 
     private var total: MidasTotalSpend {
@@ -32,10 +32,8 @@ struct MidasTotalSpendView: View {
                 }
             }
             HStack(alignment: .firstTextBaseline) {
-                if let periodAction {
-                    Button(action: periodAction) {
-                        Label(self.periodLabel ?? total.periodText, systemImage: "chevron.down")
-                    }.buttonStyle(.plain)
+                if let periodControl {
+                    periodControl
                 } else if !total.totals.isEmpty || self.periodLabel != nil {
                     Text(self.periodLabel ?? total.periodText)
                 }

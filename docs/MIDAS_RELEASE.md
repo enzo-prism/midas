@@ -21,6 +21,12 @@ Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
 
+## 0.35.1 changes
+
+Version 0.35.1, build 104, targets `v0.35.1-midas.1`. It improves the spend-period dropdown
+with direct anchoring, distinct interaction states, date previews, keyboard controls, and validated
+historical-month choices. See [setup](MIDAS_SETUP.md#choosing-a-spend-period).
+
 ## 0.35.0 changes
 
 See [the changelog](../CHANGELOG.md) and [setup and estimate coverage](MIDAS_SETUP.md).

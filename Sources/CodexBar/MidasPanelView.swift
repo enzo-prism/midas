@@ -7,7 +7,6 @@ struct MidasPanelView: View {
     @Bindable var navigation: MidasNavigationState
     let presentation: (UsageProvider) -> MidasProviderPresentation
     let actions: MidasActions
-    @State private var showsPeriodPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,10 +78,7 @@ struct MidasPanelView: View {
             MidasTotalSpendView(
                 presentations: self.providers.map(self.presentation),
                 periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label,
-                periodAction: { self.showsPeriodPicker = true })
-                .popover(isPresented: self.$showsPeriodPicker) {
-                    MidasSpendPeriodPicker(settings: self.settings, store: self.store)
-                }
+                periodControl: AnyView(MidasSpendPeriodControl(settings: self.settings, store: self.store)))
             if self.providers.isEmpty {
                 Button("Connect an account", action: self.actions.settings)
                     .buttonStyle(.borderedProminent).padding(.vertical, 16)

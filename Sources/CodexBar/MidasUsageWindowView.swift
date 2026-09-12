@@ -9,7 +9,6 @@ struct MidasUsageWindowView: View {
     let presentation: (UsageProvider) -> MidasProviderPresentation
     let actions: MidasActions
     @State private var showsCosts = false
-    @State private var showsPeriodPicker = false
     @State private var period: MidasCostPresentation.Period = .month
 
     private var providers: [UsageProvider] {
@@ -122,10 +121,7 @@ struct MidasUsageWindowView: View {
             MidasTotalSpendView(
                 presentations: self.providers.map(self.presentation),
                 periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label,
-                periodAction: { self.showsPeriodPicker = true })
-                .popover(isPresented: self.$showsPeriodPicker) {
-                    MidasSpendPeriodPicker(settings: self.settings, store: self.store)
-                }
+                periodControl: AnyView(MidasSpendPeriodControl(settings: self.settings, store: self.store)))
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 16))

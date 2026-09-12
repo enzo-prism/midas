@@ -75,6 +75,15 @@ struct MidasSpendPeriodTests {
         #expect(result.isPartial)
     }
 
+    @Test func pickerRejectsInvalidDatesAndKeepsSelectedMonth() {
+        let months = MidasSpendPeriodChoices.recordedMonths(
+            dates: ["2026-08-01", "2026-08-31", "2026-02-30", "2026-09-01", "2027-01-01", "bad-date!!"],
+            selection: "2026-07",
+            now: self.now)
+        #expect(months == ["2026-08", "2026-07"])
+        #expect(MidasSpendPeriodChoices.recordedMonths(dates: [], now: self.now).isEmpty)
+    }
+
     private func day(_ date: String, _ cost: Double?) -> CostUsageDailyReport.Entry {
         .init(
             date: date,
