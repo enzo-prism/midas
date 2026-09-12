@@ -6,9 +6,10 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release candidate is version 0.35.0, build 103, targeting `v0.35.0-midas.1`.
-As of September 11, the published distribution remains 0.33.6, build 88, tagged
-`v0.33.6-midas.1`, until the new signed assets are published. Check GitHub releases for live status.
+As of September 12, the published distribution is version 0.35.0, build 103, tagged
+`v0.35.0-midas.1`, from commit `07c2c1f2e0a6e2240a7e3cccb094f64c8b0b71c4`.
+The signed archive, notarization ticket, public download, and Sparkle install/relaunch were verified.
+Check GitHub releases for live status.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
 and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
 
