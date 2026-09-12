@@ -32,7 +32,7 @@ struct MidasCodexEstimate {
 }
 
 /// A pricing sample, never additional usage to add to the cloud total.
-struct MidasCodexCalibration: Codable, Equatable {
+struct MidasCodexCalibration: Codable, Equatable, Sendable {
     let rate: Double
     let pricedTokens: Double
     let observedTokens: Double
@@ -100,6 +100,17 @@ struct MidasCodexCalibration: Codable, Equatable {
 
 extension UsageStore {
     var midasCodexAutomaticEstimate: MidasCodexEstimate? {
+        if self.settings.midasCalibrationSharingEnabled,
+           let shared = self.midasSharedCalibration,
+           shared.scope == self.midasCalibrationPortableScope,
+           let estimate = shared.calibration.estimate(now: Date())
+        {
+            return MidasCodexEstimate(
+                rate: estimate.rate,
+                detail: estimate.detail.replacingOccurrences(
+                    of: "this Mac’s", with: "shared Mac \(shared.deviceID.uuidString.prefix(4))’s")
+                    + " Shared through iCloud Drive; devices converge after file delivery.")
+        }
         guard self.midasCodexCalibrationScope == self.tokenCostScope(for: .codex).signature else { return nil }
         return self.midasCodexCalibration?.estimate(now: Date())
     }
@@ -130,6 +141,7 @@ extension UsageStore {
 
     func scheduleMidasCodexCalibration(now: Date) {
         guard !SettingsStore.isRunningTests else { return }
+        self.scheduleMidasCalibrationSharing(now: now)
         let scope = self.tokenCostScope(for: .codex)
         if self.midasCodexCalibrationScope != scope.signature {
             self.midasCodexCalibrationTask?.cancel()
@@ -163,6 +175,7 @@ extension UsageStore {
                     snapshot: fresh,
                     now: now)
             }
+            self.scheduleMidasCalibrationSharing(now: Date(), force: true)
             self.repriceMidasCloudUsage()
             self.persistWidgetSnapshot(reason: "codex-automatic-estimate")
         }

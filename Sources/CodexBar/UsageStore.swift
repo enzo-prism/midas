@@ -97,6 +97,12 @@ final class UsageStore {
     var codexAccountSnapshots: [CodexAccountUsageSnapshot] = []
     var kiloScopeSnapshots: [KiloScopeSnapshot] = []
     var midasCloudAccounts: [String: CodexCloudAccountUsage] = [:]
+    var midasSharedCalibration: MidasCalibrationExchange.Record?
+    var midasCalibrationSharingStatus = ""
+    @ObservationIgnored var midasCalibrationSharingTask: Task<Void, Never>?
+    @ObservationIgnored var midasCalibrationSharingGeneration = UUID()
+    @ObservationIgnored var midasCalibrationSharingScope: String?
+    @ObservationIgnored var midasCalibrationSharingAttempt: Date?
     var midasCodexCalibration: MidasCodexCalibration?
     @ObservationIgnored var midasCodexCalibrationScope: String?
     @ObservationIgnored var midasCodexCalibrationTask: Task<Void, Never>?
@@ -707,6 +713,7 @@ final class UsageStore {
 
     deinit {
         self.midasCodexCalibrationTask?.cancel()
+        self.midasCalibrationSharingTask?.cancel()
         self.timerTask?.cancel()
         self.tokenTimerTask?.cancel()
         self.tokenRefreshSequenceTask?.cancel()

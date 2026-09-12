@@ -29,6 +29,7 @@ extension SettingsStore {
         _ = self.kiroMenuBarDisplayMode
         _ = self.historicalTrackingEnabled
         _ = self.midasCloudUsageEnabled
+        _ = self.midasCalibrationSharingEnabled
         _ = self.midasCodexEstimateMode
         _ = self.midasCloudUSDPerMillionTokens
         _ = self.midasSpendPeriodSelection

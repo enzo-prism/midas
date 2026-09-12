@@ -448,6 +448,7 @@ extension SettingsStore {
             kiroMenuBarDisplayModeRaw: kiroMenuBarDisplayModeRaw,
             historicalTrackingEnabled: historicalTrackingEnabled,
             midasCloudUsageEnabled: userDefaults.bool(forKey: "midasCloudUsageEnabled"),
+            midasCalibrationSharingEnabled: userDefaults.bool(forKey: "midasCalibrationSharingEnabled"),
             midasCodexEstimateMode: MidasCodexEstimateMode.load(from: userDefaults),
             midasCloudUSDPerMillionTokens: userDefaults.double(forKey: "midasCloudUSDPerMillionTokens"),
             midasSpendPeriodSelection: userDefaults.string(forKey: "midasSpendPeriodSelection") ?? "currentMonth",

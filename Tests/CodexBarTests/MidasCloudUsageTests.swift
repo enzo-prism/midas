@@ -91,6 +91,27 @@ struct MidasCloudUsageTests {
         store.midasCodexCalibrationScope = "old scope"
         store.repriceMidasCloudUsage()
         #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == nil)
+        settings.midasCalibrationSharingEnabled = true
+        let scope = try #require(store.midasCalibrationPortableScope)
+        store.midasSharedCalibration = MidasCalibrationExchange.Record(
+            deviceID: UUID(),
+            scope: scope,
+            calibration: MidasCodexCalibration(
+                rate: 1.25,
+                pricedTokens: 2_000_000,
+                observedTokens: 2_000_000,
+                sampledAt: date,
+                lastUsageDay: CodexCloudAccountUsage.window(now: date).end))
+        store.repriceMidasCloudUsage()
+        #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == 1.25)
+        #expect(store.tokenSnapshots[.codex]?.last30DaysTokens == 1_000_000)
+        settings.midasCodexEstimateMode = .custom
+        store.repriceMidasCloudUsage()
+        #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == 2)
+        settings.midasCodexEstimateMode = .automatic
+        settings.midasCalibrationSharingEnabled = false
+        store.repriceMidasCloudUsage()
+        #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == nil)
     }
 
     @Test func cloudTokensCombineWithoutPricingPercentages() throws {

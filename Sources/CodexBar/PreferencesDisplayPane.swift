@@ -202,9 +202,10 @@ struct DisplayPane: View {
                 switch self.settings.midasCodexEstimateMode {
                 case .automatic:
                     Text(self.store.midasCodexEstimate == nil
-                        ? "Estimate available after priced Codex activity on this Mac."
-                        : "Uses this Mac’s observed model mix to estimate cloud usage.")
+                        ? "Waiting for a priced local or shared sample."
+                        : "Uses an observed pricing mix to estimate cloud usage.")
                         .font(.caption).foregroundStyle(.secondary)
+                    MidasCalibrationSharingView(settings: self.settings, store: self.store)
                 case .custom:
                     TextField(
                         "USD per million tokens",

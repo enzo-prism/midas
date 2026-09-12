@@ -142,12 +142,13 @@ struct MidasSpendSetupView: View {
             .pickerStyle(.segmented)
             switch self.estimateMode {
             case .automatic:
-                Text("Uses this Mac’s observed model mix to estimate usage across devices.")
+                Text("Uses an observed pricing mix to estimate usage across devices.")
                     .font(.callout).foregroundStyle(.secondary)
                 if self.store.midasCodexAutomaticEstimate == nil {
-                    Text("Estimate available after priced Codex activity on this Mac.")
+                    Text("Waiting for a priced local or shared sample.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                MidasCalibrationSharingView(settings: self.settings, store: self.store)
             case .custom:
                 HStack {
                     Text("USD per million tokens")

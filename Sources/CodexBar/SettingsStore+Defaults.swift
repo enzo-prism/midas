@@ -267,6 +267,23 @@ extension SettingsStore {
         }
     }
 
+    var midasCalibrationSharingEnabled: Bool {
+        get { self.defaultsState.midasCalibrationSharingEnabled }
+        set {
+            self.defaultsState.midasCalibrationSharingEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "midasCalibrationSharingEnabled")
+        }
+    }
+
+    var midasCalibrationDeviceID: UUID {
+        if let raw = self.userDefaults.string(forKey: "midasCalibrationDeviceID"), let id = UUID(uuidString: raw) {
+            return id
+        }
+        let id = UUID()
+        self.userDefaults.set(id.uuidString, forKey: "midasCalibrationDeviceID")
+        return id
+    }
+
     var midasCodexEstimateMode: MidasCodexEstimateMode {
         get { self.defaultsState.midasCodexEstimateMode }
         set {
