@@ -21,6 +21,12 @@ Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
 
+## 0.35.2 release candidate
+
+Version 0.35.2, build 105, adds per-account Codex banked reset counts, explicit missing and stale
+reading states, and fresh menu-bar pop-up anchoring on every opening. Publication remains pending
+until the signed archive and update feed are verified publicly.
+
 ## 0.35.1 changes
 
 Version 0.35.1, build 104, is published as `v0.35.1-midas.1`. It improves the spend-period dropdown

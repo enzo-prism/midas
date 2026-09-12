@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private weak var controller: StatusItemController?
-    private let popover = NSPopover()
+    private var popover = NSPopover()
     private let navigation = MidasNavigationState()
     private let usageNavigation = MidasNavigationState()
     private var usageWindow: NSWindow?
@@ -28,6 +28,13 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
         self.closePopover()
         guard let controller = self.controller else { return }
         self.anchor = button
+        // A status-item window can move between displays or be recreated during menu-bar updates.
+        // Never reuse an AppKit presentation window that retains geometry from an earlier opening.
+        self.popover.delegate = nil
+        self.popover = NSPopover()
+        self.popover.behavior = .transient
+        self.popover.delegate = self
+        button.window?.contentView?.layoutSubtreeIfNeeded()
         if controller.usesMidasMenuBar { self.navigation.provider = provider }
         if let provider { self.navigation.provider = provider }
         if let selected = self.navigation.provider,
@@ -55,6 +62,17 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
         self.popover.contentViewController?.view.window?.makeKey()
         controller.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(
             for: controller.store.enabledProvidersForDisplay())
+        let presentedPopover = self.popover
+        DispatchQueue.main.async { [weak self, weak button, weak presentedPopover] in
+            guard let self, let button, let presentedPopover,
+                  self.popover === presentedPopover, presentedPopover.isShown,
+                  self.anchor === button, button.window != nil
+            else { return }
+            // Activation and status-item width updates may settle after show(relativeTo:of:).
+            // Keep the positioning rectangle in the button's local coordinates, never screen coordinates.
+            button.window?.contentView?.layoutSubtreeIfNeeded()
+            presentedPopover.positioningRect = button.bounds
+        }
         self.scheduleVisibleRetry()
     }
 
@@ -78,7 +96,9 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     func popoverDidClose(_ notification: Notification) {
         // A delayed notification for an old presentation must not clear a reopened panel.
-        guard !self.popover.isShown else { return }
+        guard let closedPopover = notification.object as? NSPopover,
+              closedPopover === self.popover, !closedPopover.isShown
+        else { return }
         self.retryTask?.cancel()
         self.retryTask = nil
         self.popover.contentViewController = nil

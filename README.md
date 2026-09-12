@@ -10,9 +10,10 @@
 > (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
 > refer to the original CodexBar project, not this fork.
 
-## Midas 0.35.0
+## Midas 0.35.2
 
-The latest source adds a focused monthly spend overview, separate usage bars and reset times
+The latest source adds per-account banked reset counts and refreshed menu-bar pop-up anchoring,
+alongside a focused monthly spend overview, separate usage bars and reset times
 for connected Codex accounts, cloud account activity, automatic Codex dollar estimates, optional
 iCloud pricing-sample sharing, and a three-step onboarding flow.
 

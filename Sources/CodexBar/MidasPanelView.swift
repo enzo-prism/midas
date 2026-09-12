@@ -159,6 +159,9 @@ struct MidasOverviewMetrics: View {
                     .font(.caption)
                     .foregroundStyle(self.item.error != nil ? MidasTheme.warning : MidasTheme.secondaryText)
             }
+            if self.accounts.count <= 1 {
+                MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.item)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

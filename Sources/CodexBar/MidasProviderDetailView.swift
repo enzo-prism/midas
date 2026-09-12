@@ -21,6 +21,7 @@ struct MidasProviderDetailView: View {
                 ForEach(self.presentation.metrics) { metric in
                     MidasAccountQuotaBar(metric: metric)
                 }
+                MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.presentation)
             }
             if let error = self.presentation.error {
                 VStack(alignment: .leading, spacing: 8) {
@@ -100,8 +101,8 @@ struct MidasProviderDetailView: View {
                     if let plan = self.presentation.plan, !plan.isEmpty { Text(plan) }
                 }
                 if let activity = self.presentation.activitySummary { Text(activity) }
-                if let resets = self.presentation.resetCreditsText {
-                    Text(resets)
+                if self.accounts.count <= 1, let resets = self.presentation.resetCreditsText {
+                    Text("Banked resets: \(resets)")
                     if let help = self.presentation.resetCreditsHelp { Text(help) }
                 }
                 ForEach(Array(self.presentation.notes.enumerated()), id: \.offset) { _, note in

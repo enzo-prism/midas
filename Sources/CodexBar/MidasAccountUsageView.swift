@@ -25,6 +25,7 @@ struct MidasAccountUsageView: View {
                             .font(.caption).foregroundStyle(MidasTheme.warning)
                             .help(account.presentation.error ?? account.presentation.freshness)
                     }
+                    MidasBankedResetsRow(presentation: account.presentation)
                     self.details(for: account, metrics: metrics)
                 }
             }
@@ -39,6 +40,9 @@ struct MidasAccountUsageView: View {
                 }
                 if let plan = account.presentation.plan, !plan.isEmpty {
                     Text(plan)
+                }
+                if account.presentation.provider == .codex, let help = account.presentation.resetCreditsHelp {
+                    Text("Banked resets: \(help)")
                 }
                 ForEach(metrics) { metric in
                     if let reset = metric.resetsAt {
@@ -279,6 +283,7 @@ struct MidasAccountOverviewBars: View {
                         }
                         .font(.callout)
                     }
+                    MidasBankedResetsRow(presentation: account.presentation)
                     if account.presentation.isStale || account.presentation.error != nil {
                         Text(metrics.isEmpty ? "Needs attention" : "Last known usage")
                             .font(.caption).foregroundStyle(MidasTheme.warning)
@@ -324,5 +329,33 @@ extension StatusItemController {
                 presentation: presentation,
                 displayName: names[account.id.uuidString])
         }
+    }
+}
+
+/// Reset credits are account-owned counts, separate from percentage quotas and scheduled resets.
+struct MidasBankedResetsRow: View {
+    let presentation: MidasProviderPresentation
+
+    var body: some View {
+        if self.presentation.provider == .codex {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Banked resets")
+                Spacer(minLength: 8)
+                Text(MidasBankedResetsState.value(self.presentation)).monospacedDigit()
+            }
+            .font(.caption)
+            .foregroundStyle(MidasTheme.secondaryText)
+            .help(self.presentation.resetCreditsHelp ?? "Reset availability has not been reported for this account.")
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+enum MidasBankedResetsState {
+    static func value(_ presentation: MidasProviderPresentation) -> String {
+        if let count = presentation.resetCreditsText {
+            return presentation.isStale || presentation.error != nil ? "\(count) · last known" : count
+        }
+        return presentation.isRefreshing ? "Refreshing…" : "Unavailable"
     }
 }

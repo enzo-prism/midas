@@ -226,6 +226,7 @@ struct MidasProviderPresentation {
             ? nil : card?.creditsText
         let financialSummary = card?.providerCost?.spendLine ?? creditsText
         let resetCredits = card?.metrics.first { $0.id == "codex-reset-credits" }
+        let scopedResets = provider == .codex ? snapshot?.codexResetCredits : nil
         let unknownQuotaNotes: [String] = provider == .codex ? (card?.metrics.compactMap { metric in
             guard metric.id != "codex-reset-credits", let status = metric.statusText else { return nil }
             return "\(metric.title): \(status)"
@@ -246,8 +247,11 @@ struct MidasProviderPresentation {
             plan: card?.planText,
             hero: hero,
             metrics: quotaMetrics.filter { $0.id != hero?.id },
-            resetCreditsText: resetCredits?.statusText,
-            resetCreditsHelp: resetCredits?.helpText,
+            resetCreditsText: scopedResets
+                .map { CodexResetCreditFormatting.countText(availableCount: $0.availableCount) }
+                ?? resetCredits?.statusText,
+            resetCreditsHelp: scopedResets.map { CodexResetCreditFormatting.tooltipText(snapshot: $0) }
+                ?? resetCredits?.helpText,
             freshness: freshness,
             error: error,
             placeholder: provider == .codex ? "Weekly usage unavailable" : card?.placeholder,

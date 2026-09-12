@@ -1,5 +1,14 @@
 # Changelog
 
+## Midas 0.35.2 — September 12, 2026
+
+- Show banked resets separately for every displayed Codex account in the overview and account details.
+- Distinguish zero available resets from unavailable readings; label retained counts as last known and show reported expiry details.
+- Keep reset counts available even when weekly quota data is missing.
+- Refresh the menu-bar pop-up and its anchor each time it opens to prevent stale positioning.
+
+Build 105.
+
 ## Midas 0.35.1 — September 12, 2026
 
 - Anchor the spend-period dropdown to its button in the overview and Usage window.
