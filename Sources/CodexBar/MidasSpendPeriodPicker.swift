@@ -135,6 +135,7 @@ struct MidasSpendPeriodPicker: View {
             }.frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
         }
         .buttonStyle(MidasPeriodButtonStyle(selected: selected, focused: self.focusedSelection == selection))
+        .focusable()
         .focused(self.$focusedSelection, equals: selection)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
