@@ -47,7 +47,7 @@ struct MidasSpendSetupView: View {
                 Button("Done") { self.dismiss() }
                     .disabled(self.coordinator.isAuthenticatingManagedAccount)
             }
-            Text("Connect once on each Mac. Midas combines available estimates into your 30-day dollar total.")
+            Text("Connect once on each Mac. Midas combines available dollar estimates across your accounts.")
                 .foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {

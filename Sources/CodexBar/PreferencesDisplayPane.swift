@@ -265,7 +265,7 @@ struct DisplayPane: View {
 
     static func menuBarDescription(_ mode: MidasMenuBarMode) -> String {
         switch mode {
-        case .orbit: "Token spend (API rates) first, with an orb for your chosen provider’s remaining capacity."
+        case .orbit: "Estimated inference spend first, with an orb for your chosen provider’s remaining capacity."
         case .ledger: "A compact estimate of usage value, with source and coverage details inside Midas."
         case .focus: "Keep one provider in view. Codex always shows weekly capacity remaining."
         case .constellation: "Up to three enabled providers, prioritizing Codex, Cursor, and Meta."
