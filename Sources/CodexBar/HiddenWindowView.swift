@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HiddenWindowView: View {
+    @Bindable var selection: PreferencesSelection
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -8,6 +9,12 @@ struct HiddenWindowView: View {
             .frame(width: 20, height: 20)
             .onReceive(NotificationCenter.default.publisher(for: .codexbarOpenSettings)) { _ in
                 Task { @MainActor in
+                    self.openSettings()
+                }
+            }
+            .task {
+                if self.selection.requestsSpendSetup {
+                    NSApp.activate(ignoringOtherApps: true)
                     self.openSettings()
                 }
             }

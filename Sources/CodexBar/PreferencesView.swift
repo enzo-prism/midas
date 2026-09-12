@@ -49,6 +49,8 @@ enum PreferencesTab: String, CaseIterable, Hashable {
 struct PreferencesView: View {
     @State private var showsSpendSetup = false
     @State private var spendSetupProvider: UsageProvider?
+    @State private var finishesSpendSetup = false
+    @State private var defersSpendSetup = false
     @Bindable var settings: SettingsStore
     @Bindable var store: UsageStore
     let updater: UpdaterProviding
@@ -56,6 +58,7 @@ struct PreferencesView: View {
     let managedCodexAccountCoordinator: ManagedCodexAccountCoordinator
     let codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator
     let runProviderLoginFlow: @MainActor (UsageProvider) async -> Void
+    let openMidas: @MainActor () -> Void
 
     init(
         settings: SettingsStore,
@@ -64,7 +67,8 @@ struct PreferencesView: View {
         selection: PreferencesSelection,
         managedCodexAccountCoordinator: ManagedCodexAccountCoordinator = ManagedCodexAccountCoordinator(),
         codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator? = nil,
-        runProviderLoginFlow: @escaping @MainActor (UsageProvider) async -> Void = { _ in })
+        runProviderLoginFlow: @escaping @MainActor (UsageProvider) async -> Void = { _ in },
+        openMidas: @escaping @MainActor () -> Void = {})
     {
         self.settings = settings
         self.store = store
@@ -77,6 +81,7 @@ struct PreferencesView: View {
                 usageStore: store,
                 managedAccountCoordinator: managedCodexAccountCoordinator)
         self.runProviderLoginFlow = runProviderLoginFlow
+        self.openMidas = openMidas
     }
 
     private var availableHeight: CGFloat {
@@ -115,8 +120,11 @@ struct PreferencesView: View {
                         .accessibilityAddTraits(self.selection.tab == tab ? .isSelected : [])
                     }
                 }
-                Button("Set up accounts & spend") { self.showsSpendSetup = true }
-                    .buttonStyle(.borderedProminent)
+                Button(self.selection.spendSetupPending ? "Continue setup" : "Set up Midas") {
+                    if !self.selection.spendSetupPending { self.selection.spendSetupStep = .services }
+                    self.showsSpendSetup = true
+                }
+                .buttonStyle(.borderedProminent)
                 Spacer()
                 Text("Made for a little more clarity.")
                     .font(.caption2)
@@ -145,20 +153,62 @@ struct PreferencesView: View {
                 settings: self.settings,
                 store: self.store,
                 coordinator: self.managedCodexAccountCoordinator,
-                openProvider: { self.spendSetupProvider = $0 })
+                openProvider: {
+                    self.spendSetupProvider = $0
+                    self.selection.spendSetupStep = .accounts
+                    self.selection.spendSetupPending = true
+                    self.showsSpendSetup = false
+                },
+                onFinish: {
+                    self.finishesSpendSetup = true
+                    self.showsSpendSetup = false
+                },
+                initialStep: self.selection.spendSetupStep,
+                runProviderLoginFlow: self.runProviderLoginFlow,
+                onStepChange: { self.selection.spendSetupStep = $0 },
+                onDefer: { self.defersSpendSetup = true; self.showsSpendSetup = false })
+                .onAppear {
+                    self.settings.userDefaults.set(true, forKey: MidasOnboardingLaunch.presentedKey)
+                    self.settings.userDefaults.removeObject(forKey: MidasOnboardingLaunch.pendingKey)
+                    self.selection.spendSetupPending = true
+                }
         }
         .onAppear {
+            self.consumeSetupRequest()
             self.ensureValidTabSelection()
             NSApp.windows.first {
                 $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
             }?.title = "Midas Settings"
+        }
+        .onChange(of: self.selection.requestsSpendSetup) { _, _ in
+            self.consumeSetupRequest()
         }
         .onChange(of: self.settings.debugMenuEnabled) { _, _ in
             self.ensureValidTabSelection()
         }
     }
 
+    private func consumeSetupRequest() {
+        guard self.selection.requestsSpendSetup else { return }
+        self.selection.requestsSpendSetup = false
+        self.selection.spendSetupStep = .services
+        self.showsSpendSetup = true
+    }
+
     private func finishSpendSetup() {
+        if self.finishesSpendSetup || self.defersSpendSetup {
+            if self.finishesSpendSetup {
+                self.selection.spendSetupPending = false
+                self.selection.spendSetupStep = .services
+            }
+            self.finishesSpendSetup = false
+            self.defersSpendSetup = false
+            NSApp.windows.first {
+                $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
+            }?.close()
+            self.openMidas()
+            return
+        }
         if let provider = self.spendSetupProvider {
             self.spendSetupProvider = nil
             self.selection.showProvider(provider)

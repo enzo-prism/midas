@@ -47,6 +47,18 @@ struct CodexBarApp: App {
         }
 
         let preferencesSelection = PreferencesSelection()
+        let registry = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/CodexBar/managed-codex-accounts.json")
+        preferencesSelection.requestsSpendSetup = MidasOnboardingLaunch.shouldPresent(
+            persistentDefaults: UserDefaults.standard.persistentDomain(
+                forName: Bundle.main.bundleIdentifier ?? "com.steipete.codexbar") ?? [:],
+            hasConfig: FileManager.default.fileExists(atPath: CodexBarConfigStore.defaultURL().path),
+            hasManagedAccounts: FileManager.default.fileExists(atPath: registry.path),
+            isMidas: Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true,
+            isTesting: SettingsStore.isRunningTests)
+        if preferencesSelection.requestsSpendSetup {
+            UserDefaults.standard.set(true, forKey: MidasOnboardingLaunch.pendingKey)
+        }
         let settings = SettingsStore()
         Self.applyLanguagePreference(from: settings)
         configureUsageFormatterLocalizationProvider()
@@ -84,7 +96,7 @@ struct CodexBarApp: App {
         // Hidden 1×1 window to keep SwiftUI's lifecycle alive so `Settings` scene
         // shows the native toolbar tabs even though the UI is AppKit-based.
         WindowGroup("CodexBarLifecycleKeepalive") {
-            HiddenWindowView()
+            HiddenWindowView(selection: self.preferencesSelection)
         }
         .defaultSize(width: 20, height: 20)
         .windowStyle(.hiddenTitleBar)
@@ -99,7 +111,8 @@ struct CodexBarApp: App {
                 codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
                 runProviderLoginFlow: { provider in
                     await self.appDelegate.runProviderLoginFlow(provider)
-                })
+                },
+                openMidas: { self.appDelegate.openMidasAfterSetup() })
         }
         .defaultSize(width: PreferencesTab.general.preferredWidth, height: PreferencesTab.general.preferredHeight)
         .windowResizability(.contentSize)
@@ -415,6 +428,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.confettiOverlayController.dismiss()
         self.dismissAppKitWindowsForShutdown()
         self.terminateActiveProcessesForAppShutdown()
+    }
+
+    func openMidasAfterSetup() {
+        self.ensureStatusController()
+        self.statusController?.openMenuFromShortcut()
     }
 
     func runProviderLoginFlow(_ provider: UsageProvider) async {
