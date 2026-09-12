@@ -6,8 +6,8 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-As of September 12, the published distribution is version 0.35.1, build 104, tagged
-`v0.35.1-midas.1`, from commit `4691c801db257ca5f77bbce831ef58b9a8769821`.
+As of September 12, the published distribution is version 0.35.2, build 105, tagged
+`v0.35.2-midas.1`, from commit `518ea2cce63e0de17d6d40e05a1f43f0774b53d4`.
 The signed archive, notarization ticket, public download, and signed update feed were verified.
 Check GitHub releases for live status.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
@@ -21,11 +21,11 @@ Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
 
-## 0.35.2 release candidate
+## 0.35.2 changes
 
 Version 0.35.2, build 105, adds per-account Codex banked reset counts, explicit missing and stale
-reading states, and fresh menu-bar pop-up anchoring on every opening. Publication remains pending
-until the signed archive and update feed are verified publicly.
+reading states, and fresh menu-bar pop-up anchoring on every opening. The published archive and
+signed update feed passed public checksum, signature, and notarization verification.
 
 ## 0.35.1 changes
 
