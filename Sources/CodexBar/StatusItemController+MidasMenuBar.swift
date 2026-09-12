@@ -25,10 +25,12 @@ extension StatusItemController {
             isStale: self.store.isStale(provider: provider)
                 || (self.settings.midasMenuBarMode != .orbit && self.store.tokenErrors[provider] != nil))
         if provider == .codex, self.settings.midasCloudUsageEnabled {
-            let rows = self.midasAccountPresentations(for: .codex).map { account in
+            // Cloud coverage follows all connected accounts independently of the quota layout.
+            let rows = self.settings.codexVisibleAccountProjection.visibleAccounts.map { account in
                 MidasCloudUsagePresentation.Account(
                     id: account.id,
-                    name: account.presentation.account,
+                    name: self.settings
+                        .hidePersonalInfo ? "Account" : (self.accountInfo(for: account).email ?? "Account"),
                     usage: self.store.midasCloudAccounts[account.id],
                     error: self.store.midasCloudErrors[account.id])
             }

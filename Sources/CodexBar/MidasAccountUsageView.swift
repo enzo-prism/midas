@@ -14,7 +14,8 @@ struct MidasAccountUsageView: View {
                         .help(account.presentation.account)
                     let metrics = MidasAccountQuotaLayout.allMetrics(account.presentation)
                     if metrics.isEmpty {
-                        Text("Usage unavailable").foregroundStyle(MidasTheme.secondaryText)
+                        Text(MidasCodexAccountPolicy.emptyUsageText(account.presentation))
+                            .foregroundStyle(MidasTheme.secondaryText)
                     }
                     ForEach(metrics) { metric in
                         MidasAccountQuotaBar(metric: metric)
@@ -127,6 +128,66 @@ enum MidasAccountNames {
     }
 }
 
+/// Mirrors the refresh policy and keeps selected-account fallback scoped to its authenticated identity.
+enum MidasCodexAccountPolicy {
+    static func visibleAccounts(
+        _ accounts: [CodexVisibleAccount],
+        trackAll: Bool,
+        stacked: Bool) -> [CodexVisibleAccount]
+    {
+        accounts.filter { trackAll || stacked || $0.isActive }.sorted { $0.isActive && !$1.isActive }
+    }
+
+    static func canUseProviderSnapshot(
+        for account: CodexVisibleAccount,
+        refreshGuard: CodexAccountScopedRefreshGuard?) -> Bool
+    {
+        guard account.isActive, let refreshGuard,
+              refreshGuard.source == account.selectionSource,
+              CodexAuthFingerprint.normalize(refreshGuard.authFingerprint)
+              == CodexAuthFingerprint.normalize(account.authFingerprint)
+        else { return false }
+        let identity: CodexIdentity = if let workspace = account.workspaceAccountID?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !workspace.isEmpty
+        {
+            .providerAccount(id: CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID(workspace))
+        } else {
+            CodexIdentityResolver.resolve(accountId: nil, email: account.email)
+        }
+        return identity != .unresolved && refreshGuard.identity == identity
+    }
+
+    static func usage(
+        for account: CodexVisibleAccount,
+        entry: CodexAccountUsageSnapshot?,
+        providerSnapshot: UsageSnapshot?,
+        providerError: String?,
+        refreshGuard: CodexAccountScopedRefreshGuard?) -> (snapshot: UsageSnapshot?, error: String?)
+    {
+        if let entry,
+           entry.account.id == account.id,
+           entry.account.email == account.email,
+           entry.account.workspaceAccountID == account.workspaceAccountID,
+           entry.account.authFingerprint == account.authFingerprint
+        {
+            return (entry.snapshot, entry.error)
+        }
+        guard self.canUseProviderSnapshot(for: account, refreshGuard: refreshGuard) else { return (nil, nil) }
+        if let email = providerSnapshot?.accountEmail(for: .codex),
+           CodexIdentityResolver.normalizeEmail(email) != CodexIdentityResolver.normalizeEmail(account.email)
+        {
+            return (nil, nil)
+        }
+        return (providerSnapshot, providerError)
+    }
+
+    static func emptyUsageText(_ presentation: MidasProviderPresentation) -> String {
+        if presentation.error != nil || presentation.isStale { return "Usage unavailable" }
+        return presentation.isRefreshing ? "Refreshing…" : "Waiting for first update"
+    }
+}
+
 extension StatusItemController {
     func midasAccountPresentations(for provider: UsageProvider) -> [MidasAccountPresentation] {
         guard provider == .codex else { return self.midasTokenAccountPresentations(for: provider) }
@@ -134,19 +195,27 @@ extension StatusItemController {
         let snapshots = Dictionary(
             self.store.codexAccountSnapshots.map { ($0.id, $0) },
             uniquingKeysWith: { _, new in new })
-        let visible = projection.visibleAccounts.sorted { $0.isActive && !$1.isActive }
+        let visible = MidasCodexAccountPolicy.visibleAccounts(
+            projection.visibleAccounts,
+            trackAll: self.settings.midasTrackAllAccounts,
+            stacked: self.settings.multiAccountMenuLayout == .stacked)
         let names = MidasAccountNames.resolve(
             identities: visible.map { ($0.id, self.accountInfo(for: $0).email ?? "") },
             provider: provider,
             aliases: self.settings.midasAccountAliases,
             hidePersonalInfo: self.settings.hidePersonalInfo)
         return visible.map { account in
-            let entry = snapshots[account.id]
-            let snapshot = entry?.snapshot
+            let usage = MidasCodexAccountPolicy.usage(
+                for: account,
+                entry: snapshots[account.id],
+                providerSnapshot: self.store.snapshot(for: .codex),
+                providerError: self.store.error(for: .codex),
+                refreshGuard: self.store.lastCodexAccountScopedRefreshGuard)
+            let snapshot = usage.snapshot
             let card = self.menuCardModel(
                 for: provider,
                 snapshotOverride: snapshot,
-                errorOverride: entry?.error,
+                errorOverride: usage.error,
                 forceOverrideCard: true,
                 accountOverride: self.accountInfo(for: account))
             let presentation = MidasProviderPresentation.make(
@@ -155,7 +224,7 @@ extension StatusItemController {
                 snapshot: snapshot,
                 tokenSnapshot: nil,
                 isRefreshing: self.store.refreshingProviders.contains(provider),
-                isStale: entry?.error != nil || snapshot == nil)
+                isStale: usage.error != nil)
             return MidasAccountPresentation(
                 id: account.id,
                 isPrimary: account.isActive,
@@ -205,7 +274,8 @@ struct MidasAccountOverviewBars: View {
                         HStack {
                             Text(name).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: 8)
-                            Text("Usage unavailable").foregroundStyle(MidasTheme.secondaryText)
+                            Text(MidasCodexAccountPolicy.emptyUsageText(account.presentation))
+                                .foregroundStyle(MidasTheme.secondaryText)
                         }
                         .font(.callout)
                     }

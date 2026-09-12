@@ -19,6 +19,10 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
 
 ## Accounts, computers, and estimates
 
+- **Multiple Codex accounts:** enable **Settings → Display → Track all connected accounts** to
+  refresh and show each account's quota together. With tracking off, the overview follows the
+  selected account. Local spend history describes activity recorded on this Mac; selecting a
+  different account does not move that history into its separate sign-in directory.
 - **Codex:** Midas saves a dedicated connection for each account, separate from the active Codex
   CLI login. Available cloud activity from those accounts is combined across computers, with
   each account's remaining usage and reset time kept separate. Cloud availability depends on

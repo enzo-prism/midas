@@ -49,7 +49,7 @@ struct UsageStoreCachedTokenHydrationTests {
     }
 
     @Test
-    func `cached codex token hydration skips managed codex homes`() async throws {
+    func `cached codex token hydration preserves ambient history when managed account is selected`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
 
@@ -71,16 +71,21 @@ struct UsageStoreCachedTokenHydrationTests {
             scannerOptions: options)
 
         let settings = Self.makeCodexOnlySettings(historyDays: 1)
+        settings.midasTrackAllAccounts = false
+        let managedHome = env.codexHomeRoot.appendingPathComponent("managed-account", isDirectory: true)
+        try FileManager.default.createDirectory(at: managedHome, withIntermediateDirectories: true)
         let managedAccount = ManagedCodexAccount(
             id: UUID(),
             email: "managed@example.com",
-            managedHomePath: env.codexHomeRoot.path,
+            managedHomePath: managedHome.path,
             createdAt: 1,
             updatedAt: 1,
             lastAuthenticatedAt: 1)
         settings._test_activeManagedCodexAccount = managedAccount
         settings.codexActiveSource = .managedAccount(id: managedAccount.id)
         defer { settings._test_activeManagedCodexAccount = nil }
+        #expect(settings.activeManagedCodexRemoteHomePath == managedHome.path)
+        #expect(!FileManager.default.fileExists(atPath: managedHome.appendingPathComponent("sessions").path))
         let store = UsageStore(
             fetcher: UsageFetcher(),
             browserDetection: BrowserDetection(cacheTTL: 0),
@@ -91,11 +96,13 @@ struct UsageStoreCachedTokenHydrationTests {
 
         store.hydrateCachedTokenSnapshots(now: day)
 
-        for _ in 0..<20 {
+        for _ in 0..<100 where store.tokenSnapshot(for: .codex) == nil {
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        #expect(store.tokenSnapshot(for: .codex) == nil)
+        #expect(store.tokenSnapshot(for: .codex)?.sessionTokens == 42)
+        #expect(store.tokenSnapshot(for: .codex)?.daily.map(\.date) == ["2026-04-08"])
+        #expect(store.tokenError(for: .codex) == nil)
     }
 
     private static func makeCodexOnlySettings(historyDays: Int) -> SettingsStore {

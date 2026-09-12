@@ -138,6 +138,54 @@ struct MidasMenuBarSettingsTests {
 }
 
 extension MidasMenuBarSettingsTests {
+    @Test func selectingManagedCodexAccountPreservesLocalHistoryScope() throws {
+        let (settings, defaults, suite) = try self.makeSettings()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let account = ManagedCodexAccount(
+            id: UUID(),
+            email: "managed@example.com",
+            managedHomePath: "/tmp/midas-fixture-managed-home",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        settings._test_activeManagedCodexAccount = account
+        defer { settings._test_activeManagedCodexAccount = nil }
+        settings._test_codexAccountSnapshotLoader = { source in
+            CodexAccountReconciliationSnapshot(
+                storedAccounts: [account],
+                activeStoredAccount: source == .managedAccount(id: account.id) ? account : nil,
+                liveSystemAccount: nil,
+                matchingStoredAccountForLiveSystemAccount: nil,
+                activeSource: source,
+                hasUnreadableAddedAccountStore: false)
+        }
+        settings.midasTrackAllAccounts = false
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing,
+            environmentBase: [:])
+        let originalScope = store.tokenCostScope(for: .codex)
+        settings.codexActiveSource = .managedAccount(id: account.id)
+        #expect(settings.activeManagedCodexRemoteHomePath == account.managedHomePath)
+
+        let selectedScope = store.tokenCostScope(for: .codex)
+        #expect(selectedScope.codexHomePath == nil)
+        #expect(selectedScope.additionalHomes.isEmpty)
+        #expect(selectedScope.signature == originalScope.signature)
+        #expect(selectedScope.signature == "codex:ambient")
+
+        settings.midasTrackAllAccounts = true
+        let allAccountsScope = store.tokenCostScope(for: .codex)
+        #expect(allAccountsScope.codexHomePath == nil)
+        #expect(allAccountsScope.additionalHomes == [account.managedHomePath])
+        #expect(allAccountsScope.signature != selectedScope.signature)
+
+        settings.midasTrackAllAccounts = false
+        #expect(store.tokenCostScope(for: .codex).signature == originalScope.signature)
+    }
+
     @Test func trackingAllAccountsDoesNotDependOnMenuLayout() throws {
         let (settings, defaults, suite) = try self.makeSettings()
         defer { defaults.removePersistentDomain(forName: suite) }

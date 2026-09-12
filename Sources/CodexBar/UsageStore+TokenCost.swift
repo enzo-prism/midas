@@ -81,12 +81,9 @@ extension UsageStore {
                 .map(\.managedHomePath).sorted()
             return (nil, homes, "codex:all:" + homes.joined(separator: "|"))
         }
-        let homePath = self.settings.activeManagedCodexRemoteHomePath?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let homePath, !homePath.isEmpty else {
-            return (nil, [], "codex:ambient")
-        }
-        return (homePath, [], "codex:managed:\(homePath)")
+        // Local spend is machine-level session history. Managed account homes may contain only
+        // authentication, so choosing a quota account must not replace the ambient history source.
+        return (nil, [], "codex:ambient")
     }
 
     func tokenSnapshot(
