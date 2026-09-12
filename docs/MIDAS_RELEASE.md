@@ -6,9 +6,9 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-As of September 12, the published distribution is version 0.35.0, build 103, tagged
-`v0.35.0-midas.1`, from commit `07c2c1f2e0a6e2240a7e3cccb094f64c8b0b71c4`.
-The signed archive, notarization ticket, public download, and Sparkle install/relaunch were verified.
+As of September 12, the published distribution is version 0.35.1, build 104, tagged
+`v0.35.1-midas.1`, from commit `4691c801db257ca5f77bbce831ef58b9a8769821`.
+The signed archive, notarization ticket, public download, and signed update feed were verified.
 Check GitHub releases for live status.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
 and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
@@ -23,7 +23,7 @@ runs only for upstream releases; fork maintainers may still invoke its artifact-
 
 ## 0.35.1 changes
 
-Version 0.35.1, build 104, targets `v0.35.1-midas.1`. It improves the spend-period dropdown
+Version 0.35.1, build 104, is published as `v0.35.1-midas.1`. It improves the spend-period dropdown
 with direct anchoring, distinct interaction states, date previews, keyboard controls, and validated
 historical-month choices. See [setup](MIDAS_SETUP.md#choosing-a-spend-period).
 
