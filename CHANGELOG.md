@@ -1,5 +1,17 @@
 # Changelog
 
+## Midas 0.35.0 — September 11, 2026
+
+- Guide new users through Services, Accounts, and Overview; preserve progress and open the menu-bar overview on completion.
+- Track multiple Codex accounts with dedicated sign-ins, separate remaining-usage bars, and reset times.
+- Combine available Codex cloud token history across connected accounts and computers.
+- Estimate Codex inference value automatically from recent priced samples; support optional iCloud sample sharing, custom rates, and tokens-only mode.
+- Focus the overview on estimated dollars for a selected calendar period or the last 30 days. Keep missing estimates unavailable and disclose partial totals.
+- Keep provider settings responsive by deferring navigation, rendering panes lazily, and avoiding display-time Keychain reads.
+- Respect account privacy throughout onboarding and retain existing provider credentials and settings.
+
+This source targets build 102. Public availability is determined by the signed assets on the latest GitHub release, not by this changelog.
+
 ## Midas 0.33.3 — September 4, 2026
 
 - Add a quick circle-provider dropdown and visible Check for Updates action at the top of the panel.

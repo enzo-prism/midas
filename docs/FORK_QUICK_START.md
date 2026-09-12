@@ -14,6 +14,11 @@ created by Peter Steinberger and contributors under the MIT license.
 - **Midas issues:** [issue tracker](https://github.com/enzo-prism/midas/issues)
 - **Requirements:** macOS 14 or later and a compatible Swift 6/Xcode toolchain.
 
+## New-user setup
+
+Use [the setup guide](MIDAS_SETUP.md) for the current Services → Accounts → Overview flow,
+multi-account Codex tracking, automatic estimates, and coverage limitations.
+
 ## Current features
 
 Midas Air provides a native overview panel, a resizable Usage window, sidebar settings, and
@@ -37,7 +42,7 @@ Open Midas and use the provider dropdown in the footer to change the menu-bar ci
 The dropdown selects Orbit; it does not change which providers contribute to the spend total.
 Hover over Orbit to see 30-day token counts for the favorite and all enabled providers.
 
-Click **Check for Updates** beside the provider dropdown, then **Download → Install & Restart**.
+Choose **Check for Updates** from the panel’s More actions menu or Settings → About, then **Download → Install & Restart**.
 Signed Apple Silicon builds use the Midas-only update feed. Builds older than 0.33.3 need a
 one-time manual install from [Midas releases](https://github.com/enzo-prism/midas/releases).
 See [the release procedure](MIDAS_RELEASE.md) before publishing; inherited upstream scripts are

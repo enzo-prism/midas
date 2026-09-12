@@ -4,6 +4,21 @@ Midas Air replaces the main menu presentation with one native SwiftUI popover ho
 existing status-item controller. It keeps the provider engine, account coordinators, saved
 settings, and legacy menu-bar icon preferences intact. macOS 14 remains the minimum target.
 
+## Current onboarding and account coverage
+
+Version 0.35.0 introduces Services → Accounts → Overview. See [the setup guide](MIDAS_SETUP.md)
+for sign-in, cloud coverage, pricing, iCloud privacy, and missing-data behavior.
+`MidasOnboardingLaunch` decides first-run presentation before settings migration;
+`PreferencesSelection` persists deferred progress. `MidasSpendSetupView` uses the existing
+account coordinators and finishes without blocking on provider refreshes.
+
+The primary display is now **Estimated inference spend** for the selected period.
+`MidasSpendPeriod` selects actual daily history for calendar or rolling periods;
+`MidasAccountUsageView` keeps account capacity and reset times separate.
+`UsageStore+CloudUsage` combines available Codex account history, `MidasCodexEstimate` provides
+blended pricing, and `MidasCalibrationExchange` shares optional derived samples.
+The implementation notes below also preserve older Midas presentation decisions.
+
 ## Everyday surfaces
 
 - **Overview:** total token spend (API rates) across all enabled providers, ordered favorite provider rows, an All providers chooser, freshness and

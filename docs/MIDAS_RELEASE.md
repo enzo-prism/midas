@@ -6,7 +6,9 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The current Midas distribution is version 0.33.6, build 88, tagged `v0.33.6-midas.1`.
+The release candidate is version 0.35.0, build 102, targeting `v0.35.0-midas.1`.
+As of September 11, the published distribution remains 0.33.6, build 88, tagged
+`v0.33.6-midas.1`, until the new signed assets are published. Check GitHub releases for live status.
 Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
 and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
 
@@ -17,6 +19,12 @@ The upstream CodexBar feed remains disabled. Debug, ad-hoc, and Intel builds can
 Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+
+## 0.35.0 changes
+
+See [the changelog](../CHANGELOG.md) and [setup and estimate coverage](MIDAS_SETUP.md).
+This release combines the focused spend design, multi-account Codex cloud usage, automatic
+pricing and optional iCloud calibration sharing, and resumable three-step onboarding.
 
 ## 0.33.6 changes
 
@@ -52,7 +60,10 @@ runs only for upstream releases; fork maintainers may still invoke its artifact-
 
 1. Run `make check` and the relevant native/menu regression tests. Inspect light/dark native fixtures.
 2. Set the next build number in `version.env`, commit the reviewed source, and push `main`.
-3. Build with `APP_TEAM_ID` and `APP_IDENTITY` matching the installed Midas developer signature:
+3. Confirm `security find-identity -v -p codesigning` lists a valid **Developer ID Application**
+   identity with its private key. Apple Development and Apple Distribution identities are not
+   substitutes for outside-the-App-Store distribution. Stop binary publication if it is missing.
+   Build with `APP_TEAM_ID` and `APP_IDENTITY` matching the installed Midas developer signature:
    `APP_TEAM_ID=... APP_IDENTITY='Developer ID Application: ...' ./Scripts/package_app.sh release`.
 4. Verify with `codesign --verify --deep --strict CodexBar.app` and inspect the timestamp/team.
 5. Create a temporary ZIP using `ditto --norsrc -c -k --keepParent`, then submit it with
@@ -79,3 +90,12 @@ runs only for upstream releases; fork maintainers may still invoke its artifact-
 Keep signed archives and signing credentials on internal encrypted storage. Do not publish logs,
 provider account data, keys, or local settings. A source push, a signed build, an accepted Apple
 submission, and a verified public download are separate verification steps.
+
+## Website publication
+
+The marketing site is a separate repository at `enzo-prism/midas-site` (Vercel project
+`midas-by-prism`, production domain `midas-ai.dev`). Verify its actual Git remote before pushing.
+Update version labels, download URLs, and the Updates entry only after the matching GitHub
+archive is public and verified. Build and test the site, deploy production, then follow the
+public download link and confirm it retrieves the exact signed archive. Do not advertise a
+release candidate as available while notarization or signing is blocked.

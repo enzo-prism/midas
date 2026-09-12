@@ -10,43 +10,30 @@
 > (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
 > refer to the original CodexBar project, not this fork.
 
-Midas 0.33.4 adds sharper native typography, a subtly animated pixel crown, and a fixed footer
-with clearly labeled **Favorite provider** and **Check for Updates** controls. Reduce Motion
-keeps the crown static.
+## Midas 0.35.0
 
-## Midas Air
+The latest source adds a focused monthly spend overview, separate usage bars and reset times
+for connected Codex accounts, cloud account activity, automatic Codex dollar estimates, optional
+iCloud pricing-sample sharing, and a three-step onboarding flow.
 
-Midas now opens a spacious native panel with warm neutral surfaces, a restrained gold accent,
-bundled provider logos, and prominent token spend (API rates) beside remaining usage. Both overviews show
-the total across all enabled providers with usable estimates, including providers outside Favorites.
-Missing estimates are excluded and disclosed; currencies stay separate. These are usage-rate
-estimates, not a combined bill. Codex keeps an explicit weekly-remaining view. **Open Usage** opens
-a separate resizable window for history and costs. Settings use a stable sidebar, and the app
-has its own Midas icon and About page. The **Orbit** menu bar places total token spend beside a
-single favorite provider’s remaining-capacity ring. Choose the favorite in **Settings → Display →
-Orbit provider**, or use the provider dropdown in the panel footer; the dollar total still covers all enabled providers.
+- **Start here:** [Connect your services and accounts](docs/MIDAS_SETUP.md).
+- **Download:** [Latest signed Midas release](https://github.com/enzo-prism/midas/releases/latest).
+  Source versions can be newer than the latest published binary; check the release's version.
+- **Understand estimates:** dollars represent estimated inference value, not subscription fees
+  or billed charges. Missing history remains unavailable, and partial totals are disclosed.
+- **Build:** [Fork quick start](docs/FORK_QUICK_START.md).
+- **Architecture:** [Midas Air](docs/MIDAS_AIR.md).
+- **Publish:** [Midas release procedure](docs/MIDAS_RELEASE.md).
 
-Provider fetching, account storage, menu-bar icon preferences, and existing account actions
-remain in place. Right-click the menu-bar icon, or choose **Provider actions & accounts…**
-inside the panel, to access the original provider menu. Signed Midas builds offer **Check for Updates** in the panel footer, with Sparkle’s
-Download → Install & Restart flow. Only the Midas release feed is used; upstream CodexBar
-updates stay disabled. See [Midas Air implementation and local rebuild](docs/MIDAS_AIR.md).
+Midas uses native SwiftUI surfaces with prominent estimated dollars, remaining usage, and reset
+times. Details and advanced settings stay out of the main overview. Orbit pairs the total with a
+favorite provider's capacity ring. The period selector supports calendar periods and the last
+30 days. **Spend history** opens the resizable usage window.
 
-- [Midas quick start](docs/FORK_QUICK_START.md): build, verify, and run this fork.
-- [Midas releases](https://github.com/enzo-prism/midas/releases): manual downloads for this fork.
-  See the [Midas release procedure](docs/MIDAS_RELEASE.md) for signing and distribution.
-- [Menu-bar design research](docs/MIDAS_MENU_BAR_DESIGN.md): Orbit and the historical alternatives,
-  state behavior, and animation decisions. **Orbit is the default**; Ledger, Focus, Constellation,
-  and Legacy remain available in Settings → Display.
-
-### Everyday controls
-
-- **Switch the circle’s provider:** click Midas, then choose a provider from the dropdown in the footer.
-  This selects Orbit; the dollar total still includes all enabled providers.
-- **See token totals:** hover over Orbit for the favorite’s and all providers’ past-30-day counts.
-  Missing provider coverage is disclosed rather than counted as zero.
-- **Install updates:** click **Check for Updates** in the panel footer, then follow Sparkle’s
-  **Download → Install & Restart** flow. Builds older than 0.33.3 need one manual upgrade.
+Open Settings to run **Set up Midas**, or **Continue setup** if you paused. Signed Apple Silicon
+builds use Midas's own Sparkle update feed; **Check for Updates** is available from the panel's
+More actions menu and Settings → About. Builds older than 0.33.3 need one manual upgrade.
+Right-click the menu-bar item for the original provider actions and account controls.
 
 ### Upstream CodexBar reference
 
