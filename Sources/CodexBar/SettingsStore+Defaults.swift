@@ -267,6 +267,14 @@ extension SettingsStore {
         }
     }
 
+    var midasCodexEstimateMode: MidasCodexEstimateMode {
+        get { self.defaultsState.midasCodexEstimateMode }
+        set {
+            self.defaultsState.midasCodexEstimateMode = newValue
+            self.userDefaults.set(newValue.rawValue, forKey: "midasCodexEstimateMode")
+        }
+    }
+
     var midasCloudUSDPerMillionTokens: Double {
         get { self.defaultsState.midasCloudUSDPerMillionTokens }
         set {

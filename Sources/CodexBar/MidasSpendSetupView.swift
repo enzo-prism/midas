@@ -28,6 +28,7 @@ struct MidasSpendSetupView: View {
     let openProvider: (UsageProvider) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var rateText = ""
+    @State private var estimateMode: MidasCodexEstimateMode = .automatic
     @State private var message: String?
     @State private var isWorking = false
 
@@ -37,6 +38,18 @@ struct MidasSpendSetupView: View {
 
     private var rate: Double? {
         MidasSpendSetupRate.parse(self.rateText)
+    }
+
+    private var isRateValid: Bool {
+        self.estimateMode != .custom || (self.rate.map { $0 > 0 } ?? false)
+    }
+
+    private var previewRate: Double? {
+        switch self.estimateMode {
+        case .automatic: self.store.midasCodexAutomaticEstimate?.rate
+        case .custom: self.rate.flatMap { $0 > 0 ? $0 : nil }
+        case .tokensOnly: nil
+        }
     }
 
     var body: some View {
@@ -68,13 +81,14 @@ struct MidasSpendSetupView: View {
                     Task { await self.saveAndRefresh() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(self.isWorking || self.rate == nil || self.accounts.isEmpty
+                .disabled(self.isWorking || !self.isRateValid || self.accounts.isEmpty
                     || self.coordinator.hasConflictingManagedAccountOperationInFlight)
             }
         }
         .padding(24)
         .frame(width: 600, height: 650)
         .onAppear {
+            self.estimateMode = self.settings.midasCodexEstimateMode
             let rate = self.settings.midasCloudUSDPerMillionTokens
             self.rateText = rate > 0 ? rate.formatted(.number.grouping(.never)) : ""
         }
@@ -119,34 +133,50 @@ struct MidasSpendSetupView: View {
 
     private var pricingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("2. Choose how to estimate Codex dollars").font(.headline)
-            Text(
-                "OpenAI reports cloud token totals, but not the input, cached and output split "
-                    + "needed for exact pricing. "
-                    + "Choose a blended rate for a budgeting estimate, or leave it blank to track tokens only.")
-                .font(.callout).foregroundStyle(.secondary)
-            HStack {
-                Text("USD per million tokens")
-                TextField("Optional", text: self.$rateText).textFieldStyle(.roundedBorder).frame(width: 130)
+            Text("2. Estimate Codex dollars").font(.headline)
+            Picker("Estimate method", selection: self.$estimateMode) {
+                ForEach(MidasCodexEstimateMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
             }
-            if let rate = self.rate {
-                if rate > 0 {
-                    let snapshot = UsageStore.cloudTokenSnapshot(
-                        accounts: self.accounts.compactMap { self.store.midasCloudAccounts[$0.id] },
-                        rate: rate,
-                        now: Date())
-                    Text(snapshot.last30DaysCostUSD.map {
-                        "Codex preview: " + $0.formatted(.currency(code: "USD")) + " over 30 days"
-                    } ?? "Connect and refresh to preview your estimate.")
-                    Text("A modeled estimate, not a bill. Missing histories are excluded.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("Tokens only: Codex dollars will be excluded from the total.")
+            .pickerStyle(.segmented)
+            switch self.estimateMode {
+            case .automatic:
+                Text("Uses this Mac’s observed model mix to estimate usage across devices.")
+                    .font(.callout).foregroundStyle(.secondary)
+                if self.store.midasCodexAutomaticEstimate == nil {
+                    Text("Estimate available after priced Codex activity on this Mac.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-            } else {
-                Text("Enter a number from 0 to 1,000, without a currency symbol.")
-                    .font(.caption).foregroundStyle(.red)
+            case .custom:
+                HStack {
+                    Text("USD per million tokens")
+                    TextField("Rate", text: self.$rateText)
+                        .textFieldStyle(.roundedBorder).frame(width: 130)
+                }
+                if !self.isRateValid {
+                    Text("Enter a rate greater than 0 and up to 1,000.")
+                        .font(.caption).foregroundStyle(.red)
+                }
+            case .tokensOnly:
+                Text("Codex dollars are excluded from your total.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let rate = self.previewRate {
+                let snapshot = UsageStore.cloudTokenSnapshot(
+                    accounts: self.accounts.compactMap { self.store.midasCloudAccounts[$0.id] },
+                    rate: rate,
+                    now: Date())
+                Text(snapshot.last30DaysCostUSD.map {
+                    "Codex preview: " + $0.formatted(.currency(code: "USD")) + " over 30 days"
+                } ?? "Refresh connected accounts to preview your estimate.")
+                Text("Estimate, not a bill. Missing histories are excluded.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if self.estimateMode == .automatic, let estimate = self.store.midasCodexAutomaticEstimate {
+                    DisclosureGroup("Estimate details") {
+                        Text(estimate.detail).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }
@@ -218,11 +248,15 @@ struct MidasSpendSetupView: View {
     }
 
     private func saveAndRefresh() async {
-        guard let rate = self.rate else { return }
+        guard self.isRateValid else { return }
         self.isWorking = true
         defer { self.isWorking = false }
         self.enableTracking()
-        self.settings.midasCloudUSDPerMillionTokens = rate
+        self.settings.midasCodexEstimateMode = self.estimateMode
+        if self.estimateMode == .custom, let rate = self.rate {
+            self.settings.midasCloudUSDPerMillionTokens = rate
+        }
+        self.store.repriceMidasCloudUsage()
         self.message = "Refreshing connected accounts…"
         await self.store.refreshMidasCloudUsage(force: true)
         self.message = "Settings saved. Available estimates are included in your total; review account coverage above."

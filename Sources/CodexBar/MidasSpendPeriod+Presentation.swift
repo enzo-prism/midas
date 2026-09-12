@@ -35,8 +35,8 @@ extension StatusItemController {
         guard let token, let original = result.spend, original.isEstimate else {
             result.spend = nil
             if presentation.provider == .codex, self.settings.midasCloudUsageEnabled {
-                result.spendUnavailableReason = self.settings.midasCloudUSDPerMillionTokens <= 0
-                    ? "Set estimate rate" : "History pending"
+                result.spendUnavailableReason = self.settings.midasCodexEstimateMode == .tokensOnly
+                    ? "Tokens only" : (self.store.midasCodexEstimate == nil ? "Estimate pending" : "History pending")
             } else {
                 result.spendUnavailableReason = "Estimate unavailable"
             }

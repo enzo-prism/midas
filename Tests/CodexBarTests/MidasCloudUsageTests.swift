@@ -7,7 +7,9 @@ struct MidasCloudUsageTests {
     private let now = Date(timeIntervalSince1970: 1_789_171_200) // 2026-09-12 00:00 UTC
 
     private func usage(
-        _ tokens: Int, date: String = "2026-09-10", asOf: Date? = nil) throws -> CodexCloudAccountUsage
+        _ tokens: Int,
+        date: String = "2026-09-10",
+        asOf: Date? = nil) throws -> CodexCloudAccountUsage
     {
         let profile: [String: Any] = [
             "stats": ["daily_usage_buckets": [["start_date": date, "tokens": tokens]]],
@@ -29,7 +31,9 @@ struct MidasCloudUsageTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = SettingsStore(
             userDefaults: defaults,
-            configStore: testConfigStore(suiteName: suite, reset: false),
+            configStore: testConfigStore(
+                suiteName: suite,
+                reset: false),
             zaiTokenStore: NoopZaiTokenStore(),
             syntheticTokenStore: NoopSyntheticTokenStore(),
             tokenAccountStore: InMemoryTokenAccountStore())
@@ -55,17 +59,47 @@ struct MidasCloudUsageTests {
             date: CodexCloudAccountUsage.window(now: Date()).end,
             asOf: Date())
         #expect(settings.codexVisibleAccountProjection.visibleAccounts.count == 1)
-        await store.refreshMidasCloudUsage(force: true, loader: { _, _ in usage })
+        await store.refreshMidasCloudUsage(
+            force: true,
+            loader: { _, _ in usage })
         #expect(store.midasCloudAccounts.count == 1)
         #expect(store.tokenSnapshots[.codex]?.last30DaysTokens == 1_000_000)
         #expect(store.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true)
         #expect(store.midasCloudErrors.isEmpty)
+        settings.midasCodexEstimateMode = .custom
+        settings.midasCloudUSDPerMillionTokens = 2
+        store.repriceMidasCloudUsage()
+        #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == 2)
+        #expect(store.tokenSnapshots[.codex]?.updatedAt == usage.fetchedAt)
+        settings.midasCodexEstimateMode = .tokensOnly
+        store.repriceMidasCloudUsage()
+        #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == nil)
+        let date = Date()
+        store.midasCodexCalibrationScope = store.tokenCostScope(for: .codex).signature
+        store.midasCodexCalibration = MidasCodexCalibration(
+            rate: 0.75,
+            pricedTokens: 1_000_000,
+            observedTokens: 1_000_000,
+            sampledAt: date,
+            lastUsageDay: CodexCloudAccountUsage.window(now: date).end)
+        settings.midasCodexEstimateMode = .automatic
+        store.repriceMidasCloudUsage()
+        #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == 0.75)
+        #expect(store.tokenSnapshots[.codex]?.last30DaysTokens == 1_000_000)
+        #expect(store.tokenSnapshots[.codex]?.updatedAt == usage.fetchedAt)
+        #expect(settings.midasCloudUSDPerMillionTokens == 2)
+        store.midasCodexCalibrationScope = "old scope"
+        store.repriceMidasCloudUsage()
+        #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == nil)
     }
 
     @Test func cloudTokensCombineWithoutPricingPercentages() throws {
         let first = try self.usage(1_000_000)
         let second = try self.usage(2_000_000)
-        let snapshot = UsageStore.cloudTokenSnapshot(accounts: [first, second], rate: 0, now: self.now)
+        let snapshot = UsageStore.cloudTokenSnapshot(
+            accounts: [first, second],
+            rate: 0,
+            now: self.now)
         #expect(snapshot.last30DaysTokens == 3_000_000)
         #expect(snapshot.last30DaysCostUSD == nil)
         #expect(snapshot.daily.first?.modelBreakdowns == nil)
@@ -75,16 +109,24 @@ struct MidasCloudUsageTests {
 
     @Test func explicitRatePricesCombinedCloudTokensOnce() throws {
         let accounts = try [self.usage(1_000_000), self.usage(2_000_000)]
-        let snapshot = UsageStore.cloudTokenSnapshot(accounts: accounts, rate: 0.75, now: self.now)
+        let snapshot = UsageStore.cloudTokenSnapshot(
+            accounts: accounts,
+            rate: 0.75,
+            now: self.now)
         #expect(snapshot.last30DaysCostUSD == 2.25)
         #expect(snapshot.daily.first?.costUSD == 2.25)
         #expect(snapshot.costProvenance == .unknown)
     }
 
     @Test func missingHistoryIsNotZeroAndOldDaysAreExcluded() throws {
-        let old = try self.usage(500, date: "2026-01-01")
+        let old = try self.usage(
+            500,
+            date: "2026-01-01")
         #expect(old.totalTokens == nil)
-        let snapshot = UsageStore.cloudTokenSnapshot(accounts: [old], rate: 1, now: self.now)
+        let snapshot = UsageStore.cloudTokenSnapshot(
+            accounts: [old],
+            rate: 1,
+            now: self.now)
         #expect(snapshot.last30DaysTokens == nil)
         #expect(snapshot.last30DaysCostUSD == nil)
     }

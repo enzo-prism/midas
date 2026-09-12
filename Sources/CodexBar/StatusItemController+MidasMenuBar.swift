@@ -33,17 +33,16 @@ extension StatusItemController {
                     error: self.store.midasCloudErrors[account.id])
             }
             let cloudToken = self.store.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true ? token : nil
-            let rate = self.settings.midasCloudUSDPerMillionTokens
+            let estimate = self.store.midasCodexEstimate
             result.spend = nil
-            if rate > 0, let amount = cloudToken?.last30DaysCostUSD, amount.isFinite,
+            if let estimate, let amount = cloudToken?.last30DaysCostUSD, amount.isFinite,
                let updatedAt = cloudToken?.updatedAt
             {
                 result.spend = MidasSpendPresentation(
-                    title: "Estimated inference spend (blended rate)",
+                    title: "Estimated inference spend",
                     value: amount.formatted(.currency(code: "USD")),
                     period: "Last 30 days",
-                    detail: "Reported cloud tokens × $\(rate) per million tokens. "
-                        + "A user-configured approximation, not measured API-rate spend or a bill. "
+                    detail: estimate.detail + " "
                         + "Missing account histories and reporting delays are excluded.",
                     updatedAt: updatedAt,
                     amount: amount,

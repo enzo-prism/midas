@@ -187,19 +187,39 @@ struct DisplayPane: View {
                     self.store.lastTokenFetchAt[.codex] = nil
                     self.store.scheduleTokenRefresh(force: true)
                 }
-            Text("Reads each account’s reported usage across devices. Personal accounts do not expose "
-                + "input/cache/output token counts for API-rate pricing. Cloud data may be delayed.")
+            Text("Reported account usage across devices; cloud history may be delayed.")
                 .font(.caption).foregroundStyle(.secondary)
             if self.settings.midasCloudUsageEnabled {
-                TextField(
-                    "Optional blended USD per million tokens (0 = no dollar estimate)",
-                    value: self.$settings.midasCloudUSDPerMillionTokens,
-                    format: .number)
-                    .onChange(of: self.settings.midasCloudUSDPerMillionTokens) { _, _ in
-                        self.store.scheduleTokenRefresh(force: true)
+                Picker("Codex estimate", selection: self.$settings.midasCodexEstimateMode) {
+                    ForEach(MidasCodexEstimateMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
                     }
-                Text("A positive rate enables a modeled approximation, not a provider-reported cost.")
-                    .font(.caption).foregroundStyle(.secondary)
+                }
+                .onChange(of: self.settings.midasCodexEstimateMode) { _, _ in
+                    self.store.repriceMidasCloudUsage()
+                    self.store.scheduleTokenRefresh(force: true)
+                }
+                switch self.settings.midasCodexEstimateMode {
+                case .automatic:
+                    Text(self.store.midasCodexEstimate == nil
+                        ? "Estimate available after priced Codex activity on this Mac."
+                        : "Uses this Mac’s observed model mix to estimate cloud usage.")
+                        .font(.caption).foregroundStyle(.secondary)
+                case .custom:
+                    TextField(
+                        "USD per million tokens",
+                        value: self.$settings.midasCloudUSDPerMillionTokens,
+                        format: .number)
+                        .onChange(of: self.settings.midasCloudUSDPerMillionTokens) { _, _ in
+                            self.store.repriceMidasCloudUsage()
+                            self.store.scheduleTokenRefresh(force: true)
+                        }
+                    Text("A blended estimate, not a provider-reported cost.")
+                        .font(.caption).foregroundStyle(.secondary)
+                case .tokensOnly:
+                    Text("Codex dollars are excluded from your total.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Picker("Style", selection: self.$settings.midasMenuBarMode) {
                 ForEach(MidasMenuBarMode.allCases) { mode in

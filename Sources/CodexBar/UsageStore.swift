@@ -97,6 +97,11 @@ final class UsageStore {
     var codexAccountSnapshots: [CodexAccountUsageSnapshot] = []
     var kiloScopeSnapshots: [KiloScopeSnapshot] = []
     var midasCloudAccounts: [String: CodexCloudAccountUsage] = [:]
+    var midasCodexCalibration: MidasCodexCalibration?
+    @ObservationIgnored var midasCodexCalibrationScope: String?
+    @ObservationIgnored var midasCodexCalibrationTask: Task<Void, Never>?
+    @ObservationIgnored var midasCodexCalibrationGeneration = UUID()
+    @ObservationIgnored var midasCodexCalibrationAttempt: Date?
     var midasCloudErrors: [String: String] = [:]
     @ObservationIgnored var midasCloudRefreshInFlight = false
     var tokenSnapshots: [UsageProvider: CostUsageTokenSnapshot] = [:]
@@ -701,6 +706,7 @@ final class UsageStore {
     }
 
     deinit {
+        self.midasCodexCalibrationTask?.cancel()
         self.timerTask?.cancel()
         self.tokenTimerTask?.cancel()
         self.tokenRefreshSequenceTask?.cancel()

@@ -14,6 +14,8 @@ extension UsageStore {
         let accounts = self.settings.codexVisibleAccountProjection.visibleAccounts
         let signature = Self.cloudAccountSignature(accounts)
         let now = Date()
+        self.scheduleMidasCodexCalibration(now: now)
+        self.repriceMidasCloudUsage(now: now)
         if !force, self.lastTokenFetchScope[.codex] == "cloud:" + signature,
            let last = self.lastTokenFetchAt[.codex], now.timeIntervalSince(last) < 300 { return }
         self.midasCloudRefreshInFlight = true
@@ -53,8 +55,7 @@ extension UsageStore {
         if !SettingsStore.isRunningTests { Self.saveCloudCache(results, signature: signature) }
         self.lastTokenFetchAt[.codex] = now
         self.lastTokenFetchScope[.codex] = "cloud:" + signature
-        self.tokenSnapshots[.codex] = Self.cloudTokenSnapshot(
-            accounts: Array(results.values), rate: self.settings.midasCloudUSDPerMillionTokens, now: now)
+        self.repriceMidasCloudUsage(now: now)
         self.tokenErrors[.codex] = errors.isEmpty ? nil : "Some cloud account histories could not refresh."
         self.persistWidgetSnapshot(reason: "cloud-token-usage")
     }
@@ -86,7 +87,7 @@ extension UsageStore {
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: self.cloudCacheURL.path)
     }
 
-    private nonisolated static func cloudAccountSignature(_ accounts: [CodexVisibleAccount]) -> String {
+    nonisolated static func cloudAccountSignature(_ accounts: [CodexVisibleAccount]) -> String {
         accounts.map {
             "\($0.id)|\($0.workspaceAccountID ?? "")|\($0.storedAccountID?.uuidString ?? "live")"
         }.sorted().joined(separator: ";")

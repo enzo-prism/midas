@@ -29,6 +29,7 @@ struct SettingsDefaultsState {
     var kiroMenuBarDisplayModeRaw: String?
     var historicalTrackingEnabled: Bool
     var midasCloudUsageEnabled: Bool
+    var midasCodexEstimateMode: MidasCodexEstimateMode
     var midasCloudUSDPerMillionTokens: Double
     var midasSpendPeriodSelection: String
     var midasAccountAliases: [String: String]
