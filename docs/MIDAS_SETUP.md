@@ -55,19 +55,23 @@ it is never treated as zero. Different currencies are not silently converted.
 ## If data is missing
 
 Refresh usage once, then inspect the provider's connection status. A connected account can
-still have history pending or unavailable. For Codex, use the account's reconnect action if its
+still have history pending or unavailable. Codex weekly remaining and banked resets should appear
+from the last successful cache even before a live OAuth refresh finishes; **Waiting for first
+update** with **Unavailable** resets while spend already shows means identity matching failed
+to hydrate that cache. For Codex, use the account's reconnect action if its
 connection has expired. If tokens appear but dollars do not, inspect Codex estimate options:
 automatic pricing needs a usable priced sample, or you can supply your own blended rate.
 Finishing setup does not wait for every provider request; background refresh continues.
 
 ## Choosing a spend period
 
-Click the calendar button below the total to choose **This month**, **Last 30 days**, or a recorded month.
-The dropdown is anchored to the button and previews each date range. Gold marks the selected option;
-hover, press, and keyboard focus have distinct feedback. Use Up/Down to move, Return to select,
-and Escape or the close button to dismiss. Selecting a period updates the label and spend totals.
+Click the calendar control below the total to expand **This month**, **Last 30 days**, and any
+recorded months **inline in the panel**. Options preview their UTC date range; gold marks the
+selected period. Choosing an option updates the estimate total and collapses the list. The Air
+panel is already an `NSPopover`, so the period list must not open a nested SwiftUI popover or
+take AppKit first-responder focus — that combination aborts on macOS 27
+(`swift_abortRetainUnowned` in `KeyViewProxy` while `NSPopover` selects a first key view).
 
-Recorded months come from valid daily history for displayed providers. Earlier months scroll when
-needed; an empty-history message appears when none are available. A selected historical month remains
-selectable if its cached history disappears. Recorded history can be incomplete, and changing the
-spend period does not change provider quota reset schedules.
+Recorded months come from valid daily history for displayed providers. A selected historical
+month remains selectable if its cached history disappears. Recorded history can be incomplete,
+and changing the spend period does not change provider quota reset schedules.

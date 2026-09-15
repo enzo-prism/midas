@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.35.3 — September 15, 2026
+
+- Expand the spend-period list inline in the Air panel instead of a nested SwiftUI popover, so choosing This month / Last 30 days no longer aborts on macOS 27 (`KeyViewProxy` unowned retain while setting first responder).
+- Hydrate cached Codex account usage when managed accounts store the ChatGPT id as `providerAccountID` and omit `workspaceAccountID`, so last-known weekly remaining and banked resets show immediately.
+- Let development and Apple Development builds download the latest signed GitHub ZIP from Check for Updates. Sparkle Install & Restart still requires a Developer ID Applications copy.
+
+Build 106. Period changes still affect estimates only; quota reset schedules are unchanged.
+
 ## Midas 0.35.2 — September 12, 2026
 
 - Show banked resets separately for every displayed Codex account in the overview and account details.

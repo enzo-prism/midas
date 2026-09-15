@@ -42,11 +42,13 @@ Open Midas and use the provider dropdown in the footer to change the menu-bar ci
 The dropdown selects Orbit; it does not change which providers contribute to the spend total.
 Hover over Orbit to see 30-day token counts for the favorite and all enabled providers.
 
-Choose **Check for Updates** from the panel’s More actions menu or Settings → About, then **Download → Install & Restart**.
-Signed Apple Silicon builds use the Midas-only update feed. Builds older than 0.33.3 need a
-one-time manual install from [Midas releases](https://github.com/enzo-prism/midas/releases).
+Choose **Check for Updates** from the panel’s More actions menu or Settings → About.
+Developer ID Applications builds use Sparkle **Download → Install & Restart**. Development
+builds open the latest signed GitHub ZIP instead. Builds older than 0.33.3 need a one-time
+manual install from [Midas releases](https://github.com/enzo-prism/midas/releases).
 See [the release procedure](MIDAS_RELEASE.md) before publishing; inherited upstream scripts are
-not the Midas release path.
+not the Midas release path. A Sparkle release requires the Developer ID private key and the
+`enzo-prism-midas` Keychain account — the certificate alone is not enough.
 
 ## Build and verify
 

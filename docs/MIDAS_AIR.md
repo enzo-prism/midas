@@ -14,6 +14,8 @@ account coordinators and finishes without blocking on provider refreshes.
 
 The primary display is now **Estimated inference spend** for the selected period.
 `MidasSpendPeriod` selects actual daily history for calendar or rolling periods;
+`MidasSpendPeriodControl` expands those choices inline in the Air panel (never a nested
+`.popover` or `.focusable()` key-view loop inside the status-item `NSPopover`);
 `MidasAccountUsageView` keeps account capacity and reset times separate.
 `UsageStore+CloudUsage` combines available Codex account history, `MidasCodexEstimate` provides
 blended pricing, and `MidasCalibrationExchange` shares optional derived samples.
@@ -163,6 +165,9 @@ in this inherited README are not Midas releases.
 - `MidasMenuBarPresentation.swift`, `MidasMenuBarView.swift`: typed status readings and passive native rendering.
 - `StatusItemController+MidasMenuBar.swift`: status-item integration, activity filtering, and freshness updates.
 - `MidasPanelView.swift`, `MidasProviderDetailView.swift`: compact surfaces.
+- `MidasSpendPeriod.swift`, `MidasSpendPeriodPicker.swift`: UTC period math and the inline period list.
+- `CodexAccountUsageSnapshotStore.swift`: last-known Codex quota hydration; match on non-conflicting identity, and treat managed `providerAccountID` as the visible workspace when `workspaceAccountID` is absent.
+- `MidasAppcast.swift`, `MidasSignedReleaseUpdater.swift`: public-feed ZIP download when Sparkle cannot run.
 - `MidasUsageWindowView.swift`, `MidasUsageHistoryView.swift`, `MidasCostPresentation.swift`: history and costs.
 - `MidasDesignSystem.swift`, `MidasProviderLogo.swift`: adaptive visual tokens and provider identity.
 - `PreferencesView.swift`, `PreferencesAboutPane.swift`: sidebar settings and product identity.
@@ -174,10 +179,19 @@ explicitly authorized; follow the repository's AGENTS.md testing guidance.
 
 ## Updates
 
-Click **Check for Updates** in the panel footer for the standard Sparkle download and
-Install & Restart flow. Only signed Midas releases are accepted through the Midas-only feed.
-Settings → About provides automatic checks. Older releases need a one-time manual upgrade
-to 0.33.3 or later.
+**Developer ID Applications installs** use Sparkle: Check for Updates → Download → Install & Restart
+against `Midas-appcast-arm64.xml`. Settings → About can enable automatic checks. Older releases
+need a one-time manual upgrade to 0.33.3 or later.
+
+**Development, Apple Development, ad-hoc, and Intel packages** cannot run Sparkle (the updater
+requires a Developer ID signature and the exact Midas feed/public key). Check for Updates still
+reads the public appcast and offers the latest signed GitHub ZIP. That ZIP is the last
+*published* binary; source on `main` can be newer.
+
+Sparkle publication itself needs `Developer ID Application: Lorenzo Quaid Sison (L49MKXGVM4)`
+with its private key, plus Sparkle `sign_update --account enzo-prism-midas`. The Developer ID
+*certificate* without the private key is not enough. Do not mint a new Sparkle key; existing
+0.33.3+ installs embed `Wamu4ydtrOgeiui2Synb1ixgdZcNwDOpE0TOCtDdEbA=`.
 
 ## Multiple accounts
 

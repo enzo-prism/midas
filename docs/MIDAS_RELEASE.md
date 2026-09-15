@@ -6,12 +6,16 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-As of September 12, the published distribution is version 0.35.2, build 105, tagged
-`v0.35.2-midas.1`, from commit `518ea2cce63e0de17d6d40e05a1f43f0774b53d4`.
-The signed archive, notarization ticket, public download, and signed update feed were verified.
-Check GitHub releases for live status.
-Its downloadable app is for Apple Silicon Macs running macOS 14 or later. The bundle directory
-and executable retain `CodexBar` for compatibility; the app's displayed name is Midas.
+Source on `main` is version **0.35.3**, build **106**. It includes the inline spend-period list
+(nested-popover crash fix), Codex last-known quota hydration, and GitHub ZIP Check for Updates
+for non–Developer ID builds.
+
+The last **signed, notarized, Sparkle-published** binary remains **0.35.2**, build **105**, tagged
+`v0.35.2-midas.1`, from commit `518ea2cce63e0de17d6d40e05a1f43f0774b53d4`, until a Developer ID
+private key and `enzo-prism-midas` Sparkle account are available on the build machine. Check
+GitHub releases for live binary status. The downloadable app is for Apple Silicon Macs running
+macOS 14 or later. The bundle directory and executable retain `CodexBar` for compatibility; the
+app's displayed name is Midas.
 
 Midas 0.33.3 enables Sparkle using a Midas-only feed and Ed25519 key. In the panel, click
 **Check for Updates**, then follow **Download → Install & Restart**. Automatic checks can be
@@ -20,6 +24,13 @@ The upstream CodexBar feed remains disabled. Debug, ad-hoc, and Intel builds can
 Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+
+## 0.35.3 changes
+
+Version 0.35.3, build 106, expands the spend-period list inline so Last 30 days → This month does
+not abort on macOS 27, hydrates cached Codex weekly usage when managed accounts omit
+`workspaceAccountID`, and offers the public signed ZIP from Check for Updates when Sparkle cannot
+run. Period math is unchanged.
 
 ## 0.35.2 changes
 
