@@ -27,10 +27,10 @@ runs only for upstream releases; fork maintainers may still invoke its artifact-
 
 ## 0.35.3 changes
 
-Version 0.35.3, build 106, expands the spend-period list inline so Last 30 days → This month does
-not abort on macOS 27, hydrates cached Codex weekly usage when managed accounts omit
-`workspaceAccountID`, and offers the public signed ZIP from Check for Updates when Sparkle cannot
-run. Period math is unchanged.
+Version 0.35.3, build 106, expands the spend-period list and estimate-coverage details inline so
+Last 30 days → This month and Partial total do not abort on macOS 27, hydrates cached Codex
+weekly usage when managed accounts omit `workspaceAccountID`, and offers the public signed ZIP
+from Check for Updates when Sparkle cannot run. Period math is unchanged.
 
 ## 0.35.2 changes
 

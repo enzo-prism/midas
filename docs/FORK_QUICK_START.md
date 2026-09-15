@@ -94,13 +94,20 @@ selected provider.
 
 ## Source updates versus releases
 
+| Surface | Current |
+| --- | --- |
+| Source on `main` | **0.35.3**, build **106** |
+| Signed Sparkle / GitHub latest | **0.35.2**, tag `v0.35.2-midas.1` |
+| Marketing site (`midas-site` / Vercel `midas-by-prism`) | **0.35.2** download |
+
 Push source changes to `enzo-prism/midas`. Review `git status` and the staged diff before
 committing; exclude generated bundles, logs, credentials, and local configuration.
-A source push does not publish an installer, GitHub release, or Sparkle update.
+A source push does not publish an installer, GitHub release, or Sparkle update. Follow
+[Midas releases](MIDAS_RELEASE.md). Do not use inherited `Scripts/release.sh` or the
+upstream CodexBar appcast. Do not advertise an unsigned build as the public download.
 
-Midas packages disable upstream CodexBar update checks. The inherited release/Homebrew links
-in the README refer to CodexBar. A future Midas binary release needs a deliberate fork-specific
-release channel; consult [RELEASING.md](RELEASING.md) before configuring one.
+Sparkle publication needs the **Developer ID Application** *private key* (the certificate
+alone is not enough) and Keychain account `enzo-prism-midas`. Do not mint a new Sparkle key.
 
 ## Code map
 

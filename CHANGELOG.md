@@ -3,6 +3,7 @@
 ## Midas 0.35.3 — September 15, 2026
 
 - Expand the spend-period list inline in the Air panel instead of a nested SwiftUI popover, so choosing This month / Last 30 days no longer aborts on macOS 27 (`KeyViewProxy` unowned retain while setting first responder).
+- Expand estimate-coverage details inline as well; Partial total / Estimate details used the same nested `.popover` inside the status-item `NSPopover`.
 - Hydrate cached Codex account usage when managed accounts store the ChatGPT id as `providerAccountID` and omit `workspaceAccountID`, so last-known weekly remaining and banked resets show immediately.
 - Let development and Apple Development builds download the latest signed GitHub ZIP from Check for Updates. Sparkle Install & Restart still requires a Developer ID Applications copy.
 
