@@ -39,13 +39,16 @@ struct MidasTotalSpendView: View {
                 }
                 Spacer(minLength: 8)
                 if !self.presentations.isEmpty {
-                    Button(self.coverageLabel) { self.showsCoverage = true }
+                    Button(self.coverageLabel) { self.showsCoverage.toggle() }
                         .buttonStyle(.plain)
                         .foregroundStyle(self.isPartial ? MidasTheme.warning : MidasTheme.secondaryText)
-                        .popover(isPresented: self.$showsCoverage) { self.coverage }
+                        .accessibilityHint("Shows which providers contribute to the estimate")
                 }
             }
             .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            if self.showsCoverage {
+                self.coverage
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(MidasTheme.text)
@@ -60,23 +63,23 @@ struct MidasTotalSpendView: View {
     }
 
     private var coverage: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Estimate coverage").font(.headline)
-                Text(self.total.coverageText).font(.callout)
-                ForEach(self.presentations, id: \.provider) { item in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.name).font(.callout.weight(.semibold))
-                        Text(item.spend?.detail ?? item.spendUnavailableReason ?? "No dollar estimate available.")
-                        if let cloud = item.cloudUsage { Text(cloud.coverage) }
-                        if let spend = item.spend {
-                            Text("Updated \(spend.updatedAt.formatted(date: .abbreviated, time: .shortened))")
-                        }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Estimate coverage").font(.callout.weight(.semibold))
+            Text(self.total.coverageText).font(.caption)
+            ForEach(self.presentations, id: \.provider) { item in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.name).font(.caption.weight(.semibold))
+                    Text(item.spend?.detail ?? item.spendUnavailableReason ?? "No dollar estimate available.")
+                    if let cloud = item.cloudUsage { Text(cloud.coverage) }
+                    if let spend = item.spend {
+                        Text("Updated \(spend.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                     }
-                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }
+                .font(.caption).foregroundStyle(MidasTheme.secondaryText)
             }
-            .padding(18)
-        }.frame(width: 336).frame(maxHeight: 440)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
+        .accessibilityElement(children: .contain)
     }
 }

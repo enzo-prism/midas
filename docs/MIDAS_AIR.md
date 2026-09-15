@@ -14,8 +14,9 @@ account coordinators and finishes without blocking on provider refreshes.
 
 The primary display is now **Estimated inference spend** for the selected period.
 `MidasSpendPeriod` selects actual daily history for calendar or rolling periods;
-`MidasSpendPeriodControl` expands those choices inline in the Air panel (never a nested
-`.popover` or `.focusable()` key-view loop inside the status-item `NSPopover`);
+`MidasSpendPeriodControl` and `MidasTotalSpendView` expand period choices and estimate
+coverage inline in the Air panel (never a nested `.popover` or `.focusable()` key-view loop
+inside the status-item `NSPopover`);
 `MidasAccountUsageView` keeps account capacity and reset times separate.
 `UsageStore+CloudUsage` combines available Codex account history, `MidasCodexEstimate` provides
 blended pricing, and `MidasCalibrationExchange` shares optional derived samples.
@@ -161,7 +162,8 @@ in this inherited README are not Midas releases.
 
 - `MidasAirCoordinator.swift`: native presentation lifetime and existing action routing.
 - `MidasPresentation.swift`: provider presentation and navigation state.
-- `MidasTotalSpend.swift`, `MidasTotalSpendView.swift`: estimate aggregation and shared total display.
+- `MidasTotalSpend.swift`, `MidasTotalSpendView.swift`: estimate aggregation and shared total
+  display. Coverage expands inline; do not restore a nested `.popover` inside Air.
 - `MidasMenuBarPresentation.swift`, `MidasMenuBarView.swift`: typed status readings and passive native rendering.
 - `StatusItemController+MidasMenuBar.swift`: status-item integration, activity filtering, and freshness updates.
 - `MidasPanelView.swift`, `MidasProviderDetailView.swift`: compact surfaces.

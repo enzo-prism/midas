@@ -12,13 +12,13 @@
 
 ## Midas 0.35.3
 
-The latest source expands the spend-period list inside the Air panel (no nested popover), hydrates
-cached Codex weekly usage and banked resets when workspace ids are missing from the managed store,
-and lets development builds download the latest signed ZIP from Check for Updates. It also includes
-per-account banked reset counts, refreshed menu-bar pop-up anchoring, a focused monthly spend
-overview, separate usage bars and reset times for connected Codex accounts, cloud account activity,
-automatic Codex dollar estimates, optional iCloud pricing-sample sharing, and a three-step
-onboarding flow.
+The latest source expands the spend-period list and estimate-coverage details inside the Air
+panel (no nested popover), hydrates cached Codex weekly usage and banked resets when workspace
+ids are missing from the managed store, and lets development builds download the latest signed
+ZIP from Check for Updates. It also includes per-account banked reset counts, refreshed
+menu-bar pop-up anchoring, a focused monthly spend overview, separate usage bars and reset
+times for connected Codex accounts, cloud account activity, automatic Codex dollar estimates,
+optional iCloud pricing-sample sharing, and a three-step onboarding flow.
 
 - **Start here:** [Connect your services and accounts](docs/MIDAS_SETUP.md).
 - **Download:** [Latest signed Midas release](https://github.com/enzo-prism/midas/releases/latest).
