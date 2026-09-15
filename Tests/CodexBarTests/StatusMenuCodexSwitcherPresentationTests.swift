@@ -397,4 +397,93 @@ struct StatusMenuCodexSwitcherPresentationTests {
 
         #expect(hydrated.isEmpty)
     }
+
+    @Test
+    func `codex account snapshot store hydrates when cached workspace is missing on the visible account`() {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let accountID = UUID()
+        let cachedAccount = CodexVisibleAccount(
+            id: "cached@example.com",
+            email: "cached@example.com",
+            workspaceAccountID: "acct-cached",
+            authFingerprint: "same-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: true,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let visibleAccount = CodexVisibleAccount(
+            id: "cached@example.com",
+            email: "cached@example.com",
+            workspaceAccountID: nil,
+            authFingerprint: "same-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: true,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let store = FileCodexAccountUsageSnapshotStore(fileURL: fileURL)
+        store.store([
+            CodexAccountUsageSnapshot(
+                account: cachedAccount,
+                snapshot: self.snapshot(email: cachedAccount.email, percent: 97),
+                error: nil,
+                sourceLabel: "oauth"),
+        ])
+
+        let hydrated = store.load(for: [visibleAccount])
+
+        #expect(hydrated.count == 1)
+        #expect(hydrated.first?.id == visibleAccount.id)
+        #expect(hydrated.first?.snapshot?.secondary?.usedPercent == 97)
+        #expect(hydrated.first?.account.workspaceAccountID == nil)
+    }
+
+    @Test
+    func `codex account snapshot store hydrates when visible id is the managed account key`() {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let accountID = UUID()
+        let cachedAccount = CodexVisibleAccount(
+            id: "cached@example.com",
+            email: "cached@example.com",
+            workspaceAccountID: "acct-cached",
+            authFingerprint: "same-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: false,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let visibleAccount = CodexVisibleAccount(
+            id: "managed:\(accountID.uuidString.lowercased())",
+            email: "cached@example.com",
+            workspaceAccountID: nil,
+            authFingerprint: "same-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: false,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let store = FileCodexAccountUsageSnapshotStore(fileURL: fileURL)
+        store.store([
+            CodexAccountUsageSnapshot(
+                account: cachedAccount,
+                snapshot: self.snapshot(email: cachedAccount.email, percent: 100),
+                error: nil,
+                sourceLabel: "oauth"),
+        ])
+
+        let hydrated = store.load(for: [visibleAccount])
+
+        #expect(hydrated.count == 1)
+        #expect(hydrated.first?.id == visibleAccount.id)
+        #expect(hydrated.first?.snapshot?.secondary?.usedPercent == 100)
+    }
 }

@@ -112,7 +112,7 @@ extension CodexVisibleAccountProjection {
             drafts.append(VisibleAccountDraft(
                 email: normalizedEmail,
                 workspaceLabel: Self.normalizeWorkspaceLabel(storedAccount.workspaceLabel),
-                workspaceAccountID: storedAccount.workspaceAccountID,
+                workspaceAccountID: Self.workspaceAccountID(for: storedAccount),
                 authFingerprint: storedAccount.authFingerprint,
                 storedAccountID: storedAccount.id,
                 selectionSource: .managedAccount(id: storedAccount.id),
@@ -235,6 +235,13 @@ extension CodexVisibleAccountProjection {
             return nil
         }
         return trimmed
+    }
+
+    /// Managed stores often keep the ChatGPT account id on `providerAccountID` without a
+    /// separate `workspaceAccountID`. Surface that id so cached usage can bind immediately.
+    static func workspaceAccountID(for storedAccount: ManagedCodexAccount) -> String? {
+        storedAccount.workspaceAccountID
+            ?? CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(storedAccount.providerAccountID)
     }
 
     private static func visibleAccountID(for draft: VisibleAccountDraft, emailGroupSize: Int) -> String {
