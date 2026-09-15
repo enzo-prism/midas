@@ -159,8 +159,14 @@ final class DisabledUpdaterController: UpdaterProviding {
         self.unavailableReason = unavailableReason
     }
 
-    func checkForUpdates(_ sender: Any?) {}
-    func installUpdate() {}
+    func checkForUpdates(_ sender: Any?) {
+        NSApp.activate(ignoringOtherApps: true)
+        NSWorkspace.shared.open(MidasUpdateConfiguration.releasesURL)
+    }
+
+    func installUpdate() {
+        self.checkForUpdates(nil)
+    }
 }
 
 @MainActor
@@ -328,37 +334,42 @@ private func isDeveloperIDSigned(bundleURL: URL) -> Bool {
 
 @MainActor
 private func makeUpdaterController() -> UpdaterProviding {
-    if Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true {
-        guard Bundle.main.object(forInfoDictionaryKey: "MidasUpdatesDisabled") as? Bool != true,
-              MidasUpdateConfiguration.isValid(
-                  feedURL: Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
-                  publicKey: Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String)
-        else {
-            return DisabledUpdaterController(unavailableReason: "Updates unavailable in this development build.")
-        }
-    }
     let bundleURL = Bundle.main.bundleURL
+    let isMidas = Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true
     let isBundledApp = bundleURL.pathExtension == "app"
+
+    if isMidas, InstallOrigin.isHomebrewCask(appBundleURL: bundleURL) {
+        return DisabledUpdaterController(
+            unavailableReason: "This installation is managed by Homebrew. Install Midas from github.com/enzo-prism/midas/releases to use in-app updates.")
+    }
+
+    let canUseSparkle = isBundledApp
+        && Bundle.main.object(forInfoDictionaryKey: "MidasUpdatesDisabled") as? Bool != true
+        && MidasUpdateConfiguration.isValid(
+            feedURL: Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+            publicKey: Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String)
+        && isDeveloperIDSigned(bundleURL: bundleURL)
+
+    if canUseSparkle {
+        let defaults = UserDefaults.standard
+        let autoUpdateKey = "autoUpdateEnabled"
+        let savedAutoUpdate = (defaults.object(forKey: autoUpdateKey) as? Bool) ?? true
+        return SparkleUpdaterController(savedAutoUpdate: savedAutoUpdate)
+    }
+
+    if isMidas, isBundledApp {
+        return MidasSignedReleaseUpdater()
+    }
+
+    if !isMidas, InstallOrigin.isHomebrewCask(appBundleURL: bundleURL) {
+        return DisabledUpdaterController(
+            unavailableReason: "Updates managed by Homebrew. Run: brew upgrade --cask steipete/tap/codexbar")
+    }
+
     guard isBundledApp else {
         return DisabledUpdaterController(unavailableReason: "Updates unavailable in this build.")
     }
-
-    if InstallOrigin.isHomebrewCask(appBundleURL: bundleURL) {
-        let reason = Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true
-            ? "This installation is managed by Homebrew. Install Midas from github.com/enzo-prism/midas/releases to use in-app updates."
-            : "Updates managed by Homebrew. Run: brew upgrade --cask steipete/tap/codexbar"
-        return DisabledUpdaterController(unavailableReason: reason)
-    }
-
-    guard isDeveloperIDSigned(bundleURL: bundleURL) else {
-        return DisabledUpdaterController(unavailableReason: "Updates unavailable in this build.")
-    }
-
-    let defaults = UserDefaults.standard
-    let autoUpdateKey = "autoUpdateEnabled"
-    // Default to true for first launch; fall back to saved preference thereafter.
-    let savedAutoUpdate = (defaults.object(forKey: autoUpdateKey) as? Bool) ?? true
-    return SparkleUpdaterController(savedAutoUpdate: savedAutoUpdate)
+    return DisabledUpdaterController(unavailableReason: "Updates unavailable in this build.")
 }
 #else
 private func makeUpdaterController() -> UpdaterProviding {

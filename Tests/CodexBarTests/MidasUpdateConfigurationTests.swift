@@ -51,4 +51,63 @@ struct MidasUpdateConfigurationTests {
                 publicKey: key))
         }
     }
+
+    @Test func parsesSignedMidasAppcastItem() throws {
+        let xml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+          <channel>
+            <title>Midas Updates</title>
+            <item>
+              <title>Midas 0.35.2</title>
+              <sparkle:version>105</sparkle:version>
+              <sparkle:shortVersionString>0.35.2</sparkle:shortVersionString>
+              <enclosure url="https://github.com/enzo-prism/midas/releases/download/v0.35.2-midas.1/Midas-0.35.2-macos-arm64.zip" length="26642135" type="application/octet-stream" />
+            </item>
+          </channel>
+        </rss>
+        """
+        let item = try #require(MidasAppcastParser.item(from: xml))
+        #expect(item.version == "0.35.2")
+        #expect(item.build == 105)
+        #expect(item.title == "Midas 0.35.2")
+        #expect(item.length == 26_642_135)
+        #expect(item.downloadURL.absoluteString
+            == "https://github.com/enzo-prism/midas/releases/download/v0.35.2-midas.1/Midas-0.35.2-macos-arm64.zip")
+        #expect(item.isNewer(thanBuild: 104))
+        #expect(!item.isNewer(thanBuild: 105))
+        #expect(!item.isNewer(thanBuild: 106))
+    }
+
+    @Test func rejectsNonMidasEnclosureHosts() {
+        let xml = """
+        <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+          <channel>
+            <item>
+              <title>Midas 0.35.2</title>
+              <sparkle:version>105</sparkle:version>
+              <sparkle:shortVersionString>0.35.2</sparkle:shortVersionString>
+              <enclosure url="https://example.com/Midas-0.35.2-macos-arm64.zip" length="1" />
+            </item>
+          </channel>
+        </rss>
+        """
+        #expect(MidasAppcastParser.item(from: xml) == nil)
+    }
+
+    @Test func signedReleasePromptDownloadsNewerAndCurrentBuilds() {
+        let item = MidasAppcastItem(
+            version: "0.35.2",
+            build: 105,
+            downloadURL: URL(
+                string: "https://github.com/enzo-prism/midas/releases/download/v0.35.2-midas.1/Midas-0.35.2-macos-arm64.zip")!,
+            title: "Midas 0.35.2",
+            length: 1)
+        let newer = MidasSignedReleasePrompt.make(item: item, currentBuild: 82)
+        #expect(newer.primaryChoice == .download)
+        #expect(newer.primaryTitle == "Download 0.35.2")
+        let current = MidasSignedReleasePrompt.make(item: item, currentBuild: 105)
+        #expect(current.primaryChoice == .download)
+        #expect(current.title.contains("0.35.2"))
+    }
 }
