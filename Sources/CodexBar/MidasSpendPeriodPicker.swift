@@ -4,35 +4,7 @@ import SwiftUI
 struct MidasSpendPeriodControl: View {
     @Bindable var settings: SettingsStore
     let store: UsageStore
-    @State private var isPresented = false
-
-    var body: some View {
-        Button { self.isPresented.toggle() } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "calendar").foregroundStyle(MidasTheme.secondaryText)
-                Text(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label)
-                    .lineLimit(1)
-                Image(systemName: self.isPresented ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-            }
-            .font(.system(size: 12, weight: .medium))
-        }
-        .buttonStyle(MidasPeriodButtonStyle(selected: self.isPresented))
-        .accessibilityLabel("Spend period")
-        .accessibilityValue(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label)
-        .help("Choose the date range for estimated spend")
-        .popover(isPresented: self.$isPresented, arrowEdge: .bottom) {
-            MidasSpendPeriodPicker(settings: self.settings, store: self.store)
-        }
-    }
-}
-
-/// A fixed control surface separates date choices from the underlying provider data.
-struct MidasSpendPeriodPicker: View {
-    @Bindable var settings: SettingsStore
-    let store: UsageStore
-    @Environment(\.dismiss) private var dismiss
-    @FocusState private var focusedSelection: String?
+    @State private var isExpanded = false
 
     private var months: [String] {
         let providers = self.store.enabledProvidersForDisplay()
@@ -47,76 +19,48 @@ struct MidasSpendPeriodPicker: View {
             dates: dates, selection: self.settings.midasSpendPeriodSelection)
     }
 
-    private var selections: [String] {
-        ["currentMonth", "rolling30Days"] + self.months
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Spend period").font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Button { self.dismiss() } label: { Image(systemName: "xmark").font(.system(size: 10)) }
-                    .buttonStyle(.plain).foregroundStyle(MidasTheme.secondaryText)
-                    .accessibilityLabel("Close spend period")
-            }.padding(.horizontal, 6)
-            VStack(spacing: 4) {
-                self.option("This month", selection: "currentMonth", icon: "calendar")
-                self.option("Last 30 days", selection: "rolling30Days", icon: "clock.arrow.circlepath")
+        VStack(alignment: .leading, spacing: 6) {
+            Button { self.isExpanded.toggle() } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "calendar").foregroundStyle(MidasTheme.secondaryText)
+                    Text(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label)
+                        .lineLimit(1)
+                    Image(systemName: self.isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .font(.system(size: 12, weight: .medium))
             }
-            Divider()
-            Text("RECORDED MONTHS")
-                .font(.system(size: 10, weight: .semibold)).tracking(0.7)
-                .foregroundStyle(MidasTheme.secondaryText).padding(.horizontal, 6)
-            if self.months.isEmpty {
-                Text("No earlier months recorded yet")
-                    .font(.system(size: 12)).foregroundStyle(MidasTheme.secondaryText)
-                    .padding(.horizontal, 6).padding(.vertical, 8)
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 4) {
-                            ForEach(self.months, id: \.self) { month in
-                                self.option(
-                                    MidasSpendPeriod(selection: month).label,
-                                    selection: month,
-                                    icon: "archivebox")
-                                    .id(month)
-                            }
+            .buttonStyle(MidasPeriodButtonStyle(selected: self.isExpanded))
+            .accessibilityLabel("Spend period")
+            .accessibilityValue(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label)
+            .help("Choose the date range for estimated spend")
+            if self.isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    self.option("This month", selection: "currentMonth", icon: "calendar")
+                    self.option("Last 30 days", selection: "rolling30Days", icon: "clock.arrow.circlepath")
+                    if !self.months.isEmpty {
+                        Text("RECORDED MONTHS")
+                            .font(.system(size: 10, weight: .semibold)).tracking(0.7)
+                            .foregroundStyle(MidasTheme.secondaryText)
+                            .padding(.top, 6)
+                            .padding(.horizontal, 6)
+                        ForEach(self.months, id: \.self) { month in
+                            self.option(
+                                MidasSpendPeriod(selection: month).label,
+                                selection: month,
+                                icon: "archivebox")
                         }
                     }
-                    .frame(height: CGFloat(min(self.months.count, 4)) * 54)
-                    .onAppear { proxy.scrollTo(self.settings.midasSpendPeriodSelection) }
-                    .onChange(of: self.focusedSelection) { _, value in
-                        if let value { proxy.scrollTo(value) }
-                    }
                 }
+                .accessibilityElement(children: .contain)
             }
-            Text("Recorded history may be incomplete. Quota reset dates stay the same.")
-                .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 6)
         }
-        .padding(12).frame(width: 300)
-        .foregroundStyle(MidasTheme.text).background(MidasTheme.background)
-        .onAppear { self.focusedSelection = self.selections.contains(self.settings.midasSpendPeriodSelection)
-            ? self.settings.midasSpendPeriodSelection : "currentMonth"
-        }
-        .onMoveCommand { direction in
-            let index = self.selections.firstIndex(of: self.focusedSelection ?? "") ?? 0
-            if direction == .down { self.focusedSelection = self.selections[min(index + 1, self.selections.count - 1)] }
-            if direction == .up { self.focusedSelection = self.selections[max(index - 1, 0)] }
-        }
-        .onKeyPress(.return) {
-            guard let selection = self.focusedSelection else { return .ignored }
-            self.select(selection)
-            return .handled
-        }
-        .onExitCommand { self.dismiss() }
     }
 
     private func select(_ selection: String) {
         self.settings.midasSpendPeriodSelection = selection
-        self.dismiss()
+        self.isExpanded = false
     }
 
     private func option(_ title: String, selection: String, icon: String) -> some View {
@@ -134,24 +78,20 @@ struct MidasSpendPeriodPicker: View {
                     .foregroundStyle(MidasTheme.accent).opacity(selected ? 1 : 0).accessibilityHidden(true)
             }.frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
         }
-        .buttonStyle(MidasPeriodButtonStyle(selected: selected, focused: self.focusedSelection == selection))
-        .focusable()
-        .focused(self.$focusedSelection, equals: selection)
+        .buttonStyle(MidasPeriodButtonStyle(selected: selected))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
 private struct MidasPeriodButtonStyle: ButtonStyle {
     let selected: Bool
-    var focused = false
     func makeBody(configuration: Configuration) -> some View {
-        Surface(configuration: configuration, selected: self.selected, focused: self.focused)
+        Surface(configuration: configuration, selected: self.selected)
     }
 
     private struct Surface: View {
         let configuration: ButtonStyleConfiguration
         let selected: Bool
-        let focused: Bool
         @State private var hovered = false
         @Environment(\.isEnabled) private var enabled
 
@@ -163,7 +103,7 @@ private struct MidasPeriodButtonStyle: ButtonStyle {
                 .overlay {
                     RoundedRectangle(cornerRadius: 8)
                         .strokeBorder(
-                            self.focused ? MidasTheme.accent : self.selected ? MidasTheme.accent.opacity(0.45)
+                            self.selected ? MidasTheme.accent.opacity(0.45)
                                 : MidasTheme.secondaryText.opacity(self.hovered ? 0.3 : 0.12),
                             lineWidth: 1)
                 }
