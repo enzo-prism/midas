@@ -162,6 +162,37 @@ enum MidasCodexAccountPolicy {
         return identity != .unresolved && refreshGuard.identity == identity
     }
 
+    static func snapshot(
+        for account: CodexVisibleAccount,
+        in snapshots: [String: CodexAccountUsageSnapshot]) -> CodexAccountUsageSnapshot?
+    {
+        if let entry = snapshots[account.id], self.entryBelongs(to: account, entry: entry) {
+            return entry
+        }
+        return snapshots.values.first { self.entryBelongs(to: account, entry: $0) }
+    }
+
+    static func entryBelongs(to account: CodexVisibleAccount, entry: CodexAccountUsageSnapshot) -> Bool {
+        let stored = entry.account
+        guard CodexIdentityResolver.normalizeEmail(stored.email)
+            == CodexIdentityResolver.normalizeEmail(account.email)
+        else { return false }
+
+        if let storedID = stored.storedAccountID, let currentID = account.storedAccountID {
+            return storedID == currentID
+        }
+
+        let storedWorkspace = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(stored.workspaceAccountID)
+        let currentWorkspace = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(account.workspaceAccountID)
+        if let storedWorkspace, let currentWorkspace, storedWorkspace != currentWorkspace {
+            return false
+        }
+
+        return stored.id == account.id
+            && stored.workspaceAccountID == account.workspaceAccountID
+            && stored.authFingerprint == account.authFingerprint
+    }
+
     static func usage(
         for account: CodexVisibleAccount,
         entry: CodexAccountUsageSnapshot?,
@@ -169,12 +200,7 @@ enum MidasCodexAccountPolicy {
         providerError: String?,
         refreshGuard: CodexAccountScopedRefreshGuard?) -> (snapshot: UsageSnapshot?, error: String?)
     {
-        if let entry,
-           entry.account.id == account.id,
-           entry.account.email == account.email,
-           entry.account.workspaceAccountID == account.workspaceAccountID,
-           entry.account.authFingerprint == account.authFingerprint
-        {
+        if let entry, self.entryBelongs(to: account, entry: entry) {
             return (entry.snapshot, entry.error)
         }
         guard self.canUseProviderSnapshot(for: account, refreshGuard: refreshGuard) else { return (nil, nil) }
@@ -211,7 +237,7 @@ extension StatusItemController {
         return visible.map { account in
             let usage = MidasCodexAccountPolicy.usage(
                 for: account,
-                entry: snapshots[account.id],
+                entry: MidasCodexAccountPolicy.snapshot(for: account, in: snapshots),
                 providerSnapshot: self.store.snapshot(for: .codex),
                 providerError: self.store.error(for: .codex),
                 refreshGuard: self.store.lastCodexAccountScopedRefreshGuard)

@@ -144,4 +144,44 @@ struct MidasCodexAccountPolicyTests {
                 == (refreshing ? "Refreshing…" : "Waiting for first update"))
         }
     }
+
+    @Test func managedAccountEntryBindsWhenCachedWorkspaceIsMissingOnTheVisibleAccount() {
+        let accountID = UUID()
+        let cached = CodexVisibleAccount(
+            id: "cached@example.com",
+            email: "cached@example.com",
+            workspaceAccountID: "acct-cached",
+            authFingerprint: "same-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: false,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let visible = CodexVisibleAccount(
+            id: "cached@example.com",
+            email: "cached@example.com",
+            workspaceAccountID: nil,
+            authFingerprint: "same-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: false,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let entry = CodexAccountUsageSnapshot(
+            account: cached,
+            snapshot: self.snapshot(cached),
+            error: nil,
+            sourceLabel: "oauth")
+        let usage = MidasCodexAccountPolicy.usage(
+            for: visible,
+            entry: entry,
+            providerSnapshot: nil,
+            providerError: nil,
+            refreshGuard: nil)
+        #expect(usage.snapshot?.primary?.usedPercent == 25)
+        #expect(usage.error == nil)
+        #expect(MidasCodexAccountPolicy.snapshot(for: visible, in: [entry.id: entry])?.id == entry.id)
+    }
 }

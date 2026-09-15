@@ -84,4 +84,30 @@ struct CodexAccountProviderIdentityReconciliationTests {
         #expect(projection.visibleAccounts.first?.isActive == true)
         #expect(projection.visibleAccounts.first?.isLive == true)
     }
+
+    @Test
+    func `visible managed account uses provider account id when workspace id is absent`() {
+        let stored = ManagedCodexAccount(
+            id: UUID(),
+            email: "cached@example.com",
+            providerAccountID: "7711d25c-a8eb-43f0-b847-c96c4ab5ca32",
+            authFingerprint: "fingerprint",
+            managedHomePath: "/tmp/managed-cached",
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 3)
+        let snapshot = CodexAccountReconciliationSnapshot(
+            storedAccounts: [stored],
+            activeStoredAccount: stored,
+            liveSystemAccount: nil,
+            matchingStoredAccountForLiveSystemAccount: nil,
+            activeSource: .managedAccount(id: stored.id),
+            hasUnreadableAddedAccountStore: false)
+
+        let projection = CodexVisibleAccountProjection.make(from: snapshot)
+        let account = projection.visibleAccounts.first
+
+        #expect(stored.workspaceAccountID == nil)
+        #expect(account?.workspaceAccountID == "7711d25c-a8eb-43f0-b847-c96c4ab5ca32")
+    }
 }

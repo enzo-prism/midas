@@ -41,19 +41,36 @@ struct FileCodexAccountUsageSnapshotStore: CodexAccountUsageSnapshotStoring, @un
                 return false
             }
 
+            // Only reject when *both* sides publish a value and they disagree. Managed
+            // accounts often persist `providerAccountID` without `workspaceAccountID`, so a
+            // cached workspace must still hydrate onto that row instead of waiting for a
+            // live Codex refresh.
             let currentWorkspaceAccountID = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(
                 account.workspaceAccountID)
-            if self.workspaceAccountID != nil || currentWorkspaceAccountID != nil {
-                return self.workspaceAccountID == currentWorkspaceAccountID
+            if let stored = self.workspaceAccountID, let current = currentWorkspaceAccountID,
+               stored != current
+            {
+                return false
             }
 
             let currentAuthFingerprint = CodexAuthFingerprint.normalize(account.authFingerprint)
-            if self.authFingerprint != nil || currentAuthFingerprint != nil {
-                return self.authFingerprint == currentAuthFingerprint
+            if let stored = self.authFingerprint, let current = currentAuthFingerprint,
+               stored != current
+            {
+                return false
             }
 
-            if self.storedAccountID != nil || account.storedAccountID != nil {
-                return self.storedAccountID == account.storedAccountID
+            if let stored = self.storedAccountID, let current = account.storedAccountID,
+               stored != current
+            {
+                return false
+            }
+
+            if self.workspaceAccountID != nil || currentWorkspaceAccountID != nil
+                || self.authFingerprint != nil || currentAuthFingerprint != nil
+                || self.storedAccountID != nil || account.storedAccountID != nil
+            {
+                return true
             }
 
             guard let selectionSource else { return true }
@@ -80,14 +97,16 @@ struct FileCodexAccountUsageSnapshotStore: CodexAccountUsageSnapshotStoring, @un
             return []
         }
 
+        var usedAccountIDs = Set<String>()
         let accountsByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
         return payload.records.compactMap { record in
-            guard let account = accountsByID[record.id] else { return nil }
-            guard record.accountIdentity?.matches(account)
-                ?? Self.canHydrateLegacyRecord(record, account: account)
-            else {
-                return nil
-            }
+            let account = Self.resolveAccount(
+                for: record,
+                accountsByID: accountsByID,
+                accounts: accounts,
+                usedAccountIDs: usedAccountIDs)
+            guard let account else { return nil }
+            usedAccountIDs.insert(account.id)
             return CodexAccountUsageSnapshot(
                 account: account,
                 snapshot: record.snapshot,
@@ -122,6 +141,22 @@ struct FileCodexAccountUsageSnapshotStore: CodexAccountUsageSnapshotStoring, @un
             #endif
         } catch {
             // Snapshot hydration is best-effort; never make menu refresh fail because disk cache failed.
+        }
+    }
+
+    private static func resolveAccount(
+        for record: Record,
+        accountsByID: [String: CodexVisibleAccount],
+        accounts: [CodexVisibleAccount],
+        usedAccountIDs: Set<String>) -> CodexVisibleAccount?
+    {
+        if let account = accountsByID[record.id], !usedAccountIDs.contains(account.id),
+           record.accountIdentity?.matches(account) ?? Self.canHydrateLegacyRecord(record, account: account)
+        {
+            return account
+        }
+        return accounts.first { account in
+            !usedAccountIDs.contains(account.id) && record.accountIdentity?.matches(account) == true
         }
     }
 
