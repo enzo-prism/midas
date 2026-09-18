@@ -10,15 +10,13 @@
 > (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
 > refer to the original CodexBar project, not this fork.
 
-## Midas 0.35.3
+## Midas 0.35.4
 
-The latest source expands the spend-period list and estimate-coverage details inside the Air
-panel (no nested popover), hydrates cached Codex weekly usage and banked resets when workspace
-ids are missing from the managed store, and lets development builds download the latest signed
-ZIP from Check for Updates. It also includes per-account banked reset counts, refreshed
-menu-bar pop-up anchoring, a focused monthly spend overview, separate usage bars and reset
-times for connected Codex accounts, cloud account activity, automatic Codex dollar estimates,
-optional iCloud pricing-sample sharing, and a three-step onboarding flow.
+The latest source updates Sparkle to 2.10.0 and KeyboardShortcuts to 3.1.0 for macOS 27
+Golden Gate compatibility. It also expands the spend-period list and estimate-coverage
+details inside the Air panel (no nested popover), hydrates cached Codex weekly usage and
+banked resets when workspace ids are missing from the managed store, and lets development
+builds download the latest signed ZIP from Check for Updates.
 
 - **Start here:** [Connect your services and accounts](docs/MIDAS_SETUP.md).
 - **Download:** [Latest signed Midas release](https://github.com/enzo-prism/midas/releases/latest).

@@ -96,8 +96,8 @@ selected provider.
 
 | Surface | Current |
 | --- | --- |
-| Source on `main` | **0.35.3**, build **106** |
-| Signed Sparkle / GitHub latest | **0.35.2**, tag `v0.35.2-midas.1` |
+| Source on `main` | **0.35.4**, build **107** |
+| Signed Sparkle / GitHub latest | **0.35.3**, tag `v0.35.3-midas.1` |
 | Marketing site (`midas-site` / Vercel `midas-by-prism`) | **0.35.2** download |
 
 Push source changes to `enzo-prism/midas`. Review `git status` and the staged diff before

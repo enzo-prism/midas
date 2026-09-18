@@ -6,13 +6,12 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-Source on `main` is version **0.35.3**, build **106**. It includes the inline spend-period list
-(nested-popover crash fix), Codex last-known quota hydration, and GitHub ZIP Check for Updates
-for non–Developer ID builds.
+Source on `main` is version **0.35.4**, build **107**. It updates Sparkle and
+KeyboardShortcuts for macOS 27 Golden Gate compatibility on top of the 0.35.3 Air panel,
+quota hydration, and Check for Updates work.
 
-The last **signed, notarized, Sparkle-published** binary remains **0.35.2**, build **105**, tagged
-`v0.35.2-midas.1`, from commit `518ea2cce63e0de17d6d40e05a1f43f0774b53d4`, until a Developer ID
-private key and `enzo-prism-midas` Sparkle account are available on the build machine. Check
+The last **signed, notarized, Sparkle-published** binary is **0.35.3**, build **106**, tagged
+`v0.35.3-midas.1`, from tag commit `6d570bc8bc3c9765a0d3eb8560bb943672d1b4cc`. Check
 GitHub releases for live binary status. The downloadable app is for Apple Silicon Macs running
 macOS 14 or later. The bundle directory and executable retain `CodexBar` for compatibility; the
 app's displayed name is Midas.
@@ -24,6 +23,12 @@ The upstream CodexBar feed remains disabled. Debug, ad-hoc, and Intel builds can
 Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+
+## 0.35.4 changes
+
+Version 0.35.4, build 107, updates Sparkle to 2.10.0 (Golden Gate compatibility release)
+and KeyboardShortcuts to 3.1.0 (Swift 6.3 release-build crash fix), and clears the
+format/lint gate. No behavior changes.
 
 ## 0.35.3 changes
 

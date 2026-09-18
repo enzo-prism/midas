@@ -114,13 +114,15 @@ struct MidasSignedReleasePrompt: Equatable {
         if item.isNewer(thanBuild: currentBuild) {
             return Self(
                 title: "Midas \(item.version) is available",
-                message: "Download the latest signed Midas for Apple Silicon. Sparkle in-app install needs a Developer ID copy of Midas from Applications.",
+                message: "Download the latest signed Midas for Apple Silicon. "
+                    + "Sparkle in-app install needs a Developer ID copy of Midas from Applications.",
                 primaryTitle: "Download \(item.version)",
                 primaryChoice: .download)
         }
         return Self(
             title: "Latest signed Midas is \(item.version)",
-            message: "This build cannot use Sparkle in-app updates. You can still download the latest signed Midas ZIP from GitHub.",
+            message: "This build cannot use Sparkle in-app updates. "
+                + "You can still download the latest signed Midas ZIP from GitHub.",
             primaryTitle: "Download \(item.version)",
             primaryChoice: .download)
     }

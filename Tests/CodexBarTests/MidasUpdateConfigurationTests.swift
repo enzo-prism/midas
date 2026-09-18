@@ -95,12 +95,13 @@ struct MidasUpdateConfigurationTests {
         #expect(MidasAppcastParser.item(from: xml) == nil)
     }
 
-    @Test func signedReleasePromptDownloadsNewerAndCurrentBuilds() {
+    @Test func signedReleasePromptDownloadsNewerAndCurrentBuilds() throws {
+        let downloadURL = try #require(URL(
+            string: "https://github.com/enzo-prism/midas/releases/download/v0.35.2-midas.1/Midas-0.35.2-macos-arm64.zip"))
         let item = MidasAppcastItem(
             version: "0.35.2",
             build: 105,
-            downloadURL: URL(
-                string: "https://github.com/enzo-prism/midas/releases/download/v0.35.2-midas.1/Midas-0.35.2-macos-arm64.zip")!,
+            downloadURL: downloadURL,
             title: "Midas 0.35.2",
             length: 1)
         let newer = MidasSignedReleasePrompt.make(item: item, currentBuild: 82)

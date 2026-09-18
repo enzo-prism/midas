@@ -1,5 +1,12 @@
 # Changelog
 
+## Midas 0.35.4 — September 18, 2026
+
+- Update Sparkle to 2.10.0 (Golden Gate compatibility release) and KeyboardShortcuts to 3.1.0, fixing the known release-build crash with the Swift 6.3 compiler.
+- Clear the format/lint gate: `make check` passes with zero violations.
+
+Build 107. No behavior changes; quota, spend, and reset logic are unchanged.
+
 ## Midas 0.35.3 — September 15, 2026
 
 - Expand the spend-period list inline in the Air panel instead of a nested SwiftUI popover, so choosing This month / Last 30 days no longer aborts on macOS 27 (`KeyViewProxy` unowned retain while setting first responder).
