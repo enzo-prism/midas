@@ -116,6 +116,7 @@ See [CLI configuration](docs/cli-configuration.md) for the full flow.
 - [Codex](docs/codex.md) — OAuth API or local Codex CLI, plus optional OpenAI web dashboard extras. Midas also tracks on-demand rate-limit reset credits (count + per-credit expiries) via the OAuth source.
 - [OpenAI](docs/openai.md) — Admin API key usage/cost graphs with legacy credit-balance fallback.
 - [Claude](docs/claude.md) — OAuth API, browser cookies, or CLI PTY fallback; session and weekly usage where available.
+- [Anthropic](docs/anthropic.md) — Admin API key for organization billed spend and token usage (Claude Console), alongside Claude subscription limits.
 - [Cursor](docs/cursor.md) — Browser session cookies for plan + usage + billing resets.
 - [OpenCode](docs/opencode.md) — Browser cookies for workspace subscription usage.
 - [OpenCode Go](docs/opencode.md) — Browser cookies for Go usage windows.

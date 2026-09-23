@@ -115,16 +115,19 @@ struct MidasPanelView: View {
                         .lineLimit(2).multilineTextAlignment(.leading)
                     Spacer(minLength: 8)
                     if item.isRefreshing { ProgressView().controlSize(.mini) }
-                    Text(item.spend.flatMap { $0.isEstimate ? MidasOverviewMoney.format(
+                    Text(item.spend.flatMap { $0.isDisplayable ? MidasOverviewMoney.format(
                         $0.amount,
                         currency: $0.currency) : nil } ?? "—")
                         .font(.system(size: 21, weight: .medium)).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.7)
-                        .accessibilityLabel("Estimated inference spend")
-                        .accessibilityValue(item.spend.flatMap { $0.isEstimate ? $0.value : nil } ?? "Unavailable")
+                        .accessibilityLabel(item.spend?.accessibilityTitle ?? "Estimated inference spend")
+                        .accessibilityValue(item.spend.flatMap { $0.isDisplayable ? $0.value : nil } ?? "Unavailable")
                 }
                 MidasOverviewMetrics(item: item, accounts: self.actions.accountPresentations(item.provider))
-                if item.spend?.isEstimate != true {
+                if item.spend?.isBilled == true {
+                    Text("Billed · not in estimate total")
+                        .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                } else if item.spend?.isEstimate != true {
                     Text(item.spendUnavailableReason ?? "Estimate unavailable")
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }

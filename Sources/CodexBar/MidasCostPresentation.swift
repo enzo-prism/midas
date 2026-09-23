@@ -101,6 +101,10 @@ struct MidasCostPresentation {
         case .mixed:
             self.costLabel = "Mixed-source usage value"
             self.explanation = "These records mix provider metering and API-rate estimates; they are not billed spend."
+        case .vendorBilled:
+            self.costLabel = "Billed API spend"
+            self.explanation = "Charges from the provider's organization cost report, in UTC days. "
+                + "This is billed spend, kept separate from inference estimates."
         case .unknown:
             self.costLabel = "Usage value · source unspecified"
             self.explanation = "The source does not establish how these values were calculated. Billing is unavailable."

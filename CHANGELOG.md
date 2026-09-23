@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Fix Settings silently failing to open on macOS 27: Settings is now an AppKit window owned by the app
+  delegate instead of relying on a hidden SwiftUI keepalive window that macOS could tear down.
+- Add an **Anthropic** provider for Anthropic API Platform organization spend via an Admin API key: billed daily
+  spend, token usage by model, organization name, inline dashboard, cost-history chart, token accounts, and
+  `codexbar cost --provider anthropic`. Claude subscription limits stay in the Claude provider, so both can be shown.
+- Midas Air shows billed organization spend per provider as *Billed API spend*; the estimate total excludes it and
+  notes it in coverage (no double counting with Claude Code local usage).
+- Anthropic Admin API client (shared with Claude's Admin API source): follow `next_page` pagination, honor the
+  cost-history window up to 365 days, retry transient failures, surface Anthropic error messages, and accept
+  fractional-second timestamps.
+
 ## Midas 0.35.4 — September 18, 2026
 
 - Update Sparkle to 2.10.0 (Golden Gate compatibility release) and KeyboardShortcuts to 3.1.0, fixing the known release-build crash with the Swift 6.3 compiler.

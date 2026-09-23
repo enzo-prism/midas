@@ -157,13 +157,16 @@ struct MidasUsageWindowView: View {
                     Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }
                 Text(item.spend.flatMap {
-                    $0.isEstimate ? MidasOverviewMoney.format($0.amount, currency: $0.currency) : nil
+                    $0.isDisplayable ? MidasOverviewMoney.format($0.amount, currency: $0.currency) : nil
                 } ?? "—")
                     .font(.system(size: 28, weight: .medium)).monospacedDigit()
-                    .accessibilityLabel("Estimated inference spend")
+                    .accessibilityLabel(item.spend?.accessibilityTitle ?? "Estimated inference spend")
                     .accessibilityValue(item.spend?.value ?? "Unavailable")
                 MidasOverviewMetrics(item: item, accounts: self.actions.accountPresentations(item.provider))
-                if item.spend?.isEstimate != true {
+                if item.spend?.isBilled == true {
+                    Text("Billed · not in estimate total")
+                        .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                } else if item.spend?.isEstimate != true {
                     Text(item.spendUnavailableReason ?? "Estimate unavailable")
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }

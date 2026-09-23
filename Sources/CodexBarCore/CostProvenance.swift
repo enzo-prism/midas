@@ -8,6 +8,9 @@ public enum CostProvenance: String, Sendable, Equatable, Codable {
     case vendorMetered
     /// Window mixes list-price rows with vendor-metered rows.
     case mixed
+    /// Charges reported by the provider's organization cost API (for example the Anthropic cost report).
+    /// Real spend, so it is shown separately and never summed with list-price estimates.
+    case vendorBilled
     case unknown
 
     public var isBillingReceipt: Bool {
@@ -37,6 +40,8 @@ public enum CostProvenance: String, Sendable, Equatable, Codable {
             }
         case .listPriceEstimate:
             hasWindowCosts ? .listPriceEstimate : .unknown
+        case .vendorBilled:
+            hasWindowCosts ? .vendorBilled : .unknown
         case .unknown:
             .unknown
         }

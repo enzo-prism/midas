@@ -32,7 +32,7 @@ extension StatusItemController {
     {
         var result = presentation
         let period = MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
-        guard let token, let original = result.spend, original.isEstimate else {
+        guard let token, let original = result.spend, original.isDisplayable else {
             result.spend = nil
             if presentation.provider == .codex, self.settings.midasCloudUsageEnabled {
                 result.spendUnavailableReason = self.settings.midasCodexEstimateMode == .tokensOnly
@@ -48,12 +48,16 @@ extension StatusItemController {
             return result
         }
         let scope = "\(estimate.range.start)–\(estimate.range.end)"
-        let calendarNote = result.provider == .codex && self.settings.midasCloudUsageEnabled
-            ? "OpenAI daily dates use UTC."
-            : "Uses recorded daily dates in the source’s reporting calendar."
+        let calendarNote = if result.provider == .codex, self.settings.midasCloudUsageEnabled {
+            "OpenAI daily dates use UTC."
+        } else if original.isBilled {
+            "Cost report days use UTC; the latest hours can still be settling."
+        } else {
+            "Uses recorded daily dates in the source’s reporting calendar."
+        }
         let coverage = "Recorded history only; complete account and date coverage is not established."
         result.spend = MidasSpendPresentation(
-            title: "Estimated inference spend",
+            title: original.isBilled ? "Billed API spend" : "Estimated inference spend",
             value: amount.formatted(.currency(code: original.currency)),
             period: period.label,
             detail: original.detail + "\n\(scope). \(calendarNote) \(coverage)",
@@ -62,8 +66,9 @@ extension StatusItemController {
             currency: original.currency,
             secondaryValue: nil,
             secondaryLabel: nil,
-            isEstimate: true,
-            coverageNote: estimate.isPartial ? coverage : nil)
+            isEstimate: original.isEstimate,
+            coverageNote: estimate.isPartial ? coverage : nil,
+            isBilled: original.isBilled)
         return result
     }
 }

@@ -6,38 +6,91 @@ import FoundationNetworking
 public enum ClaudeAdminAPIUsageError: LocalizedError, Sendable, Equatable {
     case missingCredentials
     case networkError(String)
-    case apiError(endpoint: String, statusCode: Int)
+    case apiError(endpoint: String, statusCode: Int, message: String? = nil)
     case parseFailed(endpoint: String, message: String)
+    case paginationLimitExceeded(endpoint: String)
 
     public var errorDescription: String? {
         switch self {
         case .missingCredentials:
             "Missing Anthropic Admin API key."
         case let .networkError(message):
-            "Claude API usage network error: \(message)"
-        case let .apiError(endpoint, statusCode):
-            "Claude API usage \(endpoint) error: HTTP \(statusCode)"
+            "Anthropic API usage network error: \(message)"
+        case let .apiError(endpoint, statusCode, message):
+            Self.apiErrorDescription(endpoint: endpoint, statusCode: statusCode, message: message)
         case let .parseFailed(endpoint, message):
-            "Failed to parse Claude API usage \(endpoint): \(message)"
+            "Failed to parse Anthropic API usage \(endpoint): \(message)"
+        case let .paginationLimitExceeded(endpoint):
+            "Anthropic API usage \(endpoint) returned more pages than expected."
         }
+    }
+
+    /// 401/403 mean the key is not an organization Admin API credential (or was revoked).
+    public var isCredentialRejected: Bool {
+        switch self {
+        case let .apiError(_, statusCode, _):
+            statusCode == 401 || statusCode == 403
+        default:
+            false
+        }
+    }
+
+    private static func apiErrorDescription(endpoint: String, statusCode: Int, message: String?) -> String {
+        var description = "Anthropic API usage \(endpoint) error: HTTP \(statusCode)"
+        if let message, !message.isEmpty {
+            description += " – \(message)"
+        }
+        if statusCode == 401 || statusCode == 403 {
+            description += ". Usage and cost reports need an organization Admin API key (sk-ant-admin…)."
+        }
+        return description
     }
 }
 
+/// Anthropic Usage & Cost Admin API client, shared by the Anthropic provider and Claude's Admin API source.
 public enum ClaudeAdminAPIUsageFetcher {
     public static let costReportURL = URL(string: "https://api.anthropic.com/v1/organizations/cost_report")!
     public static let messagesUsageURL =
         URL(string: "https://api.anthropic.com/v1/organizations/usage_report/messages")!
+    public static let organizationURL = URL(string: "https://api.anthropic.com/v1/organizations/me")!
 
     private static let anthropicVersion = "2023-06-01"
     private static let timeoutSeconds: TimeInterval = 20
+    /// Both reports cap daily buckets at 31 per page.
     private static let maxDailyBuckets = 31
+    private static let maxHistoryDays = 365
+    private static let maxPagesPerRange = 20
+    private static let maxErrorMessageLength = 200
+
+    private struct RequestContext {
+        let apiKey: String
+        let transport: any ProviderHTTPTransport
+        let retryPolicy: ProviderHTTPRetryPolicy
+    }
+
+    private struct ReportEndpoint<Response: AdminAPIPage> {
+        let name: String
+        let baseURL: URL
+        let groupBy: String
+        let decode: (Data) throws -> Response
+    }
+
+    private struct SnapshotMetadata {
+        let now: Date
+        let calendar: Calendar
+        let historyDays: Int?
+        let organizationName: String?
+    }
 
     public static func fetchUsage(
         apiKey: String,
         costURL: URL = Self.costReportURL,
         messagesURL: URL = Self.messagesUsageURL,
+        organizationURL: URL? = nil,
         session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
-        now: Date = Date()) async throws -> ClaudeAdminAPIUsageSnapshot
+        now: Date = Date(),
+        historyDays: Int = 30,
+        retryPolicy: ProviderHTTPRetryPolicy = .transientIdempotent) async throws -> ClaudeAdminAPIUsageSnapshot
     {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -45,89 +98,120 @@ public enum ClaudeAdminAPIUsageFetcher {
         }
 
         let calendar = Self.utcCalendar
-        let range = Self.dailyRange(now: now, calendar: calendar)
-        let costs = try await Self.fetchCostReport(
-            apiKey: trimmed,
-            baseURL: costURL,
-            range: range,
-            transport: transport)
-        let messages = try await Self.fetchMessagesUsage(
-            apiKey: trimmed,
-            baseURL: messagesURL,
-            range: range,
-            transport: transport)
+        let clampedHistoryDays = max(1, min(Self.maxHistoryDays, historyDays))
+        let ranges = Self.dailyRanges(now: now, calendar: calendar, historyDays: clampedHistoryDays)
+        let context = RequestContext(apiKey: trimmed, transport: transport, retryPolicy: retryPolicy)
 
-        return Self.makeSnapshot(costs: costs, messages: messages, now: now, calendar: calendar)
+        // Sequential on purpose: both reports are required; the organization lookup is best-effort.
+        var costBuckets: [CostBucket] = []
+        let costEndpoint = ReportEndpoint(
+            name: "cost_report", baseURL: costURL, groupBy: "description", decode: Self.decodeCosts)
+        for range in ranges {
+            try await costBuckets.append(contentsOf: Self.fetchAllPages(costEndpoint, range: range, context: context))
+        }
+        var messageBuckets: [MessagesBucket] = []
+        let messagesEndpoint = ReportEndpoint(
+            name: "messages", baseURL: messagesURL, groupBy: "model", decode: Self.decodeMessages)
+        for range in ranges {
+            try await messageBuckets.append(
+                contentsOf: Self.fetchAllPages(messagesEndpoint, range: range, context: context))
+        }
+
+        var organizationName: String?
+        if let organizationURL {
+            organizationName = await Self.fetchOrganizationName(url: organizationURL, context: context)
+        }
+
+        return Self.makeSnapshot(
+            costs: costBuckets,
+            messages: messageBuckets,
+            metadata: SnapshotMetadata(
+                now: now,
+                calendar: calendar,
+                historyDays: clampedHistoryDays,
+                organizationName: organizationName))
     }
 
     static func _parseSnapshotForTesting(
         costs: Data,
         messages: Data,
         now: Date,
-        calendar: Calendar = Self.utcCalendar) throws -> ClaudeAdminAPIUsageSnapshot
+        calendar: Calendar = Self.utcCalendar,
+        historyDays: Int? = nil,
+        organizationName: String? = nil) throws -> ClaudeAdminAPIUsageSnapshot
     {
-        let costs = try Self.decodeCosts(costs)
-        let messages = try Self.decodeMessages(messages)
-        return Self.makeSnapshot(costs: costs, messages: messages, now: now, calendar: calendar)
+        try self.makeSnapshot(
+            costs: self.decodeCosts(costs).data,
+            messages: self.decodeMessages(messages).data,
+            metadata: SnapshotMetadata(
+                now: now,
+                calendar: calendar,
+                historyDays: historyDays,
+                organizationName: organizationName))
     }
 
-    private static func fetchCostReport(
-        apiKey: String,
-        baseURL: URL,
+    private static func fetchAllPages<Response: AdminAPIPage>(
+        _ endpoint: ReportEndpoint<Response>,
         range: DateRange,
-        transport: any ProviderHTTPTransport) async throws -> CostReportResponse
+        context: RequestContext) async throws -> [Response.Bucket]
     {
-        let url = Self.url(
-            baseURL: baseURL,
-            range: range,
-            queryItems: [
-                URLQueryItem(name: "group_by[]", value: "description"),
-            ])
-        let data = try await Self.fetchData(url: url, apiKey: apiKey, endpoint: "cost_report", transport: transport)
-        return try Self.decodeCosts(data)
+        var buckets: [Response.Bucket] = []
+        var page: String?
+        for _ in 0..<Self.maxPagesPerRange {
+            var items = [URLQueryItem(name: "group_by[]", value: endpoint.groupBy)]
+            if let page { items.append(URLQueryItem(name: "page", value: page)) }
+            let url = Self.url(baseURL: endpoint.baseURL, range: range, queryItems: items)
+            let data = try await Self.fetchData(url: url, endpoint: endpoint.name, context: context)
+            let response = try endpoint.decode(data)
+            buckets.append(contentsOf: response.data)
+            guard response.hasMore == true,
+                  let next = response.nextPage?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !next.isEmpty,
+                  next != page
+            else { return buckets }
+            page = next
+        }
+        throw ClaudeAdminAPIUsageError.paginationLimitExceeded(endpoint: endpoint.name)
     }
 
-    private static func fetchMessagesUsage(
-        apiKey: String,
-        baseURL: URL,
-        range: DateRange,
-        transport: any ProviderHTTPTransport) async throws -> MessagesUsageResponse
-    {
-        let url = Self.url(
-            baseURL: baseURL,
-            range: range,
-            queryItems: [
-                URLQueryItem(name: "group_by[]", value: "model"),
-            ])
-        let data = try await Self.fetchData(url: url, apiKey: apiKey, endpoint: "messages", transport: transport)
-        return try Self.decodeMessages(data)
+    private static func fetchOrganizationName(url: URL, context: RequestContext) async -> String? {
+        guard let data = try? await fetchData(url: url, endpoint: "organization", context: context),
+              let organization = try? JSONDecoder().decode(OrganizationResponse.self, from: data)
+        else { return nil }
+        return Self.nonEmpty(organization.name)
     }
 
-    private static func fetchData(
-        url: URL,
-        apiKey: String,
-        endpoint: String,
-        transport: any ProviderHTTPTransport) async throws -> Data
-    {
+    private static func fetchData(url: URL, endpoint: String, context: RequestContext) async throws -> Data {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = Self.timeoutSeconds
         request.setValue(Self.anthropicVersion, forHTTPHeaderField: "anthropic-version")
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue(context.apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("CodexBar/1.0", forHTTPHeaderField: "User-Agent")
 
         let response: ProviderHTTPResponse
         do {
-            response = try await transport.response(for: request)
+            response = try await context.transport.response(for: request, retryPolicy: context.retryPolicy)
         } catch {
             throw ClaudeAdminAPIUsageError.networkError(error.localizedDescription)
         }
 
         guard response.statusCode == 200 else {
-            throw ClaudeAdminAPIUsageError.apiError(endpoint: endpoint, statusCode: response.statusCode)
+            throw ClaudeAdminAPIUsageError.apiError(
+                endpoint: endpoint,
+                statusCode: response.statusCode,
+                message: Self.errorMessage(from: response.data))
         }
         return response.data
+    }
+
+    /// Anthropic errors look like `{"type":"error","error":{"type":"…","message":"…"}}`.
+    private static func errorMessage(from data: Data) -> String? {
+        guard let envelope = try? JSONDecoder().decode(ErrorEnvelope.self, from: data),
+              let message = nonEmpty(envelope.error?.message)
+        else { return nil }
+        return String(message.prefix(Self.maxErrorMessageLength))
     }
 
     private static func decodeCosts(_ data: Data) throws -> CostReportResponse {
@@ -147,31 +231,30 @@ public enum ClaudeAdminAPIUsageFetcher {
     }
 
     private static func makeSnapshot(
-        costs: CostReportResponse,
-        messages: MessagesUsageResponse,
-        now: Date,
-        calendar: Calendar) -> ClaudeAdminAPIUsageSnapshot
+        costs: [CostBucket],
+        messages: [MessagesBucket],
+        metadata: SnapshotMetadata) -> ClaudeAdminAPIUsageSnapshot
     {
+        let calendar = metadata.calendar
+        // Key by parsed UTC day rather than the raw timestamp so equivalent RFC 3339 spellings merge.
         var accumulators: [String: DailyAccumulator] = [:]
 
-        for bucket in costs.data {
-            var accumulator = accumulators[bucket.startingAt] ?? DailyAccumulator(
-                startingAt: bucket.startingAt,
-                endingAt: bucket.endingAt)
+        for bucket in costs {
+            guard let window = BucketWindow(bucket.startingAt, bucket.endingAt, calendar: calendar) else { continue }
+            var accumulator = accumulators[window.day] ?? DailyAccumulator(window: window)
             for result in bucket.results {
                 // Anthropic Usage & Cost API docs define `amount` as a decimal string in lowest USD units.
                 let value = Self.usdFromAnthropicLowestUnitAmount(result.amount)
                 accumulator.costUSD += value
-                let item = Self.displayName(result.description ?? result.costType, fallback: "Claude API")
+                let item = Self.nonEmpty(result.description ?? result.costType) ?? "Claude API"
                 accumulator.costItems[item, default: 0] += value
             }
-            accumulators[bucket.startingAt] = accumulator
+            accumulators[window.day] = accumulator
         }
 
-        for bucket in messages.data {
-            var accumulator = accumulators[bucket.startingAt] ?? DailyAccumulator(
-                startingAt: bucket.startingAt,
-                endingAt: bucket.endingAt)
+        for bucket in messages {
+            guard let window = BucketWindow(bucket.startingAt, bucket.endingAt, calendar: calendar) else { continue }
+            var accumulator = accumulators[window.day] ?? DailyAccumulator(window: window)
             for result in bucket.results {
                 let input = result.uncachedInputTokens ?? 0
                 let cacheCreation = result.cacheCreation?.totalInputTokens ?? 0
@@ -183,7 +266,7 @@ public enum ClaudeAdminAPIUsageFetcher {
                 accumulator.cacheReadInputTokens += cacheRead
                 accumulator.outputTokens += output
                 accumulator.totalTokens += total
-                let modelName = Self.displayName(result.model, fallback: "Claude API")
+                let modelName = Self.nonEmpty(result.model) ?? "Claude API"
                 accumulator.models[modelName, default: ModelAccumulator()].add(
                     inputTokens: input,
                     cacheCreationInputTokens: cacheCreation,
@@ -191,25 +274,30 @@ public enum ClaudeAdminAPIUsageFetcher {
                     outputTokens: output,
                     totalTokens: total)
             }
-            accumulators[bucket.startingAt] = accumulator
+            accumulators[window.day] = accumulator
         }
 
         let daily = accumulators.values
-            .compactMap { $0.makeBucket(calendar: calendar) }
-            .filter { $0.startTime <= now }
+            .map { $0.makeBucket() }
+            .filter { $0.startTime <= metadata.now }
             .sorted { $0.startTime < $1.startTime }
-        return ClaudeAdminAPIUsageSnapshot(daily: daily, updatedAt: now)
+        return ClaudeAdminAPIUsageSnapshot(
+            daily: daily,
+            updatedAt: metadata.now,
+            historyDays: metadata.historyDays,
+            organizationName: metadata.organizationName)
     }
 
-    private static func displayName(_ raw: String?, fallback: String) -> String {
+    private static func nonEmpty(_ raw: String?) -> String? {
         guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
-            return fallback
+            return nil
         }
         return trimmed
     }
 
     private static func usdFromAnthropicLowestUnitAmount(_ raw: String) -> Double {
-        (Double(raw) ?? 0) / 100
+        let cents = Double(raw.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        return cents.isFinite ? cents / 100 : 0
     }
 
     private static func url(baseURL: URL, range: DateRange, queryItems extraItems: [URLQueryItem]) -> URL {
@@ -218,16 +306,25 @@ public enum ClaudeAdminAPIUsageFetcher {
             URLQueryItem(name: "starting_at", value: Self.rfc3339String(from: range.start)),
             URLQueryItem(name: "ending_at", value: Self.rfc3339String(from: range.end)),
             URLQueryItem(name: "bucket_width", value: "1d"),
-            URLQueryItem(name: "limit", value: String(Self.maxDailyBuckets)),
+            URLQueryItem(name: "limit", value: String(range.limit)),
         ] + extraItems
         return components.url!
     }
 
-    private static func dailyRange(now: Date, calendar: Calendar) -> DateRange {
+    /// UTC day ranges covering `historyDays` through today, chunked to the 31-bucket page limit.
+    private static func dailyRanges(now: Date, calendar: Calendar, historyDays: Int) -> [DateRange] {
         let today = calendar.startOfDay(for: now)
-        let start = calendar.date(byAdding: .day, value: -(Self.maxDailyBuckets - 1), to: today) ?? today
-        let end = calendar.date(byAdding: .day, value: 1, to: today) ?? now
-        return DateRange(start: start, end: end)
+        var cursor = calendar.date(byAdding: .day, value: -(historyDays - 1), to: today) ?? today
+        var remainingDays = historyDays
+        var ranges: [DateRange] = []
+        while remainingDays > 0 {
+            let chunkDays = min(Self.maxDailyBuckets, remainingDays)
+            let end = calendar.date(byAdding: .day, value: chunkDays, to: cursor) ?? cursor
+            ranges.append(DateRange(start: cursor, end: end, limit: chunkDays))
+            cursor = end
+            remainingDays -= chunkDays
+        }
+        return ranges
     }
 
     private static var utcCalendar: Calendar {
@@ -237,15 +334,11 @@ public enum ClaudeAdminAPIUsageFetcher {
         return calendar
     }
 
-    private static func rfc3339Formatter() -> ISO8601DateFormatter {
+    private static func rfc3339String(from date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter
-    }
-
-    private static func rfc3339String(from date: Date) -> String {
-        self.rfc3339Formatter().string(from: date)
+        return formatter.string(from: date)
     }
 
     fileprivate static func dayKey(from date: Date, calendar: Calendar) -> String {
@@ -257,18 +350,37 @@ public enum ClaudeAdminAPIUsageFetcher {
     }
 
     fileprivate static func parseDate(_ raw: String) -> Date? {
-        self.rfc3339Formatter().date(from: raw)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: raw) { return date }
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: raw)
     }
 }
 
 private struct DateRange {
     let start: Date
     let end: Date
+    let limit: Int
+}
+
+private struct BucketWindow {
+    let day: String
+    let start: Date
+    let end: Date
+
+    init?(_ startingAt: String, _ endingAt: String, calendar: Calendar) {
+        guard let start = ClaudeAdminAPIUsageFetcher.parseDate(startingAt),
+              let end = ClaudeAdminAPIUsageFetcher.parseDate(endingAt)
+        else { return nil }
+        self.day = ClaudeAdminAPIUsageFetcher.dayKey(from: start, calendar: calendar)
+        self.start = start
+        self.end = end
+    }
 }
 
 private struct DailyAccumulator {
-    let startingAt: String
-    let endingAt: String
+    let window: BucketWindow
     var costUSD: Double = 0
     var inputTokens: Int = 0
     var cacheCreationInputTokens: Int = 0
@@ -278,14 +390,11 @@ private struct DailyAccumulator {
     var costItems: [String: Double] = [:]
     var models: [String: ModelAccumulator] = [:]
 
-    func makeBucket(calendar: Calendar) -> ClaudeAdminAPIUsageSnapshot.DailyBucket? {
-        guard let start = ClaudeAdminAPIUsageFetcher.parseDate(self.startingAt),
-              let end = ClaudeAdminAPIUsageFetcher.parseDate(self.endingAt)
-        else { return nil }
-        return ClaudeAdminAPIUsageSnapshot.DailyBucket(
-            day: ClaudeAdminAPIUsageFetcher.dayKey(from: start, calendar: calendar),
-            startTime: start,
-            endTime: end,
+    func makeBucket() -> ClaudeAdminAPIUsageSnapshot.DailyBucket {
+        ClaudeAdminAPIUsageSnapshot.DailyBucket(
+            day: self.window.day,
+            startTime: self.window.start,
+            endTime: self.window.end,
             costUSD: self.costUSD,
             inputTokens: self.inputTokens,
             cacheCreationInputTokens: self.cacheCreationInputTokens,
@@ -339,7 +448,14 @@ private struct ModelAccumulator {
     }
 }
 
-private struct CostReportResponse: Decodable {
+private protocol AdminAPIPage: Decodable {
+    associatedtype Bucket: Decodable
+    var data: [Bucket] { get }
+    var hasMore: Bool? { get }
+    var nextPage: String? { get }
+}
+
+private struct CostReportResponse: AdminAPIPage {
     let data: [CostBucket]
     let hasMore: Bool?
     let nextPage: String?
@@ -377,7 +493,7 @@ private struct CostResult: Decodable {
     }
 }
 
-private struct MessagesUsageResponse: Decodable {
+private struct MessagesUsageResponse: AdminAPIPage {
     let data: [MessagesBucket]
     let hasMore: Bool?
     let nextPage: String?
@@ -429,4 +545,16 @@ private struct CacheCreation: Decodable {
         case ephemeral1HInputTokens = "ephemeral_1h_input_tokens"
         case ephemeral5MInputTokens = "ephemeral_5m_input_tokens"
     }
+}
+
+private struct OrganizationResponse: Decodable {
+    let name: String?
+}
+
+private struct ErrorEnvelope: Decodable {
+    struct Detail: Decodable {
+        let message: String?
+    }
+
+    let error: Detail?
 }

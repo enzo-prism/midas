@@ -84,6 +84,8 @@ public enum ProviderConfigEnvironment {
             AzureOpenAISettingsReader.apiKeyEnvironmentKey
         case .claude:
             ClaudeAdminAPISettingsReader.adminAPIKeyEnvironmentKey
+        case .anthropic:
+            AnthropicSettingsReader.adminAPIKeyEnvironmentKey
         case .zai:
             ZaiSettingsReader.apiTokenKey
         case .minimax:

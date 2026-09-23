@@ -115,10 +115,20 @@ public struct ClaudeAdminAPIUsageSnapshot: Codable, Equatable, Sendable {
 
     public let daily: [DailyBucket]
     public let updatedAt: Date
+    /// Requested history window. `nil` for snapshots cached before this was recorded (30-day window).
+    public let historyDays: Int?
+    /// Organization name from `/v1/organizations/me`, when it was requested and available.
+    public let organizationName: String?
 
-    public init(daily: [DailyBucket], updatedAt: Date) {
+    public init(daily: [DailyBucket], updatedAt: Date, historyDays: Int? = nil, organizationName: String? = nil) {
         self.daily = daily.sorted { $0.startTime < $1.startTime }
         self.updatedAt = updatedAt
+        self.historyDays = historyDays
+        self.organizationName = organizationName
+    }
+
+    public var effectiveHistoryDays: Int {
+        max(1, self.historyDays ?? 30)
     }
 
     public var last30Days: Summary {
@@ -174,7 +184,7 @@ public struct ClaudeAdminAPIUsageSnapshot: Codable, Equatable, Sendable {
             }
     }
 
-    public func toUsageSnapshot() -> UsageSnapshot {
+    public func toUsageSnapshot(provider: UsageProvider = .claude) -> UsageSnapshot {
         let total = self.last30Days
         return UsageSnapshot(
             primary: nil,
@@ -188,10 +198,46 @@ public struct ClaudeAdminAPIUsageSnapshot: Codable, Equatable, Sendable {
             claudeAdminAPIUsage: self,
             updatedAt: self.updatedAt,
             identity: ProviderIdentitySnapshot(
-                providerID: .claude,
+                providerID: provider,
                 accountEmail: nil,
-                accountOrganization: nil,
+                accountOrganization: self.organizationName,
                 loginMethod: "Admin API"))
+    }
+
+    /// Projects org cost-report days into the shared cost-history model. Costs are vendor-billed, not estimates.
+    public func toCostUsageTokenSnapshot() -> CostUsageTokenSnapshot {
+        let historyDays = self.effectiveHistoryDays
+        let window = self.daily.suffix(historyDays)
+        let daily = window.map { bucket in
+            let modelBreakdowns = bucket.models.map {
+                CostUsageDailyReport.ModelBreakdown(
+                    modelName: $0.name,
+                    costUSD: nil,
+                    totalTokens: $0.totalTokens)
+            }
+            let modelsUsed = bucket.models.map(\.name)
+            return CostUsageDailyReport.Entry(
+                date: bucket.day,
+                inputTokens: bucket.inputTokens,
+                outputTokens: bucket.outputTokens,
+                cacheReadTokens: bucket.cacheReadInputTokens,
+                cacheCreationTokens: bucket.cacheCreationInputTokens,
+                totalTokens: bucket.totalTokens,
+                costUSD: bucket.costUSD,
+                modelsUsed: modelsUsed.isEmpty ? nil : modelsUsed,
+                modelBreakdowns: modelBreakdowns.isEmpty ? nil : modelBreakdowns)
+        }
+        let latest = self.latestDay
+        let total = self.summary(days: historyDays)
+        return CostUsageTokenSnapshot(
+            sessionTokens: latest.totalTokens,
+            sessionCostUSD: latest.costUSD,
+            last30DaysTokens: total.totalTokens,
+            last30DaysCostUSD: total.costUSD,
+            historyDays: historyDays,
+            costProvenance: .vendorBilled,
+            daily: daily,
+            updatedAt: self.updatedAt)
     }
 
     private struct ModelAccumulator {

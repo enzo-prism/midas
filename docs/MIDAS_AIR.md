@@ -64,7 +64,10 @@ Favorites filtering. It deduplicates providers, keeps currencies separate withou
 reports coverage and reporting periods. A missing estimate is excluded rather than converted to
 zero; a genuine zero estimate remains valid. Secondary API equivalents, metered balances, and
 reset credits are not additional token spend (API rates). Provider valuation bases can differ, so this
-total is a sum of usage-rate estimates, not billed charges.
+total is a sum of usage-rate estimates, not billed charges. Billed organization spend (`CostProvenance.vendorBilled`,
+currently the Anthropic provider) is shown on its own row as *Billed API spend* and reported in coverage as
+"billed shown separately"; it never enters the estimate total, which also avoids double counting Claude Code
+sessions billed to an org API key.
 
 Codex keeps weekly remaining separate from session constraints, and its single menu-bar capsule
 never substitutes session data when weekly data is missing. Cursor model spend shares are not

@@ -60,6 +60,16 @@ struct MidasSpendPresentation {
     let secondaryLabel: String?
     var isEstimate: Bool = false
     var coverageNote: String?
+    /// Vendor-billed organization spend. Shown per provider, never added to the estimate total.
+    var isBilled: Bool = false
+
+    var isDisplayable: Bool {
+        self.isEstimate || self.isBilled
+    }
+
+    var accessibilityTitle: String {
+        self.isBilled ? "Billed API spend" : "Estimated inference spend"
+    }
 
     static func make(provider: UsageProvider, snapshot: CostUsageTokenSnapshot?) -> Self? {
         guard let snapshot else { return nil }
@@ -83,6 +93,12 @@ struct MidasSpendPresentation {
         case .mixed:
             title = "Recorded usage value"
             detail = "Mixed provider metering and API-rate estimates; not billed spend."
+        case .vendorBilled:
+            title = "Billed API spend"
+            detail = "Charges from the provider's organization cost report. Shown separately from estimates."
+            if provider == .anthropic {
+                detail += " Claude Code sessions billed to this organization can also appear in Claude's usage value."
+            }
         case .unknown:
             title = "Recorded usage value"
             detail = "The source does not establish pricing provenance. This value is not a billing receipt."
@@ -111,7 +127,8 @@ struct MidasSpendPresentation {
             currency: snapshot.currencyCode,
             secondaryValue: secondaryAmount?.formatted(.currency(code: snapshot.currencyCode)),
             secondaryLabel: secondaryLabel,
-            isEstimate: provenance == .listPriceEstimate)
+            isEstimate: provenance == .listPriceEstimate,
+            isBilled: provenance == .vendorBilled)
     }
 
     private static func valid(_ amount: Double?) -> Double? {

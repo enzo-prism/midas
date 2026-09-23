@@ -1482,7 +1482,7 @@ extension StatusItemController {
         if webItems.hasUsageBreakdown {
             return self.makeUsageBreakdownSubmenu(width: width)
         }
-        if provider == .openai {
+        if Self.usesAdminAPIUsageSubmenu(provider) {
             return self.makeOpenAIAPIUsageSubmenu(provider: provider, width: width)
         }
         if provider == .zai {
@@ -1575,8 +1575,14 @@ extension StatusItemController {
         return self.makeCostHistorySubmenu(provider: provider, width: width)
     }
 
+    /// Organization Admin API providers (OpenAI, Anthropic) use the cost-history chart as their usage submenu.
+    static func usesAdminAPIUsageSubmenu(_ provider: UsageProvider) -> Bool {
+        provider == .openai || provider == .anthropic
+    }
+
     private func hasOpenAIAPIUsageSubmenu(provider: UsageProvider) -> Bool {
-        provider == .openai && self.tokenSnapshotForCostHistorySubmenu(provider: provider)?.daily.isEmpty == false
+        Self.usesAdminAPIUsageSubmenu(provider) &&
+            self.tokenSnapshotForCostHistorySubmenu(provider: provider)?.daily.isEmpty == false
     }
 
     func makeStorageBreakdownSubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {

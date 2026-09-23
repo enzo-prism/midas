@@ -3,7 +3,9 @@ import Commander
 import Foundation
 
 extension CodexBarCLI {
-    private static let costSupportedProviders: Set<UsageProvider> = [.claude, .codex, .zai, .meta, .openai, .cursor]
+    private static let costSupportedProviders: Set<UsageProvider> = [
+        .claude, .codex, .zai, .meta, .openai, .anthropic, .cursor,
+    ]
 
     static func runCost(_ values: ParsedValues) async {
         let output = CLIOutputPreferences.from(values: values)
@@ -23,7 +25,7 @@ extension CodexBarCLI {
         guard !providers.isEmpty else {
             Self.exit(
                 code: .failure,
-                message: "Error: cost is only supported for Claude, Codex, z.ai, Meta, OpenAI, and Cursor.",
+                message: "Error: cost is only supported for Claude, Codex, z.ai, Meta, OpenAI, Anthropic, and Cursor.",
                 output: output,
                 kind: .args)
         }
@@ -103,11 +105,14 @@ extension CodexBarCLI {
         _ successes: [(provider: UsageProvider, snapshot: CostUsageTokenSnapshot)],
         useColor: Bool) -> String?
     {
-        let tokens = successes.compactMap(\.snapshot.last30DaysTokens).reduce(0, +)
+        // Billed org spend (Anthropic) is real charges and can overlap local Claude Code logs, so it stays out.
+        let billed = successes.filter { $0.snapshot.costProvenance == .vendorBilled }
+        let estimated = successes.filter { $0.snapshot.costProvenance != .vendorBilled }
+        let tokens = estimated.compactMap(\.snapshot.last30DaysTokens).reduce(0, +)
         var dollars = 0.0
         var priced: [String] = []
         var unpriced: [String] = []
-        for success in successes {
+        for success in estimated {
             let name = ProviderDescriptorRegistry.descriptor(for: success.provider).metadata.displayName
             if let cost = CostUsageFetcher.listPriceCostUSD(
                 provider: success.provider,
@@ -129,6 +134,10 @@ extension CodexBarCLI {
         line += " (\(priced.sorted().joined(separator: ", "))"
         if !unpriced.isEmpty {
             line += "; no $ data: \(unpriced.sorted().joined(separator: ", "))"
+        }
+        if !billed.isEmpty {
+            let names = billed.map { ProviderDescriptorRegistry.descriptor(for: $0.provider).metadata.displayName }
+            line += "; billed separately: \(names.sorted().joined(separator: ", "))"
         }
         line += ")"
         return "\(header)\n\(line)"

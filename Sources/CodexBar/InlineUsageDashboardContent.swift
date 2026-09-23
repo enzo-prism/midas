@@ -36,6 +36,12 @@ extension UsageMenuCardView.Model {
             return self.openAIAPIUsageNotes(usage)
         }
 
+        if input.provider == .anthropic,
+           let usage = input.snapshot?.claudeAdminAPIUsage
+        {
+            return self.anthropicAPIUsageNotes(usage)
+        }
+
         if input.provider == .deepgram,
            let usage = input.snapshot?.deepgramUsage
         {
@@ -103,6 +109,26 @@ extension UsageMenuCardView.Model {
         return notes
     }
 
+    static func anthropicAPIUsageNotes(_ usage: ClaudeAdminAPIUsageSnapshot) -> [String] {
+        let today = usage.latestDay
+        let seven = usage.last7Days
+        let window = usage.summary(days: usage.effectiveHistoryDays)
+        var notes = [
+            String(
+                format: L("Today: %@ · %@ tokens"),
+                UsageFormatter.usdString(today.costUSD),
+                UsageFormatter.tokenCountString(today.totalTokens)),
+            "7d: \(UsageFormatter.usdString(seven.costUSD)) · " +
+                "\(UsageFormatter.tokenCountString(seven.totalTokens)) \(L("tokens"))",
+            "\(usage.effectiveHistoryDays)d: \(UsageFormatter.usdString(window.costUSD)) · " +
+                "\(UsageFormatter.tokenCountString(window.totalTokens)) \(L("tokens"))",
+        ]
+        if let topModel = usage.topModels.first {
+            notes.append("\(L("Top model")): \(topModel.name)")
+        }
+        return notes
+    }
+
     static func inlineUsageDashboard(input: Input) -> InlineUsageDashboardModel? {
         if self.usesProviderCostHistoryAsPrimaryDashboard(input.provider),
            let tokenSnapshot = primaryCostHistorySnapshot(input: input),
@@ -150,13 +176,18 @@ extension UsageMenuCardView.Model {
     }
 
     static func usesProviderCostHistoryAsPrimaryDashboard(_ provider: UsageProvider) -> Bool {
-        provider == .openai || provider == .mistral
+        provider == .openai || provider == .anthropic || provider == .mistral
     }
 
     static func primaryCostHistorySnapshot(input: Input) -> CostUsageTokenSnapshot? {
         switch input.provider {
         case .openai:
             if let projected = input.snapshot?.openAIAPIUsage?.toCostUsageTokenSnapshot() {
+                return projected
+            }
+            return input.snapshot == nil ? input.tokenSnapshot : nil
+        case .anthropic:
+            if let projected = input.snapshot?.claudeAdminAPIUsage?.toCostUsageTokenSnapshot() {
                 return projected
             }
             return input.snapshot == nil ? input.tokenSnapshot : nil

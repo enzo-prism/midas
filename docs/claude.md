@@ -30,6 +30,9 @@ same inline dashboard pattern used by the OpenAI API provider.
 Usage source picker:
 - Preferences → Providers → Claude → Usage source (Auto/OAuth/Web/CLI).
 
+Prefer the separate [Anthropic provider](anthropic.md) for organization spend: it keeps Claude subscription
+limits visible at the same time. The Claude Admin API source below replaces subscription usage while active.
+
 Admin API key setup:
 - Preferences → Providers → Claude → Admin API key, stored in `~/.codexbar/config.json`.
 - CLI/env: `printf '%s' "$ANTHROPIC_ADMIN_KEY" | codexbar config set-api-key --provider claude --stdin`.

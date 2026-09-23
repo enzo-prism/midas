@@ -200,6 +200,8 @@ extension CodexBarCLI {
             AzureOpenAISettingsReader.apiKey(environment: environment) != nil
         case .bedrock:
             BedrockSettingsReader.hasCredentials(environment: environment)
+        case .anthropic:
+            AnthropicSettingsReader.adminAPIKey(environment: environment) != nil
         case .claude:
             ClaudeAdminAPISettingsReader.apiKey(environment: environment) != nil
         case .codebuff:
