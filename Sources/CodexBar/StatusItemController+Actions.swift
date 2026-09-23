@@ -349,13 +349,18 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     }
 
     private func openSettings(tab: PreferencesTab) {
+        // Escape NSMenu's synchronous tracking callback before presenting a window.
         DispatchQueue.main.async {
-            self.preferencesSelection.tab = tab
-            NSApp.activate(ignoringOtherApps: true)
-            NotificationCenter.default.post(
-                name: .codexbarOpenSettings,
-                object: nil,
-                userInfo: ["tab": tab.rawValue])
+            self.requestSettingsWindow(tab: tab)
+        }
+    }
+
+    /// Asks AppDelegate's Settings window controller to present Settings; logs if nobody handled it.
+    func requestSettingsWindow(tab: PreferencesTab?) {
+        let request = SettingsOpenRequest(tab: tab)
+        NotificationCenter.default.post(name: .codexbarOpenSettings, object: request)
+        if !request.wasHandled {
+            self.menuLogger.error("Settings open request was not handled")
         }
     }
 

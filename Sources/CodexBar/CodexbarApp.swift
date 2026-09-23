@@ -93,35 +93,19 @@ struct CodexBarApp: App {
 
     @SceneBuilder
     var body: some Scene {
-        // Hidden 1×1 window to keep SwiftUI's lifecycle alive so `Settings` scene
-        // shows the native toolbar tabs even though the UI is AppKit-based.
-        WindowGroup("CodexBarLifecycleKeepalive") {
-            HiddenWindowView(selection: self.preferencesSelection)
-        }
-        .defaultSize(width: 20, height: 20)
-        .windowStyle(.hiddenTitleBar)
-
+        // Settings lives in an AppKit window owned by AppDelegate (`SettingsWindowController`).
+        // This empty scene only routes the standard Settings… command (⌘,) to that window.
         Settings {
-            PreferencesView(
-                settings: self.settings,
-                store: self.store,
-                updater: self.appDelegate.updaterController,
-                selection: self.preferencesSelection,
-                managedCodexAccountCoordinator: self.managedCodexAccountCoordinator,
-                codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
-                runProviderLoginFlow: { provider in
-                    await self.appDelegate.runProviderLoginFlow(provider)
-                },
-                openMidas: { self.appDelegate.openMidasAfterSetup() })
+            EmptyView()
         }
-        .defaultSize(width: PreferencesTab.general.preferredWidth, height: PreferencesTab.general.preferredHeight)
-        .windowResizability(.contentSize)
-    }
-
-    private func openSettings(tab: PreferencesTab) {
-        self.preferencesSelection.tab = tab
-        NSApp.activate(ignoringOtherApps: true)
-        _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    self.appDelegate.openSettings(tab: nil)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
     }
 
     private static func applyLanguagePreference(from settings: SettingsStore) {
@@ -399,6 +383,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var managedCodexAccountCoordinator: ManagedCodexAccountCoordinator?
     private var codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator?
     private var hasInstalledWeeklyLimitResetObserver = false
+    private var settingsWindowController: SettingsWindowController?
+    private var settingsOpenObserver: NSObjectProtocol?
     var terminateActiveProcessesForAppShutdown: () -> Void = {
         TTYCommandRunner.terminateActiveProcessesForAppShutdown()
     }
@@ -410,6 +396,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.preferencesSelection = dependencies.selection
         self.managedCodexAccountCoordinator = dependencies.managedCodexAccountCoordinator
         self.codexAccountPromotionCoordinator = dependencies.codexAccountPromotionCoordinator
+        let store = dependencies.store
+        let settings = dependencies.settings
+        let selection = dependencies.selection
+        let managedCoordinator = dependencies.managedCodexAccountCoordinator
+        let promotionCoordinator = dependencies.codexAccountPromotionCoordinator
+        self.settingsWindowController = SettingsWindowController(selection: selection) { [weak self] in
+            PreferencesView(
+                settings: settings,
+                store: store,
+                updater: self?.updaterController ?? DisabledUpdaterController(),
+                selection: selection,
+                managedCodexAccountCoordinator: managedCoordinator,
+                codexAccountPromotionCoordinator: promotionCoordinator,
+                runProviderLoginFlow: { provider in
+                    await self?.runProviderLoginFlow(provider)
+                },
+                openMidas: { self?.openMidasAfterSetup() })
+        }
+        self.installSettingsOpenObserver()
+    }
+
+    /// Opens Settings directly. Every in-app Settings entry point funnels here.
+    func openSettings(tab: PreferencesTab?) {
+        guard let settingsWindowController else {
+            CodexBarLog.logger(LogCategories.app).error("Settings window controller was not configured")
+            return
+        }
+        settingsWindowController.open(tab: tab)
+    }
+
+    func closeSettings() {
+        self.settingsWindowController?.closeWindow()
+    }
+
+    private func installSettingsOpenObserver() {
+        guard self.settingsOpenObserver == nil else { return }
+        // AppDelegate lives for the whole process, so this relay cannot disappear the way the
+        // old hidden SwiftUI keepalive window did. Posting happens on the main thread.
+        self.settingsOpenObserver = NotificationCenter.default.addObserver(
+            forName: .codexbarOpenSettings,
+            object: nil,
+            queue: nil)
+        { [weak self] notification in
+            let request = notification.object as? SettingsOpenRequest
+            request?.wasHandled = true
+            let tab = request?.tab
+            MainActor.assumeIsolated {
+                self?.openSettings(tab: tab)
+            }
+        }
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -419,6 +455,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppNotifications.shared.requestAuthorizationOnStartup()
         self.ensureStatusController()
+        Task.detached(priority: .userInitiated) {
+            // Migrate keychain items to reduce permission prompts during development.
+            KeychainMigration.migrateIfNeeded()
+        }
+        if self.preferencesSelection?.requestsSpendSetup == true {
+            self.openSettings(tab: nil)
+        }
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
             Task { @MainActor [weak self] in
                 self?.statusController?.openMenuFromShortcut()
