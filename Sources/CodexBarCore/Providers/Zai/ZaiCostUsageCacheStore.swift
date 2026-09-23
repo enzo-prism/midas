@@ -54,7 +54,7 @@ public enum ZaiCostUsageCacheStore {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
         return caches
-            .appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
             .appendingPathComponent("cost-usage", isDirectory: true)
             .appendingPathComponent(self.cacheFilename, isDirectory: false)
     }

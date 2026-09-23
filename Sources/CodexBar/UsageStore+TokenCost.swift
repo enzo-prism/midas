@@ -117,7 +117,7 @@ extension UsageStore {
     {
         let root = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
         return root
-            .appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
             .appendingPathComponent("cost-usage", isDirectory: true)
     }
 

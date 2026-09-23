@@ -19,16 +19,16 @@ enum KeychainMigration {
     }
 
     static let itemsToMigrate: [MigrationItem] = [
-        MigrationItem(service: "com.steipete.CodexBar", account: "codex-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "claude-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "cursor-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "factory-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "minimax-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "minimax-api-token"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "augment-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "copilot-api-token"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "zai-api-token"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "synthetic-api-key"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "codex-cookie"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "claude-cookie"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "cursor-cookie"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "factory-cookie"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "minimax-cookie"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "minimax-api-token"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "augment-cookie"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "copilot-api-token"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "zai-api-token"),
+        MigrationItem(service: MidasIdentity.keychainService, account: "synthetic-api-key"),
     ]
 
     /// Run migration once per installation

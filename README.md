@@ -2,15 +2,40 @@
 
 > Every AI coding limit, in your menu bar.
 
-> **Project Midas** is my personal version of CodexBar, forked from
+> **Midas is its own project.** It started as a fork of
 > [steipete/CodexBar](https://github.com/steipete/CodexBar) (MIT-licensed — all credit to
-> Peter Steinberger and contributors) and modified for my own use. My additions so far:
-> the Midas Air native interface, provider token spend (API rates) and an all-provider token-spend total,
-> Meta usage tracking, Cursor cost dashboards, Codex weekly remaining and rate-limit reset credits
-> (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
-> refer to the original CodexBar project, not this fork.
+> Peter Steinberger and contributors) and is now developed, versioned, signed, and shipped
+> separately at [enzo-prism/midas](https://github.com/enzo-prism/midas). Upstream releases,
+> Homebrew, and codexbar.app references further down this file describe the original CodexBar
+> project, not Midas.
 
-## Midas 0.36.0
+## Midas and CodexBar
+
+Everything macOS, users, or other apps can observe belongs to Midas. Swift module names are the
+one place the CodexBar lineage is still visible in code, on purpose: keeping them lets upstream
+fixes be reviewed and merged. `Sources/CodexBarCore/MidasIdentity.swift` is the single source of
+truth for the product identity and records the inherited identifiers for attribution and migration.
+
+| Surface | Midas | Inherited from CodexBar (read-only) |
+| --- | --- | --- |
+| App bundle / executable | `Midas.app` / `Midas` | — |
+| Bundle identifier | `com.designprism.midas` (`.debug` for debug builds) | `com.steipete.codexbar` |
+| Signing team | `L49MKXGVM4` (Lorenzo Quaid Sison) | `Y5PE65HELJ` |
+| App group | `L49MKXGVM4.com.designprism.midas` | `L49MKXGVM4.com.steipete.codexbar` |
+| Keychain services | `com.designprism.midas`, `com.designprism.midas.cache` | `com.steipete.CodexBar` |
+| Storage folders | `~/Library/{Application Support,Caches,Logs}/Midas` | `…/CodexBar` |
+| Log subsystem | `com.designprism.midas` | `com.steipete.codexbar` |
+| Update feed | `Midas-appcast-arm64-v2.xml` on the latest GitHub release | `Midas-appcast-arm64.xml` (informational only) |
+| Swift targets / helpers | `CodexBar`, `CodexBarCore`, `CodexBarCLI`, `CodexBarWidget`, `Contents/Helpers/CodexBarCLI` | inherited names, not identity |
+
+Midas 0.37.0 adopts data written by earlier Midas builds (which still used the CodexBar identity)
+on first launch, without touching an upstream CodexBar install on the same Mac. See
+[the changelog](CHANGELOG.md) for the one-time manual update step.
+
+## Midas 0.37.0
+
+Midas now ships under its own bundle identifier, app name, storage, Keychain services, and Sparkle
+feed. It includes everything from 0.36.0:
 
 - **Claude 5-hour and weekly limits:** the Air panel always shows both Claude subscription
   limits as bars with % left and reset times.
@@ -19,6 +44,12 @@
   out of the estimated-spend total. See [Anthropic](docs/anthropic.md).
 - **Settings opens reliably on macOS 27:** Settings is now a regular app-owned window, fixing
   clicks that silently did nothing after Midas had been running for a while.
+
+It also includes the inline spend-period list and estimate-coverage details in the Air panel,
+cached Codex weekly usage and banked resets when workspace ids are missing, per-account banked
+reset counts, refreshed menu-bar pop-up anchoring, a focused monthly spend overview, separate
+usage bars and reset times for connected Codex accounts, cloud account activity, automatic Codex
+dollar estimates, optional iCloud pricing-sample sharing, and a three-step onboarding flow.
 
 - **Start here:** [Connect your services and accounts](docs/MIDAS_SETUP.md).
 - **Download:** [Latest signed Midas release](https://github.com/enzo-prism/midas/releases/latest).
@@ -196,13 +227,13 @@ Wondering if CodexBar scans your disk? It doesn’t crawl your filesystem; it re
   - CodexBar may use Keychain for browser cookie decryption, cached cookie headers, and OAuth/device-flow credentials where those sources require it.
   - **How do I prevent those keychain alerts?**
     - Open **Keychain Access.app** → login keychain → search the prompted item (for Claude OAuth, usually “Claude Code-credentials”).
-    - Open the item → **Access Control** → add `CodexBar.app` under “Always allow access by these applications”.
+    - Open the item → **Access Control** → add `Midas.app` under “Always allow access by these applications”.
     - Prefer adding just CodexBar (avoid “Allow all applications” unless you want it wide open).
     - Relaunch CodexBar after saving.
     - Reference screenshot: ![Keychain access control](docs/keychain-allow.png)
   - **How to do the same for the browser?**
     - Find the browser’s “Safe Storage” key (e.g., “Chrome Safe Storage”, “Brave Safe Storage”, “Microsoft Edge Safe Storage”).
-    - Open the item → **Access Control** → add `CodexBar.app` under “Always allow access by these applications”.
+    - Open the item → **Access Control** → add `Midas.app` under “Always allow access by these applications”.
     - This removes the prompt when CodexBar decrypts cookies for that browser.
   - **Last resort — stop all Keychain reads entirely**: if "Always Allow" doesn't stick (e.g., macOS resets the ACL after a Chromium update or a `partition_id` reset), open **CodexBar → Settings → Advanced → Keychain access** and enable **Disable Keychain access**. CodexBar will no longer touch the Keychain. Browser-cookie-based providers will be skipped, but Claude/Codex OAuth via the CLI still works (it reads `~/.codex` / `~/.claude` config files, not the Keychain).
 - **Files & Folders prompts (folder/volume access)**: CodexBar launches provider CLIs and local probes for some providers. If those helpers read a project directory or external drive, macOS may ask CodexBar for that folder/volume (e.g., Desktop or an external volume). This is driven by the helper’s working directory, not background disk scanning.
@@ -236,9 +267,9 @@ Wondering if CodexBar scans your disk? It doesn’t crawl your filesystem; it re
 Requires macOS 14+ and Swift 6.2+.
 
 ```bash
-./Scripts/package_app.sh        # builds CodexBar.app in-place
+./Scripts/package_app.sh        # builds Midas.app in-place
 CODEXBAR_SIGNING=adhoc ./Scripts/package_app.sh  # ad-hoc signing (no Apple Developer account)
-open CodexBar.app
+open Midas.app
 ```
 
 Dev loop:
@@ -251,7 +282,7 @@ make docs-list                       # list docs with frontmatter summaries
 
 CLI install:
 ```bash
-# after installing CodexBar.app in /Applications
+# after installing Midas.app in /Applications
 ./bin/install-codexbar-cli.sh
 ```
 

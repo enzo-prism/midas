@@ -17,13 +17,15 @@ struct CodexBarApp: App {
     private let account: AccountInfo
 
     init() {
+        // Adopt data from pre-0.37.0 builds before any preference is read.
+        let identityMigration = MidasIdentityMigration.runIfNeeded()
         let env = ProcessInfo.processInfo.environment
         // Default to .info: verbose logging eagerly formats every message/metadata string on hot
         // paths (fetch pipeline, icon passes, webview events) even though OSLog drops most of it.
         let storedLevel = CodexBarLog.parseLevel(UserDefaults.standard.string(forKey: "debugLogLevel")) ?? .info
         let level = CodexBarLog.parseLevel(env["CODEXBAR_LOG_LEVEL"]) ?? storedLevel
         CodexBarLog.bootstrapIfNeeded(.init(
-            destination: .oslog(subsystem: "com.steipete.codexbar"),
+            destination: .oslog(subsystem: MidasIdentity.logSubsystem),
             level: level,
             json: false))
 
@@ -32,13 +34,22 @@ struct CodexBarApp: App {
         let gitCommit = Bundle.main.object(forInfoDictionaryKey: "CodexGitCommit") as? String ?? "unknown"
         let buildTimestamp = Bundle.main.object(forInfoDictionaryKey: "CodexBuildTimestamp") as? String ?? "unknown"
         CodexBarLog.logger(LogCategories.app).info(
-            "CodexBar starting",
+            "Midas starting",
             metadata: [
                 "version": version,
                 "build": build,
                 "git": gitCommit,
                 "built": buildTimestamp,
+                "bundle": Bundle.main.bundleIdentifier ?? "unbundled",
             ])
+        if identityMigration.status == .migrated {
+            CodexBarLog.logger(LogCategories.app).info(
+                "Adopted pre-0.37.0 Midas data",
+                metadata: [
+                    "defaultsKeys": "\(identityMigration.copiedDefaultsKeys)",
+                    "items": "\(identityMigration.copiedItems)",
+                ])
+        }
 
         KeychainAccessGate.isDisabled = UserDefaults.standard.bool(forKey: "debugDisableKeychainAccess")
         KeychainPromptCoordinator.install()
@@ -48,10 +59,11 @@ struct CodexBarApp: App {
 
         let preferencesSelection = PreferencesSelection()
         let registry = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/CodexBar/managed-codex-accounts.json")
+            .appendingPathComponent(
+                "Library/Application Support/\(MidasIdentity.supportDirectoryName)/managed-codex-accounts.json")
         preferencesSelection.requestsSpendSetup = MidasOnboardingLaunch.shouldPresent(
             persistentDefaults: UserDefaults.standard.persistentDomain(
-                forName: Bundle.main.bundleIdentifier ?? "com.steipete.codexbar") ?? [:],
+                forName: Bundle.main.bundleIdentifier ?? MidasIdentity.bundleIdentifier) ?? [:],
             hasConfig: FileManager.default.fileExists(atPath: CodexBarConfigStore.defaultURL().path),
             hasManagedAccounts: FileManager.default.fileExists(atPath: registry.path),
             isMidas: Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true,

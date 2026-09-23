@@ -6,10 +6,18 @@
 - `Scripts`: build/package helpers (`package_app.sh`, `sign-and-notarize.sh`, `make_appcast.sh`, `build_icon.sh`, `compile_and_run.sh`). Release wrappers call `Scripts/mac-release`, which resolves `MAC_RELEASE_TOOL` or the shared `agent-scripts` checkout.
 - `docs`: release notes and process (`docs/RELEASING.md`, screenshots). Root-level zips/appcast are generated artifacts—avoid editing except during releases.
 
+## Identity: Midas is its own product, forked from CodexBar
+
+- Midas is a fork of [steipete/CodexBar](https://github.com/steipete/CodexBar) (MIT) that ships and evolves separately. Attribution stays visible (README, LICENSE, About); identity does not.
+- `Sources/CodexBarCore/MidasIdentity.swift` is the single source of truth for everything observable outside the source tree: bundle id `com.designprism.midas`, `Midas.app` / `Midas` executable, team `L49MKXGVM4`, app group, Keychain services, `~/Library/*/Midas` folders, log subsystem, update feed. `Scripts/package_app.sh` mirrors these values. Never introduce a new `com.steipete.*`, `CodexBar`-named path, service, or feed; reference `MidasIdentity` instead of literals.
+- `MidasIdentity.Upstream` holds the inherited identifiers for attribution and one-time migration only (`MidasIdentityMigration`, `MidasLegacyKeychain`, `AppGroupSupport.legacyGroupIDs`). Read from them, never write.
+- Swift targets, modules, helper binaries, widget kinds, and Info.plist keys such as `CodexBarTeamID` keep their inherited names on purpose so upstream changes can still be reviewed and merged. They are internal names, not product identity; do not rename them piecemeal.
+- Process names: the packaged app runs as `Midas`; `swift build` products in `.build/` keep the `CodexBar` target name. Scripts kill by full path or `-x Midas`, never `-x CodexBar`.
+
 ## Build, Test, Run
-- Dev loop: `./Scripts/compile_and_run.sh` kills old instances, runs `swift build` + `swift test`, packages, relaunches `CodexBar.app`, and confirms it stays running.
+- Dev loop: `./Scripts/compile_and_run.sh` kills old Midas instances, runs `swift build` + `swift test`, packages, relaunches `Midas.app`, and confirms it stays running.
 - Quick build/test: `swift build` (debug) or `swift build -c release`; `swift test` for the full XCTest suite.
-- Package locally: `./Scripts/package_app.sh` to refresh `CodexBar.app`, then restart with `pkill -x CodexBar || pkill -f CodexBar.app || true; open -n "$PWD/CodexBar.app"`.
+- Package locally: `./Scripts/package_app.sh` to refresh `Midas.app`, then restart with `pkill -x Midas || pkill -f Midas.app || true; open -n "$PWD/Midas.app"`.
 - Midas release flow: follow `docs/MIDAS_RELEASE.md`. Version/build metadata lives in `version.env`. The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target upstream CodexBar; do not use them unchanged for Midas. Signed packaging must pass the Midas `APP_TEAM_ID` and `APP_IDENTITY`.
 
 ## Coding Style & Naming
@@ -32,12 +40,12 @@
 ## Agent Notes
 - Use the provided scripts and package manager (SwiftPM); avoid adding dependencies or tooling without confirmation.
 - Validate UI/runtime behavior against the freshly built bundle; restart via the pkill+open command above to avoid running stale binaries.
-- To guarantee the right bundle is running after a rebuild, use: `pkill -x CodexBar || pkill -f CodexBar.app || true; open -n "$PWD/CodexBar.app"`.
+- To guarantee the right bundle is running after a rebuild, use: `pkill -x Midas || pkill -f Midas.app || true; open -n "$PWD/Midas.app"`. Never `pkill CodexBar`: upstream CodexBar.app is a separate app that may be installed alongside Midas.
 - For CLI-testable provider/parser/settings behavior, use CLI/focused tests instead of `Scripts/package_app.sh` or `./Scripts/compile_and_run.sh`.
 - Run `./Scripts/compile_and_run.sh` only when UI/runtime behavior needs bundle-level validation; it builds, tests, packages, relaunches, and verifies the app stays running.
 - Widget/Tahoe UI issues: use Parallels macOS VM plus screenshots/clicks for autonomous verification.
 - Release script: keep it in the foreground; do not background it—wait until it finishes.
-- Midas Sparkle signing: use the `enzo-prism-midas` Keychain account with Sparkle’s signing tools. Never use upstream CodexBar or VibeTunnel keys. Keep private keys out of the repository. Every latest stable release must include `Midas-appcast-arm64.xml`, pointing to the immutable, signed Midas archive.
+- Midas Sparkle signing: use the `enzo-prism-midas` Keychain account with Sparkle’s signing tools. Never use upstream CodexBar or VibeTunnel keys. Keep private keys out of the repository. Every latest stable release must include `Midas-appcast-arm64-v2.xml` (signed item for the Midas identity) and `Midas-appcast-arm64.xml` (informational item for 0.33.3–0.36.0 clients); `Scripts/make_midas_appcast.py` writes both.
 - Swift concurrency: treat sibling `async let` tasks as a review red flag when one child is required and another is optional/best-effort. Prefer sequential awaits or a drained `withThrowingTaskGroup` that surfaces required failures and explicitly contains optional failures; crash stacks mentioning `swift_task_dealloc` or `asyncLet_finish_after_task_completion` should trigger an audit of nearby `async let` usage.
 - Prefer modern SwiftUI/Observation macros: use `@Observable` models with `@State` ownership and `@Bindable` in views; avoid `ObservableObject`, `@ObservedObject`, and `@StateObject`.
 - Favor modern macOS 15+ APIs over legacy/deprecated counterparts when refactoring (Observation, new display link APIs, updated menu item styling, etc.).

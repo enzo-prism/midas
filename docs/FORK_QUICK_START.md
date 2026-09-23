@@ -7,8 +7,10 @@ read_when:
 
 # Midas quick start
 
-Midas is Enzo’s personal macOS fork of [CodexBar](https://github.com/steipete/CodexBar),
-created by Peter Steinberger and contributors under the MIT license.
+Midas is Enzo’s macOS app, forked from [CodexBar](https://github.com/steipete/CodexBar)
+(created by Peter Steinberger and contributors, MIT license) and developed and shipped as its
+own project. See the README’s *Midas and CodexBar* table for what is Midas identity and what is
+inherited naming.
 
 - **Midas source:** [enzo-prism/midas](https://github.com/enzo-prism/midas)
 - **Midas issues:** [issue tracker](https://github.com/enzo-prism/midas/issues)
@@ -60,8 +62,8 @@ swift test
 ./Scripts/package_app.sh release
 ```
 
-Signed local builds must pass the appropriate `APP_TEAM_ID` and `APP_IDENTITY`; the packaging
-script inherits upstream signing defaults. Preserve the identity used by an existing installation.
+The packaging script defaults to the Midas Developer ID identity (`L49MKXGVM4`); pass
+`APP_TEAM_ID` and `APP_IDENTITY` only to override it for a different Mac.
 See [Midas Air](MIDAS_AIR.md#local-rebuild) for details.
 
 For a focused Midas regression pass:
@@ -74,9 +76,11 @@ Follow [AGENTS.md](../AGENTS.md) for testing boundaries. Use fixtures and isolat
 do not initiate live provider probes, browser imports, or Keychain reads as routine tests.
 Full-suite failures must be reported separately from passing focused tests.
 
-Packaging produces `CodexBar.app` with the Midas display name. Bundle identifiers, executable
-name, storage, and account identity are intentionally retained. To build, test, package, and
-restart in one development workflow:
+Packaging produces `Midas.app` with a `Midas` executable, bundle identifier
+`com.designprism.midas`, and Midas-owned app group, Keychain services, and storage folders.
+`Sources/CodexBarCore/MidasIdentity.swift` defines these; the `CodexBar*` Swift targets and
+helper binaries keep their inherited names so upstream changes can still be merged. To build,
+test, package, and restart in one development workflow:
 
 ```sh
 ./Scripts/compile_and_run.sh
@@ -96,9 +100,9 @@ selected provider.
 
 | Surface | Current |
 | --- | --- |
-| Source on `main` | **0.35.4**, build **107** |
-| Signed Sparkle / GitHub latest | **0.35.3**, tag `v0.35.3-midas.1` |
-| Marketing site (`midas-site` / Vercel `midas-by-prism`) | **0.35.4** download |
+| Source on `main` | **0.37.0**, build **109** (own identity) |
+| Signed Sparkle / GitHub latest | **0.36.0**, tag `v0.36.0-midas.1` (CodexBar-era identity) |
+| Marketing site (`midas-site` / Vercel `midas-by-prism`) | **0.36.0** download |
 
 Push source changes to `enzo-prism/midas`. Review `git status` and the staged diff before
 committing; exclude generated bundles, logs, credentials, and local configuration.

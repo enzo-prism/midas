@@ -1,4 +1,5 @@
 import AppKit
+import CodexBarCore
 import SwiftUI
 
 @MainActor
@@ -110,9 +111,13 @@ struct AboutPane: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                     AboutLinkRow(
+                        icon: "chevron.left.forwardslash.chevron.right",
+                        title: "Midas source · enzo-prism/midas",
+                        url: MidasIdentity.repositoryURL.absoluteString)
+                    AboutLinkRow(
                         icon: "heart",
                         title: "CodexBar · MIT License",
-                        url: "https://github.com/steipete/CodexBar/blob/main/LICENSE")
+                        url: MidasIdentity.Upstream.licenseURL.absoluteString)
                     Text("Provider marks via SVGL. All trademarks belong to their respective owners.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)

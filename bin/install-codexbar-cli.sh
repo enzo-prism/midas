@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP="/Applications/CodexBar.app"
+APP="/Applications/Midas.app"
 HELPER="$APP/Contents/Helpers/CodexBarCLI"
 TARGETS=("/usr/local/bin/codexbar" "/opt/homebrew/bin/codexbar")
 
 if [[ ! -x "$HELPER" ]]; then
-  echo "CodexBarCLI helper not found at $HELPER. Please reinstall CodexBar." >&2
+  echo "CodexBarCLI helper not found at $HELPER. Please reinstall Midas." >&2
   exit 1
 fi
 
@@ -26,4 +26,4 @@ on run argv
 end run
 APPLESCRIPT
 
-echo "CodexBar CLI installed. Try: codexbar usage"
+echo "Midas CLI installed. Try: codexbar usage"

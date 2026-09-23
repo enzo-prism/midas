@@ -24,7 +24,7 @@ enum CookieHeaderStoreError: LocalizedError {
 struct KeychainCookieHeaderStore: CookieHeaderStoring {
     private static let log = CodexBarLog.logger(LogCategories.cookieHeaderStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = MidasIdentity.keychainService
     private let account: String
     private let promptKind: KeychainPromptContext.Kind
 
@@ -78,7 +78,16 @@ struct KeychainCookieHeaderStore: CookieHeaderStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound,
+           let adopted = MidasLegacyKeychain.adoptIfNeeded(
+               service: self.service,
+               account: self.account,
+               promptKind: self.promptKind)
+        {
+            result = adopted as CFTypeRef
+            status = errSecSuccess
+        }
         if status == errSecItemNotFound {
             // Cache the nil result
             Self.cacheLock.lock()

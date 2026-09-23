@@ -20,8 +20,8 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: CodexBar
-        CFBundleName: CodexBarWidget
+        CFBundleDisplayName: Midas
+        CFBundleName: Midas Widget
         CFBundlePackageType: XPC!
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"

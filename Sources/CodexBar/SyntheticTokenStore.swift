@@ -24,7 +24,7 @@ enum SyntheticTokenStoreError: LocalizedError {
 struct KeychainSyntheticTokenStore: SyntheticTokenStoring {
     private static let log = CodexBarLog.logger(LogCategories.syntheticTokenStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = MidasIdentity.keychainService
     private let account = "synthetic-api-key"
 
     func loadToken() throws -> String? {
@@ -50,7 +50,16 @@ struct KeychainSyntheticTokenStore: SyntheticTokenStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound,
+           let adopted = MidasLegacyKeychain.adoptIfNeeded(
+               service: self.service,
+               account: self.account,
+               promptKind: .syntheticToken)
+        {
+            result = adopted as CFTypeRef
+            status = errSecSuccess
+        }
         if status == errSecItemNotFound {
             return nil
         }

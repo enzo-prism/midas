@@ -77,7 +77,7 @@ struct FileZaiSnapshotStore: ZaiSnapshotStoring, @unchecked Sendable {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
         return base
-            .appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
             .appendingPathComponent("zai-snapshot.json", isDirectory: false)
     }
 }

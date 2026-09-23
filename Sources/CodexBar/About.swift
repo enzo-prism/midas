@@ -1,4 +1,5 @@
 import AppKit
+import CodexBarCore
 
 @MainActor
 func showAbout() {
@@ -21,14 +22,22 @@ func showAbout() {
         ])
     }
 
-    let credits = NSMutableAttributedString(string: "Peter Steinberger — MIT License\n")
-    credits.append(makeLink("GitHub", urlString: "https://github.com/steipete/CodexBar"))
+    let smallFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+    let credits = NSMutableAttributedString(
+        string: "\(MidasIdentity.productName) — \(MidasIdentity.developerName)\n",
+        attributes: [.font: smallFont])
+    credits.append(makeLink("GitHub", urlString: MidasIdentity.repositoryURL.absoluteString))
     credits.append(separator)
-    credits.append(makeLink("Website", urlString: "https://codexbar.app"))
+    credits.append(makeLink("Website", urlString: MidasIdentity.websiteURL.absoluteString))
     credits.append(separator)
-    credits.append(makeLink("Twitter", urlString: "https://twitter.com/steipete"))
+    credits.append(makeLink("Releases", urlString: MidasIdentity.releasesURL.absoluteString))
+    credits.append(NSAttributedString(
+        string: "\nA fork of \(MidasIdentity.Upstream.productName) by \(MidasIdentity.Upstream.author) — "
+            + "\(MidasIdentity.Upstream.license)\n",
+        attributes: [.font: smallFont, .foregroundColor: NSColor.secondaryLabelColor]))
+    credits.append(makeLink("CodexBar on GitHub", urlString: MidasIdentity.Upstream.repositoryURL.absoluteString))
     credits.append(separator)
-    credits.append(makeLink("Email", urlString: "mailto:peter@steipete.me"))
+    credits.append(makeLink("License", urlString: MidasIdentity.Upstream.licenseURL.absoluteString))
     if let buildTimestamp, let formatted = formattedBuildTimestamp(buildTimestamp) {
         var builtLine = "Built \(formatted)"
         if let gitCommit, !gitCommit.isEmpty, gitCommit != "unknown" {
@@ -45,7 +54,7 @@ func showAbout() {
     }
 
     let options: [NSApplication.AboutPanelOptionKey: Any] = [
-        .applicationName: "CodexBar",
+        .applicationName: MidasIdentity.productName,
         .applicationVersion: versionString,
         .version: versionString,
         .credits: credits,

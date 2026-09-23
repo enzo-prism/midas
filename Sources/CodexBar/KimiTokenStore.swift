@@ -24,7 +24,7 @@ enum KimiTokenStoreError: LocalizedError {
 struct KeychainKimiTokenStore: KimiTokenStoring {
     private static let log = CodexBarLog.logger(LogCategories.kimiTokenStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = MidasIdentity.keychainService
     private let account = "kimi-auth-token"
 
     func loadToken() throws -> String? {
@@ -50,7 +50,16 @@ struct KeychainKimiTokenStore: KimiTokenStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound,
+           let adopted = MidasLegacyKeychain.adoptIfNeeded(
+               service: self.service,
+               account: self.account,
+               promptKind: .kimiToken)
+        {
+            result = adopted as CFTypeRef
+            status = errSecSuccess
+        }
         if status == errSecItemNotFound {
             return nil
         }

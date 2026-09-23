@@ -7,9 +7,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const docsDir = path.join(repoRoot, "docs");
 const cname = fs.readFileSync(path.join(docsDir, "CNAME"), "utf8").trim();
 const origin = "https://" + cname;
-const productName = "CodexBar";
-const productDescription = "CodexBar shows OpenAI Codex and Claude Code usage limits in the macOS menu bar.";
-const source = "https://github.com/steipete/CodexBar";
+const productName = "Midas";
+const productDescription = "Midas, a fork of CodexBar, shows AI coding-provider usage, spend estimates, and reset times in the macOS menu bar.";
+const source = "https://github.com/enzo-prism/midas";
 
 const pages = allHtml(docsDir)
   .map((file) => {

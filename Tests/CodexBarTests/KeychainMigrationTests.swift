@@ -1,3 +1,4 @@
+import CodexBarCore
 import Testing
 @testable import CodexBar
 
@@ -5,18 +6,21 @@ struct KeychainMigrationTests {
     @Test
     func `migration list covers known keychain items`() {
         let items = Set(KeychainMigration.itemsToMigrate.map(\.label))
+        // Accessibility migration targets Midas-owned items; legacy CodexBar items are adopted lazily.
+        let service = MidasIdentity.keychainService
         let expected: Set = [
-            "com.steipete.CodexBar:codex-cookie",
-            "com.steipete.CodexBar:claude-cookie",
-            "com.steipete.CodexBar:cursor-cookie",
-            "com.steipete.CodexBar:factory-cookie",
-            "com.steipete.CodexBar:minimax-cookie",
-            "com.steipete.CodexBar:minimax-api-token",
-            "com.steipete.CodexBar:augment-cookie",
-            "com.steipete.CodexBar:copilot-api-token",
-            "com.steipete.CodexBar:zai-api-token",
-            "com.steipete.CodexBar:synthetic-api-key",
+            "\(service):codex-cookie",
+            "\(service):claude-cookie",
+            "\(service):cursor-cookie",
+            "\(service):factory-cookie",
+            "\(service):minimax-cookie",
+            "\(service):minimax-api-token",
+            "\(service):augment-cookie",
+            "\(service):copilot-api-token",
+            "\(service):zai-api-token",
+            "\(service):synthetic-api-key",
         ]
+        #expect(!service.contains("steipete"))
 
         let missing = expected.subtracting(items)
         #expect(missing.isEmpty, "Missing migration entries: \(missing.sorted())")

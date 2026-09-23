@@ -59,11 +59,11 @@ struct ClaudeProbeWorkingDirectoryTests {
     func `probe project directory name matches Claude Code encoding`() {
         let cases = [
             (
-                "/Users/test/Library/Application Support/CodexBar/ClaudeProbe",
-                "-Users-test-Library-Application-Support-CodexBar-ClaudeProbe"),
+                "/Users/test/Library/Application Support/Midas/ClaudeProbe",
+                "-Users-test-Library-Application-Support-Midas-ClaudeProbe"),
             (
-                "/Users/test.name/t\u{00E9}st_under/Library/Application Support/CodexBar/ClaudeProbe",
-                "-Users-test-name-t-st-under-Library-Application-Support-CodexBar-ClaudeProbe"),
+                "/Users/test.name/t\u{00E9}st_under/Library/Application Support/Midas/ClaudeProbe",
+                "-Users-test-name-t-st-under-Library-Application-Support-Midas-ClaudeProbe"),
             (
                 "/Users/test/emoji_😀/ClaudeProbe",
                 "-Users-test-emoji----ClaudeProbe"),

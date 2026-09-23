@@ -126,14 +126,14 @@ swift test
 ./Scripts/package_app.sh release
 ```
 
-For a signed local build, supply `APP_TEAM_ID` and `APP_IDENTITY` for the identity already used
-by the installed app. The packaging script's inherited default is the upstream developer's
-identity. Use `codesign -dvv CodexBar.app` to inspect the installed public signature, then pass
-the matching values when packaging; preserving the team also preserves the app-group identity.
+The packaging script defaults to the Midas Developer ID identity (team `L49MKXGVM4`); pass
+`APP_TEAM_ID` and `APP_IDENTITY` only to build for a different signing identity. Use
+`codesign -dvv Midas.app` to inspect a signature; the team also determines the app-group identity.
 
-Packaging retains the `CodexBar.app` bundle directory and `CodexBar` executable for compatibility,
-while Finder/application display metadata says Midas. The existing bundle identifiers, app group,
-keychain/storage identity, and signing behavior are intentionally preserved. Restart the freshly
+Packaging produces `Midas.app` with a `Midas` executable and the Midas bundle identifier, app
+group, Keychain services, and storage folders defined in `Sources/CodexBarCore/MidasIdentity.swift`.
+The `CodexBar*` Swift targets and bundled helper binaries keep their inherited names; they are
+not product identity. Restart the freshly
 built bundle using the repository's `Scripts/compile_and_run.sh` development workflow or its
 approved local restart command. Do not launch an older copy from another location.
 

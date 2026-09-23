@@ -10,13 +10,13 @@ start-debug:
 
 start-release:
 	./Scripts/package_app.sh release
-	pkill -x CodexBar || pkill -f CodexBar.app || true
-	open -n "$PWD/CodexBar.app"
+	pkill -x Midas || pkill -f Midas.app || true
+	open -n "$PWD/Midas.app"
 
 restart: start
 
 stop:
-	pkill -x CodexBar || pkill -f CodexBar.app || true
+	pkill -x Midas || pkill -f Midas.app || true
 
 check lint:
 	./Scripts/lint.sh lint

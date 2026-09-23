@@ -23,7 +23,17 @@ struct KeychainPromptCoordinatorTests {
     }
 
     @Test
+    func `detects an unbundled Midas-named executable`() {
+        #expect(KeychainPromptCoordinator.isUnbundledCodexBarExecutable(
+            "/Users/me/midas/.build/arm64-apple-macosx/release/Midas"))
+    }
+
+    @Test
     func `keeps packaged app keychain behavior`() {
+        #expect(!KeychainPromptCoordinator.isUnbundledCodexBarExecutable(
+            "/Applications/Midas.app/Contents/MacOS/Midas"))
+        #expect(!KeychainPromptCoordinator.isUnbundledCodexBarExecutable(
+            "/Users/me/midas/.build/package/Midas.app/Contents/MacOS/Midas"))
         #expect(!KeychainPromptCoordinator.isUnbundledCodexBarExecutable(
             "/Applications/CodexBar.app/Contents/MacOS/CodexBar"))
         #expect(!KeychainPromptCoordinator.isUnbundledCodexBarExecutable(

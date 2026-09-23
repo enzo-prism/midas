@@ -109,8 +109,8 @@ for ARCH in "${ARCH_LIST[@]}"; do
   swift build -c "$CONF" --arch "$ARCH"
 done
 
-APP_FINAL="$ROOT/CodexBar.app"
-APP_STAGE="$ROOT/.build/package/CodexBar.app"
+APP_FINAL="$ROOT/Midas.app"
+APP_STAGE="$ROOT/.build/package/Midas.app"
 rm -rf "$APP_STAGE"
 APP="$APP_STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
@@ -123,9 +123,11 @@ if [[ -f "$ICON_SOURCE" ]]; then
   iconutil --convert icns --output "$ICON_TARGET" "$ICON_SOURCE"
 fi
 
-BUNDLE_ID="com.steipete.codexbar"
+# Midas product identity (see Sources/CodexBarCore/MidasIdentity.swift). Never ship under com.steipete.codexbar.
+BUNDLE_ID="com.designprism.midas"
 # Midas must never update itself from the upstream CodexBar feed.
-FEED_URL="https://github.com/enzo-prism/midas/releases/latest/download/Midas-appcast-arm64.xml"
+# Must match MidasUpdateConfiguration.feedURL; the un-suffixed feed is informational for pre-0.37.0 clients.
+FEED_URL="https://github.com/enzo-prism/midas/releases/latest/download/Midas-appcast-arm64-v2.xml"
 AUTO_CHECKS=true
 MIDAS_UPDATES_DISABLED=false
 # Current Midas downloads support Apple Silicon only; never deliver that archive to Intel builds.
@@ -135,7 +137,7 @@ if [[ " ${ARCH_LIST[*]} " != " arm64 " ]]; then
   MIDAS_UPDATES_DISABLED=true
 fi
 if [[ "$LOWER_CONF" == "debug" ]]; then
-  BUNDLE_ID="com.steipete.codexbar.debug"
+  BUNDLE_ID="com.designprism.midas.debug"
   FEED_URL=""
   AUTO_CHECKS=false
   MIDAS_UPDATES_DISABLED=true
@@ -146,14 +148,11 @@ if [[ "$SIGNING_MODE" == "adhoc" ]]; then
   MIDAS_UPDATES_DISABLED=true
 fi
 WIDGET_BUNDLE_ID="${BUNDLE_ID}.widget"
-APP_TEAM_ID="${APP_TEAM_ID:-Y5PE65HELJ}"
-APP_GROUP_ID="${APP_TEAM_ID}.com.steipete.codexbar"
-if [[ "$BUNDLE_ID" == *".debug"* ]]; then
-  APP_GROUP_ID="${APP_TEAM_ID}.com.steipete.codexbar.debug"
-fi
+APP_TEAM_ID="${APP_TEAM_ID:-L49MKXGVM4}"
+APP_GROUP_ID="${APP_TEAM_ID}.${BUNDLE_ID}"
 ENTITLEMENTS_DIR="$ROOT/.build/entitlements"
-APP_ENTITLEMENTS="${ENTITLEMENTS_DIR}/CodexBar.entitlements"
-WIDGET_ENTITLEMENTS="${ENTITLEMENTS_DIR}/CodexBarWidget.entitlements"
+APP_ENTITLEMENTS="${ENTITLEMENTS_DIR}/Midas.entitlements"
+WIDGET_ENTITLEMENTS="${ENTITLEMENTS_DIR}/MidasWidget.entitlements"
 mkdir -p "$ENTITLEMENTS_DIR"
 if [[ "$ALLOW_LLDB" == "1" && "$LOWER_CONF" != "debug" ]]; then
   echo "ERROR: CODEXBAR_ALLOW_LLDB requires debug configuration" >&2
@@ -197,14 +196,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key><string>Midas</string>
     <key>CFBundleDisplayName</key><string>Midas</string>
     <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
-    <key>CFBundleExecutable</key><string>CodexBar</string>
+    <key>CFBundleExecutable</key><string>Midas</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${MARKETING_VERSION}</string>
     <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>CFBundleIconFile</key><string>Icon</string>
-    <key>NSHumanReadableCopyright</key><string>© 2026 Peter Steinberger. MIT License.</string>
+    <key>NSHumanReadableCopyright</key><string>© 2026 Lorenzo Quaid Sison. Midas is a fork of CodexBar © Peter Steinberger, MIT License.</string>
+    <key>MidasUpstreamProject</key><string>CodexBar (https://github.com/steipete/CodexBar), MIT License</string>
     <key>MidasAirEnabled</key><true/>
     <key>MidasUpdatesDisabled</key><${MIDAS_UPDATES_DISABLED}/>
     <key>SUFeedURL</key><string>${FEED_URL}</string>
@@ -217,16 +217,35 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# Ask SwiftPM where it put this configuration's products. Toolchains have moved this directory
+# (.build/<arch>-apple-macosx/<conf>, then .build/out/Products/<Conf>), and guessing once shipped a
+# stale binary from an abandoned layout. Cached per arch.
+# (macOS ships Bash 3.2, so cache in plain variables rather than an associative array.)
+swiftpm_bin_path() {
+  local arch="$1"
+  local var="SWIFTPM_BIN_PATH_${arch//[^A-Za-z0-9]/_}"
+  if [[ -z "${!var:-}" ]]; then
+    printf -v "$var" '%s' "$(swift build -c "$CONF" --arch "$arch" --show-bin-path 2>/dev/null || true)"
+  fi
+  echo "${!var}"
+}
+
 build_product_path() {
   local name="$1"
   local arch="$2"
+  local bin_path
+  bin_path="$(swiftpm_bin_path "$arch")"
+  if [[ -n "$bin_path" ]]; then
+    echo "$bin_path/$name"
+    return
+  fi
   case "$arch" in
     arm64|x86_64) echo ".build/${arch}-apple-macosx/$CONF/$name" ;;
     *) echo ".build/$CONF/$name" ;;
   esac
 }
 
-# Resolve path to built binary; some SwiftPM versions use .build/$CONF/ when building for host only.
+# Resolve path to the freshly built binary for this configuration and arch.
 resolve_binary_path() {
   local name="$1"
   local arch="$2"
@@ -236,7 +255,7 @@ resolve_binary_path() {
     echo "$candidate"
     return
   fi
-  if [[ "$arch" == "arm64" || "$arch" == "x86_64" ]] && [[ -f ".build/$CONF/$name" ]]; then
+  if [[ -f ".build/$CONF/$name" ]]; then
     echo ".build/$CONF/$name"
   fi
 }
@@ -370,7 +389,8 @@ install_widget_extension() {
   verify_binary_arches "$widget_app/Contents/MacOS/CodexBarWidget" "${ARCH_LIST[@]}"
 }
 
-install_binary "CodexBar" "$APP/Contents/MacOS/CodexBar"
+# The SwiftPM product keeps its inherited target name; the shipped executable is Midas.
+install_binary "CodexBar" "$APP/Contents/MacOS/Midas"
 # Ship CodexBarCLI alongside the app for easy symlinking.
 if [[ -n "$(resolve_binary_path "CodexBarCLI" "${ARCH_LIST[0]}")" ]]; then
   install_binary "CodexBarCLI" "$APP/Contents/Helpers/CodexBarCLI"
@@ -384,7 +404,7 @@ install_widget_extension
 if [[ -d ".build/$CONF/Sparkle.framework" ]]; then
   cp -R ".build/$CONF/Sparkle.framework" "$APP/Contents/Frameworks/"
   chmod -R a+rX "$APP/Contents/Frameworks/Sparkle.framework"
-  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/CodexBar"
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Midas"
   # Re-sign Sparkle and all nested components with Developer ID + timestamp
   SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
 if [[ "$SIGNING_MODE" == "adhoc" ]]; then
@@ -394,7 +414,7 @@ elif [[ "$ALLOW_LLDB" == "1" ]]; then
   CODESIGN_ID="-"
   CODESIGN_ARGS=(--force --sign "$CODESIGN_ID")
 else
-  CODESIGN_ID="${APP_IDENTITY:-Developer ID Application: Peter Steinberger (Y5PE65HELJ)}"
+  CODESIGN_ID="${APP_IDENTITY:-Developer ID Application: Lorenzo Quaid Sison (L49MKXGVM4)}"
   CODESIGN_ARGS=(--force --timestamp --options runtime --sign "$CODESIGN_ID")
 fi
 function resign() { codesign "${CODESIGN_ARGS[@]}" "$1"; }
