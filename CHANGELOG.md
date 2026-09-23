@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix Cursor (and other cookie-based providers) showing Needs attention after updating to 0.37.0: cached browser sessions stored under the CodexBar-era Keychain cache service (`com.steipete.codexbar.cache`) are now adopted into Midas's cache the first time each is needed. macOS may ask once per item; a declined prompt is not repeated.
+
 ## Midas 0.37.0 — September 23, 2026
 
 - Give Midas its own app identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, its own app group, Keychain services, storage folders (`~/Library/{Application Support,Caches,Logs}/Midas`), and log subsystem. Midas no longer shares any of these with upstream CodexBar, so both can be installed side by side.
