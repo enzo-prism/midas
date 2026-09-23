@@ -6,9 +6,12 @@ enum IconRenderer {
     private static let creditsCap: Double = 1000
     private static let baseSize = NSSize(width: 18, height: 18)
     // Render to an 18×18 pt template (36×36 px at 2×) to match the system menu bar size.
+    // Artwork pixel constants are authored against the reference scale (36 px canvas); the
+    // derived point layout is identical at every raster scale. Only the backing bitmap size
+    // and snap granularity follow the status item screen (see MidasMenuBarLayout).
     private static let outputSize = NSSize(width: 18, height: 18)
-    private static let outputScale: CGFloat = 2
-    private static let canvasPx = Int(outputSize.width * outputScale)
+    private static let referenceScale: CGFloat = 2
+    private static let canvasPx = Int(outputSize.width * referenceScale)
 
     private struct PixelGrid {
         let scale: CGFloat
@@ -26,7 +29,7 @@ enum IconRenderer {
         }
     }
 
-    private static let grid = PixelGrid(scale: outputScale)
+    private static let grid = PixelGrid(scale: referenceScale)
 
     private struct IconCacheKey: Hashable {
         let primary: Int
@@ -35,6 +38,7 @@ enum IconRenderer {
         let stale: Bool
         let style: Int
         let indicator: Int
+        let scale: Int
     }
 
     private final class IconCacheStore: @unchecked Sendable {
@@ -118,11 +122,14 @@ enum IconRenderer {
         blink: CGFloat = 0,
         wiggle: CGFloat = 0,
         tilt: CGFloat = 0,
-        statusIndicator: ProviderStatusIndicator = .none) -> NSImage
+        statusIndicator: ProviderStatusIndicator = .none,
+        renderScale: CGFloat? = nil) -> NSImage
     {
+        // Bitmap raster follows the status item screen (fallback 2×); point layout is fixed.
+        let scale = MidasMenuBarLayout.resolvedRenderScale(renderScale)
         let shouldCache = blink <= 0.0001 && wiggle <= 0.0001 && tilt <= 0.0001
         let render = {
-            self.renderImage {
+            self.renderImage(scale: scale) {
                 // Keep monochrome template icons; Claude uses subtle shape cues only.
                 let baseFill = NSColor.labelColor
                 let trackFillAlpha: CGFloat = stale ? 0.18 : 0.28
@@ -170,7 +177,7 @@ enum IconRenderer {
                         roundedRect: strokeRect,
                         xRadius: Self.grid.pt(max(0, cornerRadiusPx - insetPx)),
                         yRadius: Self.grid.pt(max(0, cornerRadiusPx - insetPx)))
-                    strokePath.lineWidth = CGFloat(strokeWidthPx) / Self.outputScale
+                    strokePath.lineWidth = CGFloat(strokeWidthPx) / Self.referenceScale
                     baseFill.withAlphaComponent(trackStrokeAlpha * alpha).setStroke()
                     strokePath.stroke()
 
@@ -258,7 +265,7 @@ enum IconRenderer {
                     if addNotches {
                         let ctx = NSGraphicsContext.current?.cgContext
                         let wiggleOffset = Self.grid.snapDelta(wiggle * 0.6)
-                        let wigglePx = Int((wiggleOffset * Self.outputScale).rounded())
+                        let wigglePx = Int((wiggleOffset * Self.referenceScale).rounded())
 
                         fillColor.withAlphaComponent(alpha).setFill()
 
@@ -745,7 +752,7 @@ enum IconRenderer {
                     drawBar(rectPx: creditsBottomRectPx, remaining: bottomValue)
                 }
 
-                Self.drawStatusOverlay(indicator: statusIndicator)
+                Self.drawStatusOverlay(indicator: statusIndicator, scale: scale)
             }
         }
 
@@ -756,7 +763,8 @@ enum IconRenderer {
                 credits: self.quantizedCredits(creditsRemaining),
                 stale: stale,
                 style: self.styleKey(style),
-                indicator: self.indicatorKey(statusIndicator))
+                indicator: self.indicatorKey(statusIndicator),
+                scale: self.scaleKey(scale))
             if let cached = self.cachedIcon(for: key) {
                 return cached
             }
@@ -771,14 +779,15 @@ enum IconRenderer {
     // swiftlint:enable function_body_length
 
     /// Morph helper: unbraids a simplified knot into our bar icon.
-    static func makeMorphIcon(progress: Double, style: IconStyle) -> NSImage {
+    static func makeMorphIcon(progress: Double, style: IconStyle, renderScale: CGFloat? = nil) -> NSImage {
         let clamped = max(0, min(progress, 1))
-        let key = self.morphCacheKey(progress: clamped, style: style)
+        let scale = MidasMenuBarLayout.resolvedRenderScale(renderScale)
+        let key = self.morphCacheKey(progress: clamped, style: style, scale: scale)
         if let cached = self.morphCache.image(for: key) {
             return cached
         }
-        let image = self.renderImage {
-            self.drawUnbraidMorph(t: clamped, style: style)
+        let image = self.renderImage(scale: scale) {
+            self.drawUnbraidMorph(t: clamped, style: style, renderScale: scale)
         }
         self.morphCache.set(image, for: key)
         return image
@@ -818,10 +827,14 @@ enum IconRenderer {
         }
     }
 
-    private static func morphCacheKey(progress: Double, style: IconStyle) -> NSNumber {
+    private static func morphCacheKey(progress: Double, style: IconStyle, scale: CGFloat) -> NSNumber {
         let bucket = Int((progress * Double(self.morphBucketCount)).rounded())
-        let key = self.styleKey(style) * 1000 + bucket
+        let key = self.styleKey(style) * 1_000_000 + self.scaleKey(scale) * 1000 + bucket
         return NSNumber(value: key)
+    }
+
+    private static func scaleKey(_ scale: CGFloat) -> Int {
+        Int((scale * 100).rounded())
     }
 
     private static func cachedIcon(for key: IconCacheKey) -> NSImage? {
@@ -832,7 +845,7 @@ enum IconRenderer {
         self.iconCacheStore.storeIcon(image, for: key, limit: self.iconCacheLimit)
     }
 
-    private static func drawUnbraidMorph(t: Double, style: IconStyle) {
+    private static func drawUnbraidMorph(t: Double, style: IconStyle, renderScale: CGFloat) {
         let t = CGFloat(max(0, min(t, 1)))
         let size = Self.baseSize
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -910,7 +923,8 @@ enum IconRenderer {
                 weeklyRemaining: 100,
                 creditsRemaining: nil,
                 stale: false,
-                style: style)
+                style: style,
+                renderScale: renderScale)
             bars.draw(in: CGRect(origin: .zero, size: size), from: .zero, operation: .sourceOver, fraction: barT)
         }
     }
@@ -939,7 +953,7 @@ enum IconRenderer {
         path.fill()
     }
 
-    private static func drawStatusOverlay(indicator: ProviderStatusIndicator) {
+    private static func drawStatusOverlay(indicator: ProviderStatusIndicator, scale: CGFloat) {
         guard indicator.hasIssue else { return }
         let color = NSColor.labelColor
 
@@ -950,7 +964,8 @@ enum IconRenderer {
                 x: Self.baseSize.width - size - 2,
                 y: 2,
                 width: size,
-                height: size)
+                height: size,
+                scale: scale)
             let path = NSBezierPath(ovalIn: rect)
             color.setFill()
             path.fill()
@@ -959,7 +974,8 @@ enum IconRenderer {
                 x: Self.baseSize.width - 6,
                 y: 4,
                 width: 2.0,
-                height: 6)
+                height: 6,
+                scale: scale)
             let linePath = NSBezierPath(roundedRect: lineRect, xRadius: 1, yRadius: 1)
             color.setFill()
             linePath.fill()
@@ -968,7 +984,8 @@ enum IconRenderer {
                 x: Self.baseSize.width - 6,
                 y: 2,
                 width: 2.0,
-                height: 2.0)
+                height: 2.0,
+                scale: scale)
             NSBezierPath(ovalIn: dotRect).fill()
         case .none:
             break
@@ -987,21 +1004,25 @@ enum IconRenderer {
         ctx.restoreGState()
     }
 
-    private static func snap(_ value: CGFloat) -> CGFloat {
-        (value * self.outputScale).rounded() / self.outputScale
+    private static func snap(_ value: CGFloat, scale: CGFloat) -> CGFloat {
+        (value * scale).rounded() / scale
     }
 
-    private static func snapRect(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) -> CGRect {
-        CGRect(x: self.snap(x), y: self.snap(y), width: self.snap(width), height: self.snap(height))
+    private static func snapRect(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, scale: CGFloat) -> CGRect {
+        CGRect(
+            x: self.snap(x, scale: scale),
+            y: self.snap(y, scale: scale),
+            width: self.snap(width, scale: scale),
+            height: self.snap(height, scale: scale))
     }
 
-    private static func renderImage(_ draw: () -> Void) -> NSImage {
+    private static func renderImage(scale: CGFloat, _ draw: () -> Void) -> NSImage {
         let image = NSImage(size: Self.outputSize)
 
         if let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: Int(Self.outputSize.width * Self.outputScale),
-            pixelsHigh: Int(Self.outputSize.height * Self.outputScale),
+            pixelsWide: Int(Self.outputSize.width * scale),
+            pixelsHigh: Int(Self.outputSize.height * scale),
             bitsPerSample: 8,
             samplesPerPixel: 4,
             hasAlpha: true,

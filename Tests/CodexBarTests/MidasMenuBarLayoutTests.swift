@@ -75,4 +75,28 @@ struct MidasMenuBarLayoutTests {
             < MidasMenuBarLayout.width(title: "C 100%  U 100%  M —", orbit: false))
         #expect(MidasMenuBarLayout.width(title: String(repeating: "9", count: 300), orbit: false) == 220)
     }
+
+    @Test func missingWindowFallsBackToTwoX() {
+        #expect(MidasMenuBarLayout.fallbackRenderScale == 2)
+        #expect(MidasMenuBarLayout.renderScale(for: nil as NSWindow?) == 2)
+        #expect(MidasMenuBarLayout.renderScale(for: nil as NSView?) == 2)
+        #expect(MidasMenuBarLayout.renderScale(for: NSView()) == 2)
+    }
+
+    @Test func resolvedScalePrefersOverrideThenScreen() {
+        #expect(MidasMenuBarLayout.resolvedRenderScale(nil) == MidasMenuBarLayout.currentMenuBarRenderScale)
+        #expect(MidasMenuBarLayout.resolvedRenderScale(1) == 1)
+        #expect(MidasMenuBarLayout.resolvedRenderScale(2) == 2)
+        for invalid: CGFloat in [0, -1, .nan, .infinity, -.infinity] {
+            #expect(MidasMenuBarLayout.resolvedRenderScale(invalid) == 2)
+        }
+        #expect(MidasMenuBarLayout.resolvedRenderScale(100) == 3)
+    }
+
+    @Test func currentMenuBarScaleStaysInRange() {
+        let scale = MidasMenuBarLayout.currentMenuBarRenderScale
+        #expect(scale.isFinite)
+        #expect(scale >= 1)
+        #expect(scale <= 3)
+    }
 }

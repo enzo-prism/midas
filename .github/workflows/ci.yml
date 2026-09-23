@@ -11,15 +11,15 @@ concurrency:
 
 jobs:
   lint-build-test:
-    runs-on: macos-15-intel
+    runs-on: macos-26
     timeout-minutes: 70
     steps:
       - uses: actions/checkout@v6
 
-      - name: Select Xcode 26.1.1 (if present) or fallback to default
+      - name: Select Xcode 27 (if present) or fallback to default
         run: |
           set -euo pipefail
-          for candidate in /Applications/Xcode_26.1.1.app /Applications/Xcode_26.1.app /Applications/Xcode.app; do
+          for candidate in /Applications/Xcode_27.app /Applications/Xcode.app; do
             if [[ -d "$candidate" ]]; then
               sudo xcode-select -s "${candidate}/Contents/Developer"
               echo "DEVELOPER_DIR=${candidate}/Contents/Developer" >> "$GITHUB_ENV"
