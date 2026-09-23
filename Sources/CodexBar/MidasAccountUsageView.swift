@@ -82,7 +82,13 @@ enum MidasAccountQuotaLayout {
     static func overviewMetrics(_ presentation: MidasProviderPresentation) -> [MidasQuotaMetric] {
         let metrics = self.allMetrics(presentation)
         guard let first = metrics.first else { return [] }
-        return [first] + metrics.dropFirst().filter {
+        // Claude always pins both subscription limits (5-hour + weekly); other providers lead with one.
+        let pinned = presentation.provider == .claude
+            ? metrics.filter { MidasClaudeLimits.limitIDs.contains($0.id) }
+            : [first]
+        let head = pinned.isEmpty ? [first] : pinned
+        let headIDs = Set(head.map(\.id))
+        return head + metrics.filter { !headIDs.contains($0.id) }.filter {
             $0.isExhausted || ($0.remainingPercent < first.remainingPercent
                 && ($0.remainingPercent <= 10 || first.remainingPercent - $0.remainingPercent >= 20))
         }

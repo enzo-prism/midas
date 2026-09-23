@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Midas Air always shows Claude's **5-hour limit** and **Weekly limit** as bars with % left (labeled by
+  window length, so a weekly-only fallback is never mislabeled as 5-hour). Other providers keep one headline limit.
 - Fix Settings silently failing to open on macOS 27: Settings is now an AppKit window owned by the app
   delegate instead of relying on a hidden SwiftUI keepalive window that macOS could tear down.
 - Add an **Anthropic** provider for Anthropic API Platform organization spend via an Admin API key: billed daily
