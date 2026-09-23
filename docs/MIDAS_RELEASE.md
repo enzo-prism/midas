@@ -6,14 +6,14 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-Source on `main` is version **0.37.0**, build **109**. It is the first build with Midas’s own
-identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
+Source on `main` is version **0.37.1**, build **110**. 0.37.0 (build 109) was the first build with
+Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The last **signed, notarized, Sparkle-published** binary is **0.36.0**, build **108**, tagged
-`v0.36.0-midas.1`. It still runs under the CodexBar identity. Check GitHub releases for live
+The last **signed, notarized, Sparkle-published** binary is **0.37.0**, build **109**, tagged
+`v0.37.0-midas.1`; 0.36.0 (build 108) was the last CodexBar-identity build. Check GitHub releases for live
 binary status. The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
 ### Update feeds after 0.37.0
@@ -30,6 +30,13 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.37.1 changes
+
+Version 0.37.1, build 110, adopts cache items from the CodexBar-era cache service
+(`com.steipete.codexbar.cache`) into `com.designprism.midas.cache` on first use. 0.37.0 adopted only
+the main Keychain service, so cached browser sessions such as `cookie.cursor` were orphaned and
+Cursor showed Needs attention. Each item is attempted once; macOS may ask to allow the read.
 
 ## 0.37.0 changes
 

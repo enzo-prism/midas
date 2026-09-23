@@ -152,6 +152,15 @@ public enum KeychainCacheStore {
             }
             Self.inMemoryCacheStore(service: serviceName, account: account, data: data)
             return .found(decoded)
+        case errSecItemNotFound where serviceName == self.cacheService:
+            // Builds before 0.37.0 cached under the inherited CodexBar service. Adopt that entry once.
+            guard let legacyData = self.adoptLegacyItem(account: account),
+                  let decoded = try? Self.makeDecoder().decode(Entry.self, from: legacyData)
+            else {
+                return .missing
+            }
+            self.store(key: key, entry: decoded)
+            return .found(decoded)
         default:
             return self.loadResultForKeychainReadFailure(status: status, key: key)
         }
@@ -159,6 +168,57 @@ public enum KeychainCacheStore {
         return .missing
         #endif
     }
+
+    #if os(macOS)
+    static let legacyCacheService = MidasIdentity.Upstream.keychainCacheService
+    static let legacyAdoptionDefaultsKey = "midasLegacyKeychainCacheAdoptionAttempts"
+
+    /// Reads a cache item written under the inherited CodexBar cache service (Midas before 0.37.0).
+    ///
+    /// The legacy item's access list trusts only the old app, so macOS may ask once to allow the
+    /// read. Each account is attempted at most once, so a denied or cancelled prompt never repeats on
+    /// later refreshes; a locked keychain is retried. The legacy item is left in place so an
+    /// upstream CodexBar install keeps working.
+    static func adoptLegacyItem(
+        account: String,
+        defaults: UserDefaults = .standard,
+        readLegacy: (_ service: String, _ account: String) -> (status: OSStatus, data: Data?) = Self.readLegacyItem)
+        -> Data?
+    {
+        var attempted = Set(defaults.stringArray(forKey: self.legacyAdoptionDefaultsKey) ?? [])
+        guard !attempted.contains(account) else { return nil }
+
+        let (status, data) = readLegacy(self.legacyCacheService, account)
+        if status != errSecInteractionNotAllowed {
+            attempted.insert(account)
+            defaults.set(attempted.sorted(), forKey: self.legacyAdoptionDefaultsKey)
+        }
+        switch status {
+        case errSecSuccess:
+            guard let data, !data.isEmpty else { return nil }
+            self.log.info("Adopted legacy keychain cache item (\(account))")
+            return data
+        case errSecItemNotFound, errSecInteractionNotAllowed:
+            return nil
+        default:
+            self.log.warning("Legacy keychain cache read failed (\(account)): \(status)")
+            return nil
+        }
+    }
+
+    private static func readLegacyItem(service: String, account: String) -> (status: OSStatus, data: Data?) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        return (status, result as? Data)
+    }
+    #endif
 
     public static func store(key: Key, entry: some Codable) {
         if self.storeInTestStore(key: key, entry: entry) {
