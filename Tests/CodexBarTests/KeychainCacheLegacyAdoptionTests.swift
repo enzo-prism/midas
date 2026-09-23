@@ -17,10 +17,11 @@ struct KeychainCacheLegacyAdoptionTests {
     func `reads the inherited CodexBar cache service and returns its data`() {
         let defaults = self.makeDefaults()
         var requested: [(String, String)] = []
-        let data = KeychainCacheStore.adoptLegacyItem(account: "cookie.cursor", defaults: defaults) { service, account in
-            requested.append((service, account))
-            return (errSecSuccess, Data("legacy".utf8))
-        }
+        let data = KeychainCacheStore
+            .adoptLegacyItem(account: "cookie.cursor", defaults: defaults) { service, account in
+                requested.append((service, account))
+                return (errSecSuccess, Data("legacy".utf8))
+            }
         #expect(data == Data("legacy".utf8))
         #expect(requested.count == 1)
         #expect(requested.first?.0 == "com.steipete.codexbar.cache")
@@ -35,8 +36,10 @@ struct KeychainCacheLegacyAdoptionTests {
             reads += 1
             return (errSecAuthFailed, nil)
         }
-        #expect(KeychainCacheStore.adoptLegacyItem(account: "cookie.cursor", defaults: defaults, readLegacy: deny) == nil)
-        #expect(KeychainCacheStore.adoptLegacyItem(account: "cookie.cursor", defaults: defaults, readLegacy: deny) == nil)
+        #expect(KeychainCacheStore
+            .adoptLegacyItem(account: "cookie.cursor", defaults: defaults, readLegacy: deny) == nil)
+        #expect(KeychainCacheStore
+            .adoptLegacyItem(account: "cookie.cursor", defaults: defaults, readLegacy: deny) == nil)
         #expect(reads == 1)
 
         _ = KeychainCacheStore.adoptLegacyItem(account: "cookie.codex", defaults: defaults, readLegacy: deny)
@@ -68,8 +71,10 @@ struct KeychainCacheLegacyAdoptionTests {
             reads += 1
             return (errSecItemNotFound, nil)
         }
-        #expect(KeychainCacheStore.adoptLegacyItem(account: "cookie.grok", defaults: defaults, readLegacy: missing) == nil)
-        #expect(KeychainCacheStore.adoptLegacyItem(account: "cookie.grok", defaults: defaults, readLegacy: missing) == nil)
+        #expect(KeychainCacheStore
+            .adoptLegacyItem(account: "cookie.grok", defaults: defaults, readLegacy: missing) == nil)
+        #expect(KeychainCacheStore
+            .adoptLegacyItem(account: "cookie.grok", defaults: defaults, readLegacy: missing) == nil)
         #expect(reads == 1)
     }
 }

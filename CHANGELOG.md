@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## Midas 0.37.1 — September 23, 2026
 
 - Fix Cursor (and other cookie-based providers) showing Needs attention after updating to 0.37.0: cached browser sessions stored under the CodexBar-era Keychain cache service (`com.steipete.codexbar.cache`) are now adopted into Midas's cache the first time each is needed. macOS may ask once per item; a declined prompt is not repeated.
+
+Build 110. Quota, spend, and reset logic are unchanged.
 
 ## Midas 0.37.0 — September 23, 2026
 
