@@ -28,12 +28,16 @@ The implementation notes below also preserve older Midas presentation decisions.
   connection states, refresh, settings, and Open Usage.
 - **Provider detail:** prominent token spend (API rates), recognizable logos, explicit periods and remaining capacity, reset
   information, and separate session constraints. Codex uses weekly remaining as its quota hero;
-  missing weekly data does not turn into a session metric.
+  missing weekly data does not turn into a session metric. Claude always pins both its
+  **5-hour limit** and **Weekly limit** bars in the overview (`MidasClaudeLimits`, titled by window length);
+  other providers show one headline limit plus any tighter window.
 - **Usage window:** resizable provider navigation, Usage and Costs views, period controls,
   history, model breakdowns where available, and source-aware cost labels. Metered consumption,
   provider-reported costs, and API-equivalent estimates are distinct meanings.
 - **Settings:** a stable sidebar preserving General, Providers, Display, Advanced, About,
-  and the optional Debug pane. Its height is constrained for smaller screens.
+  and the optional Debug pane. Its height is constrained for smaller screens. The window is owned
+  by `SettingsWindowController` on the app delegate; do not reintroduce a hidden SwiftUI
+  keepalive window as the only listener for opening Settings.
 - **Branding:** a gold pixel crown beside the Midas wordmark, Midas display names and support links, and explicit
   acknowledgment of CodexBar's MIT-licensed foundation.
 

@@ -6,13 +6,9 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-Source on `main` is version **0.35.4**, build **107**. It updates Sparkle and
-KeyboardShortcuts for macOS 27 Golden Gate compatibility on top of the 0.35.3 Air panel,
-quota hydration, and Check for Updates work.
-
-The last **signed, notarized, Sparkle-published** binary is **0.35.3**, build **106**, tagged
-`v0.35.3-midas.1`, from tag commit `6d570bc8bc3c9765a0d3eb8560bb943672d1b4cc`. Check
-GitHub releases for live binary status. The downloadable app is for Apple Silicon Macs running
+Source on `main` is version **0.36.0**, build **108**, published as `v0.36.0-midas.1`.
+It adds the Anthropic provider, always shows Claude's 5-hour and weekly limits, and fixes
+Settings not opening on macOS 27. Check GitHub releases for live binary status. The downloadable app is for Apple Silicon Macs running
 macOS 14 or later. The bundle directory and executable retain `CodexBar` for compatibility; the
 app's displayed name is Midas.
 
@@ -23,6 +19,17 @@ The upstream CodexBar feed remains disabled. Debug, ad-hoc, and Intel builds can
 Apple Silicon channel.
 No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
 runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+
+## 0.36.0 changes
+
+Version 0.36.0, build 108:
+
+- **Claude limits:** the Air overview pins Claude's **5-hour limit** and **Weekly limit** bars
+  (`MidasClaudeLimits`), titled by window length.
+- **Anthropic provider:** organization billed spend via the Admin API (`CostProvenance.vendorBilled`),
+  shown per provider and excluded from the estimate total.
+- **Settings:** now an AppKit window owned by the app delegate (`SettingsWindowController`), replacing the
+  hidden SwiftUI keepalive window that macOS 27 could tear down, which left Settings clicks with no effect.
 
 ## 0.35.4 changes
 

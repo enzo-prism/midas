@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Midas 0.36.0 — September 22, 2026
 
 - Midas Air always shows Claude's **5-hour limit** and **Weekly limit** as bars with % left (labeled by
   window length, so a weekly-only fallback is never mislabeled as 5-hour). Other providers keep one headline limit.
@@ -14,6 +14,8 @@
 - Anthropic Admin API client (shared with Claude's Admin API source): follow `next_page` pagination, honor the
   cost-history window up to 365 days, retry transient failures, surface Anthropic error messages, and accept
   fractional-second timestamps.
+
+Build 108. Estimate math for existing providers is unchanged; billed Anthropic spend is shown separately.
 
 ## Midas 0.35.4 — September 18, 2026
 
