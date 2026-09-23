@@ -21,8 +21,10 @@ struct UsageStorePathDebugTests {
             settings: settings,
             startupBehavior: .full)
 
-        let deadline = Date().addingTimeInterval(2)
-        while store.pathDebugInfo == .empty, Date() < deadline {
+        // The startup placeholder can already differ from `.empty` (cached login-shell PATH) while its
+        // effective PATH is still blank, so wait for the background refresh itself.
+        let deadline = Date().addingTimeInterval(10)
+        while store.pathDebugInfo.effectivePATH.isEmpty, Date() < deadline {
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
 
