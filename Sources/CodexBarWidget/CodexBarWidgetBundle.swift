@@ -21,7 +21,7 @@ struct CodexBarSwitcherWidget: Widget {
         { entry in
             CodexBarSwitcherWidgetView(entry: entry)
         }
-        .configurationDisplayName("CodexBar Switcher")
+        .configurationDisplayName("Midas Switcher")
         .description("Usage widget with a provider switcher.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
@@ -38,7 +38,7 @@ struct CodexBarUsageWidget: Widget {
         { entry in
             CodexBarUsageWidgetView(entry: entry)
         }
-        .configurationDisplayName("CodexBar Usage")
+        .configurationDisplayName("Midas Usage")
         .description("Session and weekly usage with credits and costs.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
@@ -55,7 +55,7 @@ struct CodexBarHistoryWidget: Widget {
         { entry in
             CodexBarHistoryWidgetView(entry: entry)
         }
-        .configurationDisplayName("CodexBar History")
+        .configurationDisplayName("Midas History")
         .description("Usage history chart with recent totals.")
         .supportedFamilies([.systemMedium, .systemLarge])
     }
@@ -72,7 +72,7 @@ struct CodexBarCompactWidget: Widget {
         { entry in
             CodexBarCompactWidgetView(entry: entry)
         }
-        .configurationDisplayName("CodexBar Metric")
+        .configurationDisplayName("Midas Metric")
         .description("Compact widget for credits or cost.")
         .supportedFamilies([.systemSmall])
     }

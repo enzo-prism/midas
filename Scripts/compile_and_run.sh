@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Reset CodexBar: kill running instances, build, package, relaunch, verify.
+# Reset Midas: kill running instances, build, package, relaunch, verify.
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_BUNDLE="${ROOT_DIR}/CodexBar.app"
-APP_PROCESS_PATTERN="CodexBar.app/Contents/MacOS/CodexBar"
+APP_BUNDLE="${ROOT_DIR}/Midas.app"
+APP_PROCESS_PATTERN="Midas.app/Contents/MacOS/Midas"
 DEBUG_PROCESS_PATTERN="${ROOT_DIR}/.build/debug/CodexBar"
 RELEASE_PROCESS_PATTERN="${ROOT_DIR}/.build/release/CodexBar"
 LOCK_KEY="$(printf '%s' "${ROOT_DIR}" | shasum -a 256 | cut -c1-8)"
@@ -123,7 +123,8 @@ resolve_signing_mode() {
 
   local candidate=""
   for candidate in \
-    "Developer ID Application: Peter Steinberger (Y5PE65HELJ)" \
+    "Developer ID Application: Lorenzo Quaid Sison (L49MKXGVM4)" \
+    "Midas Development" \
     "CodexBar Development"
   do
     if has_signing_identity "${candidate}"; then
@@ -203,7 +204,7 @@ kill_all_codexbar() {
     pgrep -f "${APP_PROCESS_PATTERN}" >/dev/null 2>&1 \
       || pgrep -f "${DEBUG_PROCESS_PATTERN}" >/dev/null 2>&1 \
       || pgrep -f "${RELEASE_PROCESS_PATTERN}" >/dev/null 2>&1 \
-      || pgrep -x "CodexBar" >/dev/null 2>&1
+      || pgrep -x "Midas" >/dev/null 2>&1
   }
 
   # Phase 1: request termination (give the app time to exit cleanly).
@@ -211,7 +212,7 @@ kill_all_codexbar() {
     pkill -f "${APP_PROCESS_PATTERN}" 2>/dev/null || true
     pkill -f "${DEBUG_PROCESS_PATTERN}" 2>/dev/null || true
     pkill -f "${RELEASE_PROCESS_PATTERN}" 2>/dev/null || true
-    pkill -x "CodexBar" 2>/dev/null || true
+    pkill -x "Midas" 2>/dev/null || true
     if ! is_running; then
       return 0
     fi
@@ -222,7 +223,7 @@ kill_all_codexbar() {
   pkill -9 -f "${APP_PROCESS_PATTERN}" 2>/dev/null || true
   pkill -9 -f "${DEBUG_PROCESS_PATTERN}" 2>/dev/null || true
   pkill -9 -f "${RELEASE_PROCESS_PATTERN}" 2>/dev/null || true
-  pkill -9 -x "CodexBar" 2>/dev/null || true
+  pkill -9 -x "Midas" 2>/dev/null || true
 
   for _ in {1..25}; do
     if ! is_running; then
@@ -231,7 +232,7 @@ kill_all_codexbar() {
     sleep 0.2
   done
 
-  fail "Failed to kill all CodexBar instances."
+  fail "Failed to kill all Midas instances."
 }
 
 # 1) Ensure a single runner instance.
@@ -265,21 +266,21 @@ fi
 
 acquire_lock
 
-# 2) Kill all running CodexBar instances (debug, release, bundled).
-log "==> Killing existing CodexBar instances"
+# 2) Kill all running Midas instances (debug, release, bundled). Upstream CodexBar.app is a separate app and is left alone.
+log "==> Killing existing Midas instances"
 kill_all_codexbar
 kill_claude_probes
 
 # 2.5) Optionally delete keychain entries to avoid permission prompts with adhoc signing
 # (adhoc signature changes on every build, making old keychain entries inaccessible)
 if [[ "${SIGNING_MODE:-adhoc}" == "adhoc" && "${CLEAR_ADHOC_KEYCHAIN}" == "1" ]]; then
-  log "==> Clearing CodexBar keychain entries (adhoc signing)"
+  log "==> Clearing Midas keychain entries (adhoc signing)"
   # Clear both the legacy keychain store and the current cache service when developers explicitly want a clean reset
   # of CodexBar-owned keychain state for ad-hoc builds.
-  delete_keychain_service_items "com.steipete.CodexBar"
-  delete_keychain_service_items "com.steipete.codexbar.cache"
+  delete_keychain_service_items "com.designprism.midas"
+  delete_keychain_service_items "com.designprism.midas.cache"
 elif [[ "${SIGNING_MODE:-adhoc}" == "adhoc" ]]; then
-  log "==> Preserving CodexBar keychain entries (pass --clear-adhoc-keychain to reset adhoc keychain state)"
+  log "==> Preserving Midas keychain entries (pass --clear-adhoc-keychain to reset adhoc keychain state)"
 fi
 
 # 3) Package (release build happens inside package_app.sh).
@@ -311,14 +312,14 @@ fi
 log "==> launch app"
 if ! open "${APP_BUNDLE}"; then
   log "WARN: launch app returned non-zero; falling back to direct binary launch."
-  "${APP_BUNDLE}/Contents/MacOS/CodexBar" >/dev/null 2>&1 &
+  "${APP_BUNDLE}/Contents/MacOS/Midas" >/dev/null 2>&1 &
   disown
 fi
 
 # 5) Verify the app stays up for at least a moment (launch can be >1s on some systems).
 for _ in {1..10}; do
   if pgrep -f "${APP_PROCESS_PATTERN}" >/dev/null 2>&1; then
-    log "OK: CodexBar is running."
+    log "OK: Midas is running."
     exit 0
   fi
   sleep 0.4

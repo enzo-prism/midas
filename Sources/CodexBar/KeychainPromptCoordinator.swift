@@ -84,14 +84,15 @@ enum KeychainPromptCoordinator {
         guard Self.isUnbundledCodexBarExecutable(executablePath) else { return }
         KeychainAccessGate.forceDisabledForProcess(reason: "unbundled-executable")
         Self.log.warning(
-            "Unbundled CodexBar executable detected; disabling keychain access to avoid repeated prompts",
+            "Unbundled Midas executable detected; disabling keychain access to avoid repeated prompts",
             metadata: ["doc": "docs/DEVELOPMENT_SETUP.md"])
     }
 
     static func isUnbundledCodexBarExecutable(_ executablePath: String) -> Bool {
         guard executablePath.hasPrefix("/") else { return false }
         let executableURL = URL(fileURLWithPath: executablePath).standardizedFileURL
-        return executableURL.lastPathComponent == "CodexBar"
+        // Packaged builds run as `Midas`; `swift build` products keep the inherited `CodexBar` target name.
+        return [MidasIdentity.executableName, "CodexBar"].contains(executableURL.lastPathComponent)
             && !executableURL.pathComponents.contains(where: { $0.hasSuffix(".app") })
     }
 

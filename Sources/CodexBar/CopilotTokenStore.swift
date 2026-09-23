@@ -24,7 +24,7 @@ enum CopilotTokenStoreError: LocalizedError {
 struct KeychainCopilotTokenStore: CopilotTokenStoring {
     private static let log = CodexBarLog.logger(LogCategories.copilotTokenStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = MidasIdentity.keychainService
     private let account = "copilot-api-token"
 
     func loadToken() throws -> String? {
@@ -50,7 +50,16 @@ struct KeychainCopilotTokenStore: CopilotTokenStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound,
+           let adopted = MidasLegacyKeychain.adoptIfNeeded(
+               service: self.service,
+               account: self.account,
+               promptKind: .copilotToken)
+        {
+            result = adopted as CFTypeRef
+            status = errSecSuccess
+        }
         if status == errSecItemNotFound {
             return nil
         }

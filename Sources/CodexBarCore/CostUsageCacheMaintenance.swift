@@ -57,7 +57,7 @@ public enum CostUsageCacheMaintenance {
 
     private static func defaultCacheRoot(fileManager: FileManager) -> URL {
         let root = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        return root.appendingPathComponent("CodexBar", isDirectory: true)
+        return root.appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
     }
 
     private static func currentArtifactNames() -> Set<String> {

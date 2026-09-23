@@ -24,7 +24,7 @@ enum MiniMaxCookieStoreError: LocalizedError {
 struct KeychainMiniMaxCookieStore: MiniMaxCookieStoring {
     private static let log = CodexBarLog.logger(LogCategories.minimaxCookieStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = MidasIdentity.keychainService
     private let account = "minimax-cookie"
 
     func loadCookieHeader() throws -> String? {
@@ -50,7 +50,16 @@ struct KeychainMiniMaxCookieStore: MiniMaxCookieStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound,
+           let adopted = MidasLegacyKeychain.adoptIfNeeded(
+               service: self.service,
+               account: self.account,
+               promptKind: .minimaxCookie)
+        {
+            result = adopted as CFTypeRef
+            status = errSecSuccess
+        }
         if status == errSecItemNotFound {
             return nil
         }

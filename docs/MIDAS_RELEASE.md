@@ -6,19 +6,36 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-Source on `main` is version **0.36.0**, build **108**, published as `v0.36.0-midas.1`.
-It adds the Anthropic provider, always shows Claude's 5-hour and weekly limits, and fixes
-Settings not opening on macOS 27. Check GitHub releases for live binary status. The downloadable app is for Apple Silicon Macs running
-macOS 14 or later. The bundle directory and executable retain `CodexBar` for compatibility; the
-app's displayed name is Midas.
+Source on `main` is version **0.37.0**, build **109**. It is the first build with Midas’s own
+identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
+`L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
+Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
+`Scripts/package_app.sh`.
 
-Midas 0.33.3 enables Sparkle using a Midas-only feed and Ed25519 key. In the panel, click
-**Check for Updates**, then follow **Download → Install & Restart**. Automatic checks can be
-controlled in Settings → About. Older builds need one manual install to bootstrap this channel.
-The upstream CodexBar feed remains disabled. Debug, ad-hoc, and Intel builds cannot use this
-Apple Silicon channel.
-No upstream Homebrew tap or appcast is updated. The inherited CLI release workflow automatically
-runs only for upstream releases; fork maintainers may still invoke its artifact-only manual mode.
+The last **signed, notarized, Sparkle-published** binary is **0.36.0**, build **108**, tagged
+`v0.36.0-midas.1`. It still runs under the CodexBar identity. Check GitHub releases for live
+binary status. The downloadable app is for Apple Silicon Macs running macOS 14 or later.
+
+### Update feeds after 0.37.0
+
+Sparkle refuses to install an update whose bundle identifier differs from the running app, so
+0.33.3–0.36.0 clients cannot update themselves to 0.37.0. Every latest stable release therefore
+ships two feeds, both written by `Scripts/make_midas_appcast.py`:
+
+- `Midas-appcast-arm64-v2.xml` — the real feed for the Midas identity (0.37.0+): signed enclosure.
+- `Midas-appcast-arm64.xml` — the legacy feed (`--informational`): no enclosure, a link to the
+  release page, and a note asking for a one-time manual download. Keep publishing it until the
+  0.35.x install base is gone.
+
+Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
+their settings (adopted on first launch) and update automatically from then on. Widgets must be
+re-added once because the app identity changed.
+
+## 0.37.0 changes
+
+Version 0.37.0, build 109, moves Midas to its own product identity and adopts pre-0.37.0 data on
+first launch (preferences, storage folders, app group, and lazily the Keychain items). See
+[the changelog](../CHANGELOG.md).
 
 ## 0.36.0 changes
 
@@ -101,19 +118,20 @@ pricing and optional iCloud calibration sharing, and resumable three-step onboar
    substitutes for outside-the-App-Store distribution. Stop binary publication if it is missing.
    Build with `APP_TEAM_ID` and `APP_IDENTITY` matching the installed Midas developer signature:
    `APP_TEAM_ID=... APP_IDENTITY='Developer ID Application: ...' ./Scripts/package_app.sh release`.
-4. Verify with `codesign --verify --deep --strict CodexBar.app` and inspect the timestamp/team.
+4. Verify with `codesign --verify --deep --strict Midas.app` and inspect the timestamp/team.
 5. Create a temporary ZIP using `ditto --norsrc -c -k --keepParent`, then submit it with
    `asc notarization submit --file <zip>`. Use `asc notarization status --id <id>` until accepted.
-6. Staple with `xcrun stapler staple CodexBar.app`, then run `xcrun stapler validate` and
-   `spctl --assess --type execute --verbose CodexBar.app`.
+6. Staple with `xcrun stapler staple Midas.app`, then run `xcrun stapler validate` and
+   `spctl --assess --type execute --verbose Midas.app`.
 7. Create a new final ZIP of the stapled app and a SHA-256 checksum. Never reuse the unstapled ZIP
    for distribution. Prepare the release against the exact tested commit in `enzo-prism/midas`
    with an explicit architecture label. Include license notices and the existing bundled credits.
 8. Sign the final app ZIP using Sparkle’s `sign_update --account enzo-prism-midas`.
    The private key remains in the login Keychain; never export it into the repository.
-   Generate `Midas-appcast-arm64.xml` using `Scripts/make_midas_appcast.py` with that signature,
-   the exact version/build/tag, and the final archive. Include this feed in **every** latest stable
-   GitHub release: installed Midas reads `/releases/latest/download/Midas-appcast-arm64.xml`.
+   Generate `Midas-appcast-arm64-v2.xml` using `Scripts/make_midas_appcast.py` with that signature,
+   the exact version/build/tag, and the final archive, and `Midas-appcast-arm64.xml` with
+   `--informational` for pre-0.37.0 clients. Include both feeds in **every** latest stable
+   GitHub release: installed Midas reads `/releases/latest/download/<feed>`.
    Verify the archive signature with `sign_update --account enzo-prism-midas --verify` before publishing.
    Sign the XML feed too with `sign_update --account enzo-prism-midas <feed.xml>`, then verify it
    using `--verify`. Generate final checksums after signing. Upload the archive, feed, checksums,

@@ -273,7 +273,7 @@ public actor AugmentSessionStore {
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fm.temporaryDirectory
-        let dir = appSupport.appendingPathComponent("CodexBar", isDirectory: true)
+        let dir = appSupport.appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         self.fileURL = dir.appendingPathComponent("augment-session.json")
 

@@ -4,19 +4,30 @@ import Testing
 
 struct AppGroupSupportTests {
     @Test
-    func `app group identifiers use resolved team-prefixed release and debug variants`() {
+    func `app group identifiers use the Midas identity with team-prefixed release and debug variants`() {
         #expect(
-            AppGroupSupport.currentGroupID(teamID: "Y5PE65HELJ", bundleID: "com.steipete.codexbar")
-                == "Y5PE65HELJ.com.steipete.codexbar")
+            AppGroupSupport.currentGroupID(teamID: "L49MKXGVM4", bundleID: "com.designprism.midas")
+                == "L49MKXGVM4.com.designprism.midas")
         #expect(
-            AppGroupSupport.currentGroupID(teamID: "ABCDE12345", bundleID: "com.steipete.codexbar.debug")
-                == "ABCDE12345.com.steipete.codexbar.debug")
+            AppGroupSupport.currentGroupID(teamID: "ABCDE12345", bundleID: "com.designprism.midas.debug")
+                == "ABCDE12345.com.designprism.midas.debug")
         #expect(
-            AppGroupSupport.legacyGroupID(for: "com.steipete.codexbar")
+            AppGroupSupport.legacyGroupID(for: "com.designprism.midas")
                 == "group.com.steipete.codexbar")
         #expect(
-            AppGroupSupport.legacyGroupID(for: "com.steipete.codexbar.debug")
+            AppGroupSupport.legacyGroupID(for: "com.designprism.midas.debug")
                 == "group.com.steipete.codexbar.debug")
+    }
+
+    @Test
+    func `legacy group ids cover pre-0_37 Midas builds and upstream CodexBar, newest first`() {
+        #expect(
+            AppGroupSupport.legacyGroupIDs(for: "com.designprism.midas", teamID: "L49MKXGVM4")
+                == ["L49MKXGVM4.com.steipete.codexbar", "group.com.steipete.codexbar"])
+        #expect(
+            AppGroupSupport.legacyGroupIDs(for: "com.designprism.midas.debug", teamID: "L49MKXGVM4")
+                == ["L49MKXGVM4.com.steipete.codexbar.debug", "group.com.steipete.codexbar.debug"])
+        #expect(AppGroupSupport.defaultTeamID == MidasIdentity.teamID)
     }
 
     @Test
@@ -62,7 +73,7 @@ struct AppGroupSupportTests {
 
         let currentSnapshotURL = root.appendingPathComponent("current/widget-snapshot.json", isDirectory: false)
         let result = AppGroupSupport.migrateLegacyDataIfNeeded(
-            bundleID: "com.steipete.codexbar",
+            bundleID: "com.designprism.midas",
             standardDefaults: standardDefaults,
             currentDefaultsOverride: currentDefaults,
             legacyDefaultsOverride: legacyDefaults,
@@ -80,7 +91,7 @@ struct AppGroupSupportTests {
                 == AppGroupSupport.migrationVersion)
 
         let secondResult = AppGroupSupport.migrateLegacyDataIfNeeded(
-            bundleID: "com.steipete.codexbar",
+            bundleID: "com.designprism.midas",
             standardDefaults: standardDefaults,
             currentDefaultsOverride: currentDefaults,
             legacyDefaultsOverride: legacyDefaults,
@@ -108,7 +119,7 @@ struct AppGroupSupportTests {
         legacyDefaults.set(UsageProvider.cursor.rawValue, forKey: "widgetSelectedProvider")
 
         let result = AppGroupSupport.migrateLegacyDataIfNeeded(
-            bundleID: "com.steipete.codexbar",
+            bundleID: "com.designprism.midas",
             standardDefaults: standardDefaults,
             currentDefaultsOverride: currentDefaults,
             legacyDefaultsOverride: legacyDefaults)

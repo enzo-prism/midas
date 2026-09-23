@@ -11,6 +11,9 @@ DerivedData
 
 # Bundles / artifacts
 # Main app bundle (any variation)
+Midas.app/
+Midas *.app/
+Midas_*.app/
 CodexBar.app/
 CodexBar *.app/
 CodexBar_*.app/

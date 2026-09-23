@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.37.0 — September 23, 2026
+
+- Give Midas its own app identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, its own app group, Keychain services, storage folders (`~/Library/{Application Support,Caches,Logs}/Midas`), and log subsystem. Midas no longer shares any of these with upstream CodexBar, so both can be installed side by side.
+- Adopt existing data on first launch: preferences, local history and account registries, and the widget app group are copied from the CodexBar-era locations. Provider cookies and tokens are adopted from the old Keychain service the first time each provider is used; macOS may ask once per item.
+- Move Sparkle updates to `Midas-appcast-arm64-v2.xml`. Sparkle cannot install across bundle identifiers, so 0.33.3–0.36.0 builds receive an informational item on the old feed and need one manual download of 0.37.0. Updates are automatic again afterwards.
+- Label the fork explicitly: About shows Midas by Lorenzo Quaid Sison with CodexBar attribution and license, Info.plist carries `MidasUpstreamProject`, and `MidasIdentity.swift`, AGENTS.md, and the docs define which names are product identity versus inherited module names.
+- Widgets appear as Midas Switcher, Usage, History, and Metric; the CLI installer targets `/Applications/Midas.app`.
+
+Build 109. Existing widgets must be re-added after installing because the app identity changed. Quota, spend, and reset logic are unchanged.
+
 ## Midas 0.36.0 — September 22, 2026
 
 - Midas Air always shows Claude's **5-hour limit** and **Weekly limit** as bars with % left (labeled by

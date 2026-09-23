@@ -837,7 +837,7 @@ public struct ClaudeStatusProbe: Sendable {
         let fm = FileManager.default
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? fm.temporaryDirectory
         let dir = base
-            .appendingPathComponent("CodexBar", isDirectory: true)
+            .appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
             .appendingPathComponent("ClaudeProbe", isDirectory: true)
         do {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)

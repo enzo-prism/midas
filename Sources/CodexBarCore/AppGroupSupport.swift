@@ -4,12 +4,15 @@ import Security
 #endif
 
 public enum AppGroupSupport {
-    public static let defaultTeamID = "Y5PE65HELJ"
+    public static let defaultTeamID = MidasIdentity.teamID
+    /// Info.plist key carrying the signing team. The key name is inherited and intentionally stable.
     public static let teamIDInfoKey = "CodexBarTeamID"
-    public static let legacyReleaseGroupID = "group.com.steipete.codexbar"
-    public static let legacyDebugGroupID = "group.com.steipete.codexbar.debug"
+    /// Upstream CodexBar group ids from before team-prefixed groups existed.
+    public static let legacyReleaseGroupID = "group.\(MidasIdentity.Upstream.bundleIdentifier)"
+    public static let legacyDebugGroupID = "group.\(MidasIdentity.Upstream.debugBundleIdentifier)"
     public static let widgetSnapshotFilename = "widget-snapshot.json"
-    public static let migrationVersion = 1
+    /// Version 2: Midas 0.37.0 moved to its own bundle identifier and app group.
+    public static let migrationVersion = 2
     public static let migrationVersionKey = "appGroupMigrationVersion"
     private static let sharedDefaultsMigrationKeys = [
         "debugDisableKeychainAccess",
@@ -40,8 +43,18 @@ public enum AppGroupSupport {
     }
 
     static func currentGroupID(teamID: String, bundleID: String?) -> String {
-        let base = "\(teamID).com.steipete.codexbar"
-        return self.isDebugBundleID(bundleID) ? "\(base).debug" : base
+        "\(teamID).\(MidasIdentity.bundleIdentifier(matchingLegacy: bundleID))"
+    }
+
+    /// Group ids that earlier builds may have written to, newest first: Midas builds before 0.36.0
+    /// (team-prefixed CodexBar identity) and upstream CodexBar's original `group.` identifier.
+    public static func legacyGroupIDs(
+        for bundleID: String? = Bundle.main.bundleIdentifier,
+        teamID: String? = nil) -> [String]
+    {
+        let team = teamID ?? self.resolvedTeamID()
+        let midasEra = "\(team).\(MidasIdentity.legacyBundleIdentifier(for: bundleID))"
+        return [midasEra, self.legacyGroupID(for: bundleID)]
     }
 
     public static func resolvedTeamID(bundle: Bundle = .main) -> String {
@@ -111,7 +124,7 @@ public enum AppGroupSupport {
     {
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
-        let directory = base.appendingPathComponent("CodexBar", isDirectory: true)
+        let directory = base.appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
@@ -121,10 +134,22 @@ public enum AppGroupSupport {
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser)
         -> URL
     {
+        self.groupContainerURL(groupID: self.legacyGroupID(for: bundleID), homeDirectory: homeDirectory)
+    }
+
+    public static func legacyContainerCandidateURLs(
+        bundleID: String? = Bundle.main.bundleIdentifier,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser)
+        -> [URL]
+    {
+        self.legacyGroupIDs(for: bundleID).map { self.groupContainerURL(groupID: $0, homeDirectory: homeDirectory) }
+    }
+
+    private static func groupContainerURL(groupID: String, homeDirectory: URL) -> URL {
         homeDirectory
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Group Containers", isDirectory: true)
-            .appendingPathComponent(self.legacyGroupID(for: bundleID), isDirectory: true)
+            .appendingPathComponent(groupID, isDirectory: true)
     }
 
     public static func migrateLegacyDataIfNeeded(
@@ -149,18 +174,25 @@ public enum AppGroupSupport {
             return MigrationResult(status: .targetUnavailable)
         }
 
-        let legacyDefaults = legacyDefaultsOverride ?? UserDefaults(suiteName: self.legacyGroupID(for: bundleID))
+        let legacyDefaultsCandidates: [UserDefaults] = if let legacyDefaultsOverride {
+            [legacyDefaultsOverride]
+        } else {
+            self.legacyGroupIDs(for: bundleID).compactMap { UserDefaults(suiteName: $0) }
+        }
         let currentSnapshotURL = currentSnapshotURLOverride
             ?? self.currentContainerURL(bundleID: bundleID, fileManager: fileManager)?
             .appendingPathComponent(self.widgetSnapshotFilename, isDirectory: false)
-        let legacySnapshotURL = legacySnapshotURLOverride
-            ?? self.legacyContainerCandidateURL(bundleID: bundleID, homeDirectory: homeDirectory)
-            .appendingPathComponent(self.widgetSnapshotFilename, isDirectory: false)
+        let legacySnapshotURLs: [URL] = if let legacySnapshotURLOverride {
+            [legacySnapshotURLOverride]
+        } else {
+            self.legacyContainerCandidateURLs(bundleID: bundleID, homeDirectory: homeDirectory)
+                .map { $0.appendingPathComponent(self.widgetSnapshotFilename, isDirectory: false) }
+        }
 
         let copiedSnapshot = {
             guard let currentSnapshotURL else { return false }
             guard !fileManager.fileExists(atPath: currentSnapshotURL.path),
-                  fileManager.fileExists(atPath: legacySnapshotURL.path)
+                  let legacySnapshotURL = legacySnapshotURLs.first(where: { fileManager.fileExists(atPath: $0.path) })
             else {
                 return false
             }
@@ -176,7 +208,7 @@ public enum AppGroupSupport {
         }()
 
         let copiedDefaults = self.copyLegacySharedDefaults(
-            from: legacyDefaults,
+            from: legacyDefaultsCandidates,
             to: currentDefaults)
 
         let result = if copiedSnapshot || copiedDefaults > 0 {
@@ -193,15 +225,13 @@ public enum AppGroupSupport {
     }
 
     private static func copyLegacySharedDefaults(
-        from legacyDefaults: UserDefaults?,
+        from legacyCandidates: [UserDefaults],
         to currentDefaults: UserDefaults) -> Int
     {
-        guard let legacyDefaults else { return 0 }
-
         var copied = 0
         for key in self.sharedDefaultsMigrationKeys {
             guard currentDefaults.object(forKey: key) == nil,
-                  let legacyValue = legacyDefaults.object(forKey: key)
+                  let legacyValue = legacyCandidates.lazy.compactMap({ $0.object(forKey: key) }).first
             else {
                 continue
             }
@@ -212,8 +242,7 @@ public enum AppGroupSupport {
     }
 
     private static func isDebugBundleID(_ bundleID: String?) -> Bool {
-        guard let bundleID, !bundleID.isEmpty else { return false }
-        return bundleID.contains(".debug")
+        MidasIdentity.isDebugBundleIdentifier(bundleID)
     }
 
     private static func codeSignatureTeamID(bundleURL: URL?) -> String? {

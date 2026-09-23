@@ -24,7 +24,7 @@ enum ZaiTokenStoreError: LocalizedError {
 struct KeychainZaiTokenStore: ZaiTokenStoring {
     private static let log = CodexBarLog.logger(LogCategories.zaiTokenStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = MidasIdentity.keychainService
     private let account = "zai-api-token"
 
     // Cache to reduce keychain access frequency
@@ -67,7 +67,16 @@ struct KeychainZaiTokenStore: ZaiTokenStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound,
+           let adopted = MidasLegacyKeychain.adoptIfNeeded(
+               service: self.service,
+               account: self.account,
+               promptKind: .zaiToken)
+        {
+            result = adopted as CFTypeRef
+            status = errSecSuccess
+        }
         if status == errSecItemNotFound {
             // Cache the nil result
             Self.cacheLock.lock()
