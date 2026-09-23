@@ -19,6 +19,8 @@ struct MidasTotalSpend {
     let coverageText: String
     let includedProviderCount: Int
     let excludedProviderCount: Int
+    /// Providers with billed organization spend, excluded from the estimate total by design.
+    let billedProviderCount: Int
     let providerCount: Int
     let oldestUpdate: Date?
     let hasIncompleteCoverage: Bool
@@ -30,6 +32,7 @@ struct MidasTotalSpend {
         var periods = Set<String>()
         var updates: [Date] = []
         var included = 0
+        let billed = unique.count(where: { $0.spend?.isBilled == true && $0.spend?.isEstimate != true })
         for presentation in unique {
             guard let spend = presentation.spend, spend.isEstimate,
                   spend.amount.isFinite, spend.amount >= 0
@@ -49,7 +52,9 @@ struct MidasTotalSpend {
         self.includedProviderCount = included
         self.excludedProviderCount = unique.count - included
         self.oldestUpdate = updates.min()
-        self.hasIncompleteCoverage = included < unique.count || unique.contains {
+        self.billedProviderCount = billed
+        // Billed providers are intentionally separate, so they do not make the estimate incomplete.
+        self.hasIncompleteCoverage = included + billed < unique.count || unique.contains {
             $0.spend?.coverageNote != nil || $0.cloudUsage?.accounts.contains {
                 $0.error != nil || $0.usage?.totalTokens == nil
             } == true
@@ -65,9 +70,12 @@ struct MidasTotalSpend {
             self.coverageText = "No enabled providers"
         } else if included == 0 {
             self.coverageText = "No usable estimates · \(self.providerCount) providers"
-        } else if self.excludedProviderCount > 0 {
+        } else if self.excludedProviderCount > billed {
             self.coverageText = "\(included) of \(self.providerCount) providers · "
                 + "\(self.excludedProviderCount) without a usable estimate"
+        } else if billed > 0 {
+            self.coverageText = "\(included) of \(self.providerCount) providers · "
+                + "\(billed) billed shown separately"
         } else {
             self.coverageText = "\(included) \(included == 1 ? "provider" : "providers") · recorded estimates only"
         }

@@ -115,6 +115,8 @@ extension UsageMenuCardView.Model {
             L("AWS Cost Explorer billing can lag.")
         case .openai:
             L("Reported by OpenAI Admin API organization usage.")
+        case .anthropic:
+            L("Reported by Anthropic Admin API organization cost report (UTC days).")
         case .mistral:
             L("Reported by Mistral billing usage.")
         case .cursor:
@@ -206,7 +208,7 @@ extension UsageMenuCardView.Model {
                 percentLine: nil)
         }
 
-        if provider == .openai || provider == .claude, cost.limit <= 0 {
+        if provider == .openai || provider == .claude || provider == .anthropic, cost.limit <= 0 {
             let spend = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
             let periodLabel = Self.localizedPeriodLabel(cost.period ?? "Last 30 days")
             return ProviderCostSection(

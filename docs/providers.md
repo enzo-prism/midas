@@ -8,8 +8,8 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 50 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
-OpenCode vs OpenCode Go, because the auth source and quota shape differ.
+CodexBar currently registers 51 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API,
+Claude vs Anthropic API, or OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
 Legend: web (browser cookies/WebView), cli (RPC/PTy or provider CLI), oauth (provider OAuth), api token, local probe, web dashboard.
@@ -25,6 +25,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | OpenAI | Admin API key (`api`) for organization spend/usage; legacy API-key balance fallback. |
 | Azure OpenAI | API key + endpoint + deployment probe (`api`) for deployment status validation. |
 | Claude | Admin API key (`api`) when configured; otherwise App Auto: OAuth API (`oauth`) → CLI PTY (`claude`) → Web API (`web`). CLI Auto: Web API (`web`) → CLI PTY (`claude`). |
+| Anthropic | Admin API key (`api`) for organization billed spend and token usage. |
 | Gemini | OAuth-backed API via Gemini CLI credentials (`api`). |
 | Antigravity | Local LSP/HTTP probe (`local`). |
 | Cursor | Web API via cookies → stored WebKit session (`web`). |
@@ -93,6 +94,12 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Validates the configured deployment with a minimal chat-completions request; it does not expose Azure spend or quota history.
 - Use `AZURE_OPENAI_API_VERSION` to override the API version. Set it to `v1` for Azure's OpenAI-compatible v1 API path.
 - Status: Azure status page link.
+
+## Anthropic
+- Admin API key (`sk-ant-admin…`) from `~/.codexbar/config.json`, token accounts, `ANTHROPIC_ADMIN_KEY`, or `ANTHROPIC_ADMIN_API_KEY`.
+- Organization cost report (billed USD) plus messages usage by model, for the configured history window (UTC days).
+- Separate from Claude subscription limits; billed spend is shown per provider and kept out of the Midas estimate total.
+- Details: `docs/anthropic.md`.
 
 ## Claude
 - Admin API: `sk-ant-admin...` key in Settings/config, token accounts, or `ANTHROPIC_ADMIN_KEY`.

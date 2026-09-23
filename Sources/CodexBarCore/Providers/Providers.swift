@@ -7,6 +7,7 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case openai
     case azureopenai
     case claude
+    case anthropic
     case cursor
     case opencode
     case opencodego

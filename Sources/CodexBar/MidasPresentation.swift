@@ -35,6 +35,17 @@ struct MidasQuotaMetric: Identifiable {
         self.remainingPercent <= 0
     }
 
+    func retitled(_ title: String) -> Self {
+        var copy = Self(
+            id: self.id,
+            title: title,
+            remainingPercent: self.remainingPercent,
+            resetText: self.resetText,
+            helpText: self.helpText)
+        copy.resetsAt = self.resetsAt
+        return copy
+    }
+
     static func make(_ metric: UsageMenuCardView.Model.Metric) -> Self? {
         guard metric.statusText == nil, metric.percent.isFinite else { return nil }
         let remaining = metric.percentStyle == .left ? metric.percent : 100 - metric.percent
@@ -60,6 +71,16 @@ struct MidasSpendPresentation {
     let secondaryLabel: String?
     var isEstimate: Bool = false
     var coverageNote: String?
+    /// Vendor-billed organization spend. Shown per provider, never added to the estimate total.
+    var isBilled: Bool = false
+
+    var isDisplayable: Bool {
+        self.isEstimate || self.isBilled
+    }
+
+    var accessibilityTitle: String {
+        self.isBilled ? "Billed API spend" : "Estimated inference spend"
+    }
 
     static func make(provider: UsageProvider, snapshot: CostUsageTokenSnapshot?) -> Self? {
         guard let snapshot else { return nil }
@@ -83,6 +104,12 @@ struct MidasSpendPresentation {
         case .mixed:
             title = "Recorded usage value"
             detail = "Mixed provider metering and API-rate estimates; not billed spend."
+        case .vendorBilled:
+            title = "Billed API spend"
+            detail = "Charges from the provider's organization cost report. Shown separately from estimates."
+            if provider == .anthropic {
+                detail += " Claude Code sessions billed to this organization can also appear in Claude's usage value."
+            }
         case .unknown:
             title = "Recorded usage value"
             detail = "The source does not establish pricing provenance. This value is not a billing receipt."
@@ -111,7 +138,8 @@ struct MidasSpendPresentation {
             currency: snapshot.currencyCode,
             secondaryValue: secondaryAmount?.formatted(.currency(code: snapshot.currencyCode)),
             secondaryLabel: secondaryLabel,
-            isEstimate: provenance == .listPriceEstimate)
+            isEstimate: provenance == .listPriceEstimate,
+            isBilled: provenance == .vendorBilled)
     }
 
     private static func valid(_ amount: Double?) -> Double? {
@@ -192,6 +220,9 @@ struct MidasProviderPresentation {
                     helpText: session.resetsAt?.formatted(date: .complete, time: .shortened),
                     resetsAt: session.resetsAt), at: 0)
             }
+        }
+        if provider == .claude {
+            quotaMetrics = MidasClaudeLimits.arrange(quotaMetrics, snapshot: snapshot)
         }
         var hero: MidasQuotaMetric?
         if provider == .codex,
@@ -312,4 +343,28 @@ struct MidasAccountPresentation: Identifiable {
     let isPrimary: Bool
     let presentation: MidasProviderPresentation
     var displayName: String?
+}
+
+/// Claude always surfaces its two subscription limits — the 5-hour session and the weekly window —
+/// labeled by window length, because the primary slot falls back to a weekly window when Claude
+/// reports no 5-hour window.
+enum MidasClaudeLimits {
+    static let fiveHourTitle = "5-hour limit"
+    static let weeklyTitle = "Weekly limit"
+    static let limitIDs: Set<String> = ["primary", "secondary"]
+    private static let weekMinutes = 7 * 24 * 60
+
+    static func arrange(_ metrics: [MidasQuotaMetric], snapshot: UsageSnapshot?) -> [MidasQuotaMetric] {
+        var session = metrics.first { $0.id == "primary" }
+        var weekly = metrics.first { $0.id == "secondary" }
+        if let minutes = snapshot?.primary?.windowMinutes, minutes >= self.weekMinutes {
+            // No 5-hour window was reported; the primary slot already carries a weekly window.
+            if weekly == nil { weekly = session }
+            session = nil
+        }
+        let limits = [session?.retitled(self.fiveHourTitle), weekly?.retitled(self.weeklyTitle)].compactMap(\.self)
+        let limitIDs = Set(limits.map(\.id))
+        let extras = metrics.filter { !self.limitIDs.contains($0.id) && !limitIDs.contains($0.id) }
+        return limits + extras
+    }
 }

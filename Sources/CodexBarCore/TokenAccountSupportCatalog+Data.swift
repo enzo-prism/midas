@@ -10,6 +10,14 @@ extension TokenAccountSupportCatalog {
             requiresManualCookieSource: false,
             cookieName: nil,
             environmentKeysToScrub: [OpenAIAPISettingsReader.projectIDEnvironmentKey]),
+        .anthropic: TokenAccountSupport(
+            title: "Admin API keys",
+            subtitle: "Store Admin API keys for multiple Anthropic organizations.",
+            placeholder: "sk-ant-admin-...",
+            injection: .environment(key: AnthropicSettingsReader.adminAPIKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil,
+            environmentKeysToScrub: [ClaudeAdminAPISettingsReader.alternateAdminAPIKeyEnvironmentKey]),
         .claude: TokenAccountSupport(
             title: "Claude credentials",
             subtitle: "Store Claude sessionKey cookies, OAuth tokens, or Anthropic Admin API keys.",

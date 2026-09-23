@@ -238,6 +238,12 @@ public enum ProviderTokenResolver {
         self.resolveEnv(ClaudeAdminAPISettingsReader.apiKey(environment: environment))
     }
 
+    public static func anthropicAdminAPIResolution(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
+    {
+        self.resolveEnv(AnthropicSettingsReader.adminAPIKey(environment: environment))
+    }
+
     public static func copilotResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {

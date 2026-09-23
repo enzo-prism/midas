@@ -60,6 +60,7 @@ enum ProviderChoice: String, AppEnum {
         case .codex: self = .codex
         case .openai: return nil // OpenAI not yet supported in widgets
         case .azureopenai: return nil // Azure OpenAI not yet supported in widgets
+        case .anthropic: return nil // Anthropic API spend not yet supported in widgets
         case .claude: self = .claude
         case .gemini: self = .gemini
         case .alibaba: self = .alibaba

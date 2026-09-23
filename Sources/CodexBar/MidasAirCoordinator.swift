@@ -263,10 +263,6 @@ extension StatusItemController {
 
     func showMidasAccountSettings(provider: UsageProvider) {
         self.preferencesSelection.showProvider(provider)
-        NSApp.activate(ignoringOtherApps: true)
-        NotificationCenter.default.post(
-            name: .codexbarOpenSettings,
-            object: nil,
-            userInfo: ["tab": PreferencesTab.providers.rawValue])
+        self.requestSettingsWindow(tab: .providers)
     }
 }

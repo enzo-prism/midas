@@ -925,7 +925,8 @@ extension UsageMenuCardView.Model {
             input.provider == .opencodego) &&
             !input.showOptionalCreditsAndExtraUsage
         let providerCost: ProviderCostSection? = if hidesOptionalProviderCost ||
-            (input.provider == .openai && openAIAPIUsage != nil)
+            (input.provider == .openai && openAIAPIUsage != nil) ||
+            (input.provider == .anthropic && input.snapshot?.claudeAdminAPIUsage != nil)
         {
             nil
         } else {

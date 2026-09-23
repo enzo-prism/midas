@@ -45,6 +45,12 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   together or use iCloud as an account-login service. Stale samples expire after 24 hours.
 - **Cursor:** account data supplies supported usage pools and history. Available quota does not
   guarantee an API-equivalent dollar estimate.
+- **Claude:** the overview always shows two subscription limits: the **5-hour limit** and the
+  **Weekly limit**, each with % left and its reset time. If Claude reports no 5-hour window,
+  only the weekly limit is shown, labeled as weekly.
+- **Anthropic API:** add an organization Admin API key (`sk-ant-admin…`) under
+  **Settings → Providers → Anthropic** to see billed API spend and token usage. Billed spend is
+  labeled **Billed API spend** and is not added to the estimated total. See [Anthropic](anthropic.md).
 - **Meta:** Muse history is local to this Mac. Other computers' Meta activity is not included,
   and Midas does not invent a remaining quota when the provider does not report one.
 

@@ -132,7 +132,7 @@ public struct CostUsageFetcher: Sendable {
             .Options? = nil) async throws -> CostUsageTokenSnapshot
     {
         guard provider == .codex || provider == .claude || provider == .vertexai || provider == .bedrock || provider ==
-            .zai || provider == .meta || provider == .openai || provider == .cursor
+            .zai || provider == .meta || provider == .openai || provider == .anthropic || provider == .cursor
         else {
             throw CostUsageError.unsupportedProvider(provider)
         }
@@ -152,6 +152,13 @@ public struct CostUsageFetcher: Sendable {
 
         if provider == .openai {
             return try await Self.loadOpenAIDailyReport(
+                environment: environment,
+                now: now,
+                historyDays: clampedHistoryDays)
+        }
+
+        if provider == .anthropic {
+            return try await Self.loadAnthropicDailyReport(
                 environment: environment,
                 now: now,
                 historyDays: clampedHistoryDays)
@@ -446,6 +453,34 @@ public struct CostUsageFetcher: Sendable {
             daily: snapshot.daily,
             updatedAt: snapshot.updatedAt)
         return snapshot
+    }
+
+    /// Anthropic organization cost report from the Admin API (billed spend, not an estimate).
+    /// Requires `ANTHROPIC_ADMIN_KEY` or a key in Settings; otherwise throws `AnthropicSettingsError.missingToken`.
+    private static func loadAnthropicDailyReport(
+        environment: [String: String],
+        now: Date,
+        historyDays: Int) async throws -> CostUsageTokenSnapshot
+    {
+        guard let apiKey = AnthropicSettingsReader.adminAPIKey(environment: environment) else {
+            throw AnthropicSettingsError.missingToken
+        }
+        let usage = try await ClaudeAdminAPIUsageFetcher.fetchUsage(
+            apiKey: apiKey,
+            now: now,
+            historyDays: historyDays)
+        let snapshot = usage.toCostUsageTokenSnapshot()
+        return CostUsageTokenSnapshot(
+            sessionTokens: snapshot.sessionTokens,
+            sessionCostUSD: snapshot.sessionCostUSD,
+            last30DaysTokens: snapshot.last30DaysTokens,
+            last30DaysCostUSD: snapshot.last30DaysCostUSD,
+            currencyCode: snapshot.currencyCode,
+            historyDays: snapshot.historyDays,
+            historyLabel: "Last \(historyDays) days (Anthropic Admin API)",
+            costProvenance: snapshot.costProvenance,
+            daily: snapshot.daily,
+            updatedAt: snapshot.updatedAt)
     }
 
     /// Snap a Cursor window start to the local day boundary so the dashboard query keeps full days.

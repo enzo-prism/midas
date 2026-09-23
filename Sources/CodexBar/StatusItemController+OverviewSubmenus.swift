@@ -7,7 +7,7 @@ extension StatusItemController {
         model: UsageMenuCardView.Model,
         width: CGFloat) -> NSMenu?
     {
-        if provider == .openai,
+        if Self.usesAdminAPIUsageSubmenu(provider),
            let submenu = self.makeOpenAIAPIUsageSubmenu(provider: provider, width: width)
         {
             return submenu

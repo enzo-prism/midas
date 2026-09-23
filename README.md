@@ -10,13 +10,15 @@
 > (count + per-credit expiries in the menu card and CLI). Upstream releases, Homebrew, and codexbar.app references below
 > refer to the original CodexBar project, not this fork.
 
-## Midas 0.35.4
+## Midas 0.36.0
 
-The latest source updates Sparkle to 2.10.0 and KeyboardShortcuts to 3.1.0 for macOS 27
-Golden Gate compatibility. It also expands the spend-period list and estimate-coverage
-details inside the Air panel (no nested popover), hydrates cached Codex weekly usage and
-banked resets when workspace ids are missing from the managed store, and lets development
-builds download the latest signed ZIP from Check for Updates.
+- **Claude 5-hour and weekly limits:** the Air panel always shows both Claude subscription
+  limits as bars with % left and reset times.
+- **Anthropic provider:** track Anthropic API organization spend and token usage with an Admin
+  API key, alongside Claude subscription limits. Billed spend appears on its own row and is kept
+  out of the estimated-spend total. See [Anthropic](docs/anthropic.md).
+- **Settings opens reliably on macOS 27:** Settings is now a regular app-owned window, fixing
+  clicks that silently did nothing after Midas had been running for a while.
 
 - **Start here:** [Connect your services and accounts](docs/MIDAS_SETUP.md).
 - **Download:** [Latest signed Midas release](https://github.com/enzo-prism/midas/releases/latest).
@@ -116,6 +118,7 @@ See [CLI configuration](docs/cli-configuration.md) for the full flow.
 - [Codex](docs/codex.md) — OAuth API or local Codex CLI, plus optional OpenAI web dashboard extras. Midas also tracks on-demand rate-limit reset credits (count + per-credit expiries) via the OAuth source.
 - [OpenAI](docs/openai.md) — Admin API key usage/cost graphs with legacy credit-balance fallback.
 - [Claude](docs/claude.md) — OAuth API, browser cookies, or CLI PTY fallback; session and weekly usage where available.
+- [Anthropic](docs/anthropic.md) — Admin API key for organization billed spend and token usage (Claude Console), alongside Claude subscription limits.
 - [Cursor](docs/cursor.md) — Browser session cookies for plan + usage + billing resets.
 - [OpenCode](docs/opencode.md) — Browser cookies for workspace subscription usage.
 - [OpenCode Go](docs/opencode.md) — Browser cookies for Go usage windows.

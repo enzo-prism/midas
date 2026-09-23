@@ -1026,6 +1026,7 @@ extension UsageStore {
         let ollamaCookieHeader = self.settings.ollamaCookieHeader
         let processEnvironment = self.environmentBase
         let openAIDebugContext = self.openAIAPIKeyDebugContext(processEnvironment: processEnvironment)
+        let anthropicDebugContext = self.anthropicAPIKeyDebugContext(processEnvironment: processEnvironment)
         let azureOpenAIDebugContext = self.azureOpenAIAPIKeyDebugContext(processEnvironment: processEnvironment)
         let openRouterDebugContext = self.openRouterAPIKeyDebugContext(processEnvironment: processEnvironment)
         let elevenLabsDebugContext = self.elevenLabsAPIKeyDebugContext(processEnvironment: processEnvironment)
@@ -1049,6 +1050,8 @@ extension UsageStore {
                     return Self.apiKeyDebugLine(openAIDebugContext)
                 case .azureopenai:
                     return Self.apiKeyDebugLine(azureOpenAIDebugContext)
+                case .anthropic:
+                    return Self.apiKeyDebugLine(anthropicDebugContext)
                 case .claude:
                     guard let claudeDebugConfiguration else {
                         return "Claude debug log configuration unavailable"
@@ -1239,7 +1242,7 @@ extension UsageStore {
         #endif
     }
 
-    private struct APIKeyDebugContext {
+    struct APIKeyDebugContext {
         let label: String
         let resolution: ProviderTokenResolution?
         let configToken: String?

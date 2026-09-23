@@ -176,9 +176,6 @@ struct PreferencesView: View {
         .onAppear {
             self.consumeSetupRequest()
             self.ensureValidTabSelection()
-            NSApp.windows.first {
-                $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
-            }?.title = "Midas Settings"
         }
         .onChange(of: self.selection.requestsSpendSetup) { _, _ in
             self.consumeSetupRequest()
@@ -203,9 +200,7 @@ struct PreferencesView: View {
             }
             self.finishesSpendSetup = false
             self.defersSpendSetup = false
-            NSApp.windows.first {
-                $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
-            }?.close()
+            NSApp.windows.first { $0.identifier == SettingsWindowIdentity.identifier }?.close()
             self.openMidas()
             return
         }
