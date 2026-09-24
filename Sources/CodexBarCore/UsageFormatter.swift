@@ -141,6 +141,10 @@ public enum UsageFormatter {
         if let desc = window.resetDescription {
             let trimmed = desc.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return nil }
+            // One-time allowance ends (e.g. a Cursor Grok Bot trial) are not resets.
+            if trimmed.lowercased().hasPrefix("trial ends ") {
+                return trimmed
+            }
             if trimmed.lowercased().hasPrefix("resets in ") {
                 return self.localized("Resets in %@", String(trimmed.dropFirst("Resets in ".count)))
             }

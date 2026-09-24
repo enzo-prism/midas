@@ -83,10 +83,15 @@ enum MidasAccountQuotaLayout {
         let metrics = self.allMetrics(presentation)
         guard let first = metrics.first else { return [] }
         // Claude pins its subscription limits (5-hour, weekly, and any model-only weekly limit such as
-        // Fable); other providers lead with one.
-        let pinned = presentation.provider == .claude
-            ? metrics.filter { MidasClaudeLimits.isPinned($0.id) }
-            : [first]
+        // Fable); Cursor pins its dashboard pools and Grok Bot; other providers lead with one.
+        let pinned: [MidasQuotaMetric] = switch presentation.provider {
+        case .claude:
+            metrics.filter { MidasClaudeLimits.isPinned($0.id) }
+        case .cursor:
+            MidasCursorLimits.pinned(metrics) ?? [first]
+        default:
+            [first]
+        }
         let head = pinned.isEmpty ? [first] : pinned
         let headIDs = Set(head.map(\.id))
         return head + metrics.filter { !headIDs.contains($0.id) }.filter {

@@ -32,8 +32,10 @@ The implementation notes below also preserve older Midas presentation decisions.
   **5-hour limit** and **Weekly limit** bars in the overview (`MidasClaudeLimits`, titled by window length),
   plus any model-only weekly limit Claude reports, such as **Fable weekly limit** (ids
   `claude-weekly-scoped-*`, from `limits[]` rows of kind `weekly_scoped`). A model-only bar keeps Claude's
-  reset time, and its tooltip notes that the all-models weekly limit still applies. Other providers show
-  one headline limit plus any tighter window.
+  reset time, and its tooltip notes that the all-models weekly limit still applies. Cursor pins its
+  dashboard trio (`MidasCursorLimits`): **Cursor Models**, **Other Models**, and **Grok Bot weekly**
+  (or **Grok Bot trial**), falling back to Total when the pools are unreported; Total stays the hero for
+  the menu-bar ring. Other providers show one headline limit plus any tighter window.
 - **Usage window:** resizable provider navigation, Usage and Costs views, period controls,
   history, model breakdowns where available, and source-aware cost labels. Metered consumption,
   provider-reported costs, and API-equivalent estimates are distinct meanings.

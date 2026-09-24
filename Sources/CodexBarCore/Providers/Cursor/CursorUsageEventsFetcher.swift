@@ -359,6 +359,8 @@ struct CursorUsageEventsFetcher: Sendable {
     var pageSize: Int
     /// Hard cap so a paging bug can never loop forever (200 * 1000 = 200k events).
     var maxPages: Int
+    /// Whole-window reads allowed when events land mid-pagination.
+    var paginationAttempts: Int = 3
 
     init(
         baseURL: URL = URL(string: "https://cursor.com")!,
@@ -385,7 +387,7 @@ struct CursorUsageEventsFetcher: Sendable {
         calendar: Calendar = .current,
         logger: ((String) -> Void)? = nil) async throws -> CursorCostFetchResult
     {
-        let events = try await self.fetchAllEvents(
+        let events = try await self.fetchAllEventsRetryingPagination(
             cookieHeader: cookieHeader,
             since: since,
             until: until,
@@ -393,6 +395,44 @@ struct CursorUsageEventsFetcher: Sendable {
         return CursorCostFetchResult(
             daily: Self.makeDailyReport(from: events, calendar: calendar),
             meteredCostUSD: Self.meteredCostUSD(from: events))
+    }
+
+    /// Cursor records events while the window is being paged (an active session, or agent runs that
+    /// finish late), which shifts page boundaries and the reported total. That is a race, not bad
+    /// data, so the whole window is re-read a couple of times before the estimate is given up.
+    private func fetchAllEventsRetryingPagination(
+        cookieHeader: String,
+        since: Date?,
+        until: Date?,
+        logger: ((String) -> Void)?) async throws -> [CursorUsageEvent]
+    {
+        var attempt = 1
+        while true {
+            do {
+                return try await self.fetchAllEvents(
+                    cookieHeader: cookieHeader,
+                    since: since,
+                    until: until,
+                    logger: logger)
+            } catch let error as CostUsageError {
+                guard attempt < self.paginationAttempts, self.isPaginationRace(error) else { throw error }
+                logger?("[cursor-cost] pagination changed during read (\(error)); retrying window")
+                attempt += 1
+                try Task.checkCancellation()
+            }
+        }
+    }
+
+    /// A count that moved between pages is a race worth re-reading; hitting the page cap is not.
+    func isPaginationRace(_ error: CostUsageError) -> Bool {
+        switch error {
+        case .cursorPaginationInconsistent:
+            true
+        case let .cursorPaginationIncomplete(_, received):
+            received < self.maxPages * self.pageSize
+        default:
+            false
+        }
     }
 
     private func fetchAllEvents(
@@ -771,32 +811,62 @@ struct CursorUsageEventsFetcher: Sendable {
         modelsDevCatalog: ModelsDevCatalog) -> Double?
     {
         guard usage.cost == .omitted else { return nil }
-        if let usd = CostUsagePricing.codexCostUSD(
-            model: model,
-            inputTokens: usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
-            cachedInputTokens: usage.cacheReadTokens,
-            outputTokens: usage.outputTokens,
-            modelsDevCatalog: modelsDevCatalog)
-        {
-            return usd * 100
-        }
-        if let usd = CostUsagePricing.claudeCostUSD(
-            model: Self.cursorClaudeCatalogModel(model),
-            inputTokens: usage.inputTokens,
-            cacheReadInputTokens: usage.cacheReadTokens,
-            cacheCreationInputTokens: usage.cacheWriteTokens,
-            outputTokens: usage.outputTokens,
-            pricingDate: eventDate,
-            modelsDevCatalog: modelsDevCatalog)
-        {
-            return usd * 100
+        for candidate in self.cursorPricingCandidates(model) {
+            if let usd = CostUsagePricing.codexCostUSD(
+                model: candidate,
+                inputTokens: usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
+                cachedInputTokens: usage.cacheReadTokens,
+                outputTokens: usage.outputTokens,
+                modelsDevCatalog: modelsDevCatalog)
+            {
+                return usd * 100
+            }
+            if let usd = CostUsagePricing.claudeCostUSD(
+                model: Self.cursorClaudeCatalogModel(candidate),
+                inputTokens: usage.inputTokens,
+                cacheReadInputTokens: usage.cacheReadTokens,
+                cacheCreationInputTokens: usage.cacheWriteTokens,
+                outputTokens: usage.outputTokens,
+                pricingDate: eventDate,
+                modelsDevCatalog: modelsDevCatalog)
+            {
+                return usd * 100
+            }
         }
         return nil
     }
 
-    private static func cursorClaudeCatalogModel(_ model: String) -> String {
-        guard let match = model.wholeMatch(of: /^claude-(\d+)\.(\d+)-(sonnet|opus|haiku)(-.*)?$/) else { return model }
-        return "claude-\(match.3)-\(match.1)-\(match.2)\(match.4 ?? "")"
+    /// Cursor appends mode suffixes that do not change the per-token list price (`-thinking`, reasoning
+    /// effort, `-max` context mode). Try the exact id first, then the id without those suffixes.
+    /// `-fast` is kept: on OpenAI models it selects a different (priority) price.
+    static func cursorPricingCandidates(_ model: String) -> [String] {
+        let exact = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var base = exact
+        let modeSuffixes = ["-thinking", "-max", "-minimal", "-low", "-medium", "-high", "-xhigh"]
+        var stripped = true
+        while stripped {
+            stripped = false
+            for suffix in modeSuffixes where base.hasSuffix(suffix) && base.count > suffix.count {
+                base = String(base.dropLast(suffix.count))
+                stripped = true
+            }
+        }
+        return base == exact ? [exact] : [exact, base]
+    }
+
+    /// Cursor writes Claude ids version-first with dots ("claude-4.5-sonnet", "claude-5.5-opus"), while the
+    /// catalogs key on "claude-sonnet-4-5". Name-first dotted ids ("claude-opus-4.8") only swap the dot.
+    static func cursorClaudeCatalogModel(_ model: String) -> String {
+        if let match = model.wholeMatch(of: /^claude-(\d+)\.(\d+)-(sonnet|opus|haiku|fable|mythos)(-.*)?$/) {
+            return "claude-\(match.3)-\(match.1)-\(match.2)\(match.4 ?? "")"
+        }
+        if let match = model.wholeMatch(of: /^claude-(\d+)-(sonnet|opus|haiku|fable|mythos)(-.*)?$/) {
+            return "claude-\(match.2)-\(match.1)\(match.3 ?? "")"
+        }
+        if let match = model.wholeMatch(of: /^claude-(sonnet|opus|haiku|fable|mythos)-(\d+)\.(\d+)(-.*)?$/) {
+            return "claude-\(match.1)-\(match.2)-\(match.3)\(match.4 ?? "")"
+        }
+        return model
     }
 
     private static func makeSummary(from entries: [CostUsageDailyReport.Entry]) -> CostUsageDailyReport.Summary {

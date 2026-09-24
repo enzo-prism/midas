@@ -1,5 +1,14 @@
 # Changelog
 
+## Midas 0.40.0 — September 24, 2026
+
+- Give Cursor three bars in Midas Air, like Claude: **Cursor Models**, **Other Models**, and **Grok Bot weekly**, each with % left and reset time, matching cursor.com's usage dashboard. You no longer have to open Cursor's details to see Grok Bot. Total still drives the menu-bar ring, and it replaces the two pools when Cursor doesn't report them.
+- Read Cursor's current Grok Bot allowance fields: a trial shows as **Grok Bot trial** with its end date instead of a fake weekly reset, and a plan without a Grok Bot allowance no longer shows an empty bar.
+- Keep Cursor's spend estimate visible: Midas shows the last good Cursor estimate right after launch and keeps it, labeled last known, when cursor.com refreshes fail, instead of blanking it. A Cursor usage read that changes mid-page (while you're using Cursor) is retried instead of failing.
+- Price more Cursor events that arrive without a cost, including ids with mode suffixes such as `-thinking` or `-high`, and dotted Claude ids.
+
+Build 113. Claude, Codex, and Meta limits and estimates are unchanged.
+
 ## Midas 0.39.0 — September 24, 2026
 
 - Show Claude's Fable-only weekly limit: when Claude reports a separate weekly limit for a model (today, Fable), Midas Air pins a third Claude bar, **Fable weekly limit**, with % left and reset time next to the 5-hour and weekly limits. It matches the "Fable only" bar in Claude's own Usage screen, and the menu-bar attention marker covers it too.
