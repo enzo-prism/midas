@@ -24,6 +24,12 @@ extension CostUsageScanner {
         var unresolved = false
     }
 
+    private struct ClaudeBillingModifiers {
+        let speed: String?
+        let inferenceGeo: String?
+        let webSearchRequests: Int
+    }
+
     private static func defaultClaudeProjectsRoots(options: Options) -> [URL] {
         if let override = options.claudeProjectsRoots { return override }
 
@@ -157,6 +163,7 @@ extension CostUsageScanner {
                         let cacheRead = max(0, toInt(usage["cache_read_input_tokens"]))
                         let output = max(0, toInt(usage["output_tokens"]))
                         if input == 0, cacheCreate == 0, cacheRead == 0, output == 0 { return }
+                        let modifiers = Self.claudeBillingModifiers(usage: usage)
 
                         let cost = CostUsagePricing.claudeCostUSD(
                             model: model,
@@ -165,6 +172,9 @@ extension CostUsageScanner {
                             cacheCreationInputTokens: cacheCreate,
                             cacheCreationInputTokens1h: cacheCreate1h,
                             outputTokens: output,
+                            speed: modifiers.speed,
+                            inferenceGeo: modifiers.inferenceGeo,
+                            webSearchRequests: modifiers.webSearchRequests,
                             pricingDate: timestamp,
                             modelsDevCatalog: modelsDevCatalog,
                             modelsDevCacheRoot: modelsDevCacheRoot)
@@ -206,7 +216,10 @@ extension CostUsageScanner {
                             cacheCreate1h: tokens.cacheCreate1h,
                             output: tokens.output,
                             costNanos: tokens.costNanos,
-                            costPriced: tokens.costPriced)
+                            costPriced: tokens.costPriced,
+                            speed: modifiers.speed,
+                            inferenceGeo: modifiers.inferenceGeo,
+                            webSearchRequests: modifiers.webSearchRequests > 0 ? modifiers.webSearchRequests : nil)
 
                         // Streaming chunks share message.id + requestId inside a file.
                         // Keep overwriting so the final cumulative chunk wins.
@@ -246,6 +259,18 @@ extension CostUsageScanner {
         guard let cacheCreation = usage["cache_creation"] as? [String: Any] else { return 0 }
         let tokens = (cacheCreation["ephemeral_1h_input_tokens"] as? NSNumber)?.intValue ?? 0
         return min(total, max(0, tokens))
+    }
+
+    /// Keeps only values that change the price, so standard rows stay compact in the cache.
+    private static func claudeBillingModifiers(usage: [String: Any]) -> ClaudeBillingModifiers {
+        let speed = (usage["speed"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let geo = (usage["inference_geo"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let serverTools = usage["server_tool_use"] as? [String: Any]
+        let searches = (serverTools?["web_search_requests"] as? NSNumber)?.intValue ?? 0
+        return ClaudeBillingModifiers(
+            speed: speed == "fast" ? speed : nil,
+            inferenceGeo: geo == "us" ? geo : nil,
+            webSearchRequests: max(0, searches))
     }
 
     private static func claudePathRole(fileURL: URL) -> ClaudePathRole {
@@ -737,6 +762,9 @@ extension CostUsageScanner {
                 cacheCreationInputTokens: row.cacheCreate,
                 cacheCreationInputTokens1h: row.cacheCreate1h ?? 0,
                 outputTokens: row.output,
+                speed: row.speed,
+                inferenceGeo: row.inferenceGeo,
+                webSearchRequests: row.webSearchRequests ?? 0,
                 pricingDate: row.timestampUnixMs.map {
                     Date(timeIntervalSince1970: Double($0) / 1000)
                 },
@@ -775,6 +803,8 @@ extension CostUsageScanner {
             var breakdown: [CostUsageDailyReport.ModelBreakdown] = []
             var dayCost: Double = 0
             var dayCostSeen = false
+            var dayRequests = 0
+            var dayUnpricedRequests = 0
 
             for model in modelNames {
                 let packed = models[model] ?? [0, 0, 0, 0]
@@ -801,6 +831,8 @@ extension CostUsageScanner {
                     nil
                 }
                 let cost = currentPricingCost
+                dayRequests += sampleCount
+                if cost == nil { dayUnpricedRequests += sampleCount }
                 breakdown.append(
                     CostUsageDailyReport.ModelBreakdown(
                         modelName: model,
@@ -823,9 +855,14 @@ extension CostUsageScanner {
                 cacheReadTokens: dayCacheRead,
                 cacheCreationTokens: dayCacheCreate,
                 totalTokens: dayTotal,
+                requestCount: dayRequests > 0 ? dayRequests : nil,
                 costUSD: entryCost,
                 modelsUsed: modelNames,
-                modelBreakdowns: sortedBreakdown))
+                modelBreakdowns: sortedBreakdown,
+                // A model without a price drops out of the day's cost; count it so period totals
+                // disclose partial coverage instead of silently understating the day.
+                unpricedRequestCount: dayUnpricedRequests > 0 ? dayUnpricedRequests : nil,
+                pricedRequestCount: dayRequests > 0 ? dayRequests - dayUnpricedRequests : nil))
 
             totalInput += dayInput
             totalOutput += dayOutput

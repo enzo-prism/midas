@@ -149,6 +149,55 @@ struct MidasSpendPresentationTests {
         #expect(cached?.last30DaysTokens == 42)
     }
 
+    @Test func claudeLocalScannerEstablishesEstimateProvenance() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 9, day: 23)
+        // A fresh isolated catalog prevents network pricing refresh; built-in rates price the row.
+        ModelsDevCache.save(
+            catalog: ModelsDevCatalog(providers: [:]),
+            fetchedAt: day,
+            cacheRoot: env.cacheRoot)
+        _ = try env.writeClaudeProjectFile(
+            relativePath: "project-a/spend-fixture.jsonl",
+            contents: env.jsonl([
+                [
+                    "type": "assistant",
+                    "timestamp": env.isoString(for: day),
+                    "requestId": "req_claude_spend",
+                    "sessionId": "session_claude_spend",
+                    "message": [
+                        "id": "msg_claude_spend",
+                        "model": "claude-opus-5-5",
+                        "role": "assistant",
+                        "usage": [
+                            "input_tokens": 1_000_000,
+                            "cache_creation_input_tokens": 0,
+                            "cache_read_input_tokens": 0,
+                            "output_tokens": 100_000,
+                        ],
+                    ],
+                ],
+            ]))
+        let fresh = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .claude,
+            now: day,
+            historyDays: 1,
+            scannerOptions: CostUsageScanner.Options(
+                claudeProjectsRoots: [env.claudeProjectsRoot],
+                cacheRoot: env.cacheRoot),
+            piScannerOptions: PiSessionCostScanner.Options(
+                piSessionsRoot: env.piSessionsRoot,
+                cacheRoot: env.cacheRoot))
+        #expect(fresh.costProvenance == .listPriceEstimate)
+        let spend = try #require(MidasSpendPresentation.make(provider: .claude, snapshot: fresh))
+        #expect(spend.isEstimate)
+        #expect(spend.isDisplayable)
+        #expect(abs(spend.amount - 6.0) < 0.000001)
+        #expect(spend.detail.contains("Claude Code"))
+        #expect(spend.detail.contains("not a bill"))
+    }
+
     private func snapshot(
         amount: Double?,
         provenance: CostProvenance,

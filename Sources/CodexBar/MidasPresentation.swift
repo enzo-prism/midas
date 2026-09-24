@@ -95,9 +95,15 @@ struct MidasSpendPresentation {
         switch provenance {
         case .listPriceEstimate:
             title = "Token spend (API rates)"
-            detail = provider == .meta
-                ? "Model-tier price estimate from local Muse activity; not a bill."
-                : "API-rate value of recorded usage; an estimate, not a bill."
+            detail = switch provider {
+            case .meta:
+                "Model-tier price estimate from local Muse activity; not a bill."
+            case .claude:
+                "Claude Code activity on this Mac at Anthropic API rates, including cache writes and reads, "
+                    + "fast mode, US-only inference, and web searches; an estimate, not a bill."
+            default:
+                "API-rate value of recorded usage; an estimate, not a bill."
+            }
         case .vendorMetered:
             title = "Provider-metered usage"
             detail = "Consumption reported by the provider; plan deductions are not necessarily cash charges."

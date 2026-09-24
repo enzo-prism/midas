@@ -32,6 +32,14 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.38.0
+
+Claude now has dollars. Claude Code activity on this Mac shows as **Estimated inference spend** at
+Anthropic API rates and counts toward the total. The estimate covers the Claude 5 family (built in, so no
+network catalog is needed), 1-hour and 5-minute cache writes, discounted cache reads, fast mode,
+US-only inference, and web searches. Days with a model Midas cannot price show as partial. See
+[Claude cost usage](docs/claude.md#cost-usage-local-log-scan).
+
 ## Midas 0.37.0
 
 Midas now ships under its own bundle identifier, app name, storage, Keychain services, and Sparkle

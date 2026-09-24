@@ -21,7 +21,10 @@ Planned local source mapping:
 - Claude logs: models.dev provider id `anthropic`
 - Vertex AI Claude logs: models.dev provider id `google-vertex-anthropic`
 
-The first integration PR only adds the parser, client, cache, provider-scoped lookup, and tests. It does not route live cost calculations through models.dev yet.
+Codex, Claude, and z.ai cost scans now look up models.dev first and fall back to the built-in tables.
+models.dev publishes only one cache-write rate (5-minute), so Claude one-hour writes are always derived as 2x input.
+Anthropic-specific modifiers (fast mode, US-only inference, web search) come from the built-in rules in
+`CostUsagePricing+Claude.swift`; see [Claude](claude.md#cost-usage-local-log-scan).
 
 ## Units
 
