@@ -351,14 +351,32 @@ struct MidasAccountPresentation: Identifiable {
     var displayName: String?
 }
 
-/// Claude always surfaces its two subscription limits — the 5-hour session and the weekly window —
-/// labeled by window length, because the primary slot falls back to a weekly window when Claude
-/// reports no 5-hour window.
+/// Claude always surfaces its subscription limits — the 5-hour session, the weekly window, and any
+/// model-only weekly limit Claude reports (for example Fable) — labeled by window length, because the
+/// primary slot falls back to a weekly window when Claude reports no 5-hour window.
 enum MidasClaudeLimits {
     static let fiveHourTitle = "5-hour limit"
     static let weeklyTitle = "Weekly limit"
     static let limitIDs: Set<String> = ["primary", "secondary"]
+    /// Server `limits[]` rows of kind `weekly_scoped`, from the OAuth, web, and CLI sources.
+    static let modelWeeklyIDPrefix = "claude-weekly-scoped-"
     private static let weekMinutes = 7 * 24 * 60
+
+    static func isPinned(_ id: String) -> Bool {
+        self.limitIDs.contains(id) || self.isModelWeekly(id)
+    }
+
+    static func isModelWeekly(_ id: String) -> Bool {
+        id.hasPrefix(self.modelWeeklyIDPrefix)
+    }
+
+    /// "Fable only" (Claude's own label) becomes "Fable weekly limit".
+    static func modelWeeklyTitle(_ sourceTitle: String) -> String {
+        var model = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if model.lowercased().hasSuffix(" only") { model = String(model.dropLast(" only".count)) }
+        model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return model.isEmpty ? self.weeklyTitle : "\(model) weekly limit"
+    }
 
     static func arrange(_ metrics: [MidasQuotaMetric], snapshot: UsageSnapshot?) -> [MidasQuotaMetric] {
         var session = metrics.first { $0.id == "primary" }
@@ -369,8 +387,29 @@ enum MidasClaudeLimits {
             session = nil
         }
         let limits = [session?.retitled(self.fiveHourTitle), weekly?.retitled(self.weeklyTitle)].compactMap(\.self)
-        let limitIDs = Set(limits.map(\.id))
+        let modelLimits = metrics.filter { self.isModelWeekly($0.id) }.map { metric in
+            self.modelWeekly(metric, window: snapshot?.extraRateWindows?.first { $0.id == metric.id }?.window)
+        }
+        let limitIDs = Set((limits + modelLimits).map(\.id))
         let extras = metrics.filter { !self.limitIDs.contains($0.id) && !limitIDs.contains($0.id) }
-        return limits + extras
+        return limits + modelLimits + extras
+    }
+
+    private static func modelWeekly(_ metric: MidasQuotaMetric, window: RateWindow?) -> MidasQuotaMetric {
+        let title = self.modelWeeklyTitle(metric.title)
+        let model = String(title.dropLast(" weekly limit".count))
+        var explanation = "Claude's separate weekly limit for \(model) only. "
+            + "The all-models weekly limit still applies."
+        if let resetsAt = window?.resetsAt {
+            explanation += " Resets \(resetsAt.formatted(date: .complete, time: .shortened))."
+        }
+        var result = MidasQuotaMetric(
+            id: metric.id,
+            title: title,
+            remainingPercent: metric.remainingPercent,
+            resetText: metric.resetText,
+            helpText: explanation)
+        result.resetsAt = window?.resetsAt ?? metric.resetsAt
+        return result
     }
 }

@@ -1061,7 +1061,7 @@ extension ClaudeUsageFetcher {
         if let routinesKey = usage.sevenDayRoutinesSourceKey {
             Self.log.debug("Claude OAuth extra usage key matched: routines=\(routinesKey)")
         }
-        return definitions.compactMap { definition in
+        let routineWindows: [NamedRateWindow] = definitions.compactMap { definition in
             let utilization: Double
             let resetDate: Date?
             if let window = definition.window, let parsedUtilization = window.utilization {
@@ -1084,6 +1084,23 @@ extension ClaudeUsageFetcher {
                     resetsAt: resetDate,
                     resetDescription: resetDescription))
         }
+        return routineWindows + Self.oauthScopedWeeklyLimitWindows(from: usage)
+    }
+
+    private static func oauthScopedWeeklyLimitWindows(from usage: OAuthUsageResponse) -> [NamedRateWindow] {
+        let limits = usage.limits?.map { entry in
+            ClaudeScopedWeeklyLimitMapper.Limit(
+                kind: entry.kind,
+                group: entry.group,
+                percent: entry.percent,
+                resetsAt: ClaudeOAuthUsageFetcher.parseISO8601Date(entry.resetsAt),
+                modelID: entry.scope?.model?.id,
+                modelName: entry.scope?.model?.displayName)
+        }
+        // `is_active` is intentionally not a filter: observed enforceable scoped limits report false.
+        return ClaudeScopedWeeklyLimitMapper.extraRateWindows(
+            from: limits,
+            resetDescription: Self.formatResetDate)
     }
 
     // MARK: - Web API path (uses browser cookies)
@@ -1222,7 +1239,7 @@ extension ClaudeUsageFetcher {
             primary: primary,
             secondary: weekly,
             opus: opus,
-            extraRateWindows: [],
+            extraRateWindows: snap.extraRateWindows,
             providerCost: nil,
             updatedAt: Date(),
             accountEmail: snap.accountEmail,
@@ -1251,8 +1268,9 @@ extension ClaudeUsageFetcher {
                     }
                 }
             // Only merge usage/cost extras; keep identity fields from the primary data source.
-            let mergedExtraRateWindows = snapshot.extraRateWindows.isEmpty ? webData.extraRateWindows : snapshot
-                .extraRateWindows
+            let mergedExtraRateWindows = Self.mergeExtraRateWindows(
+                primary: snapshot.extraRateWindows,
+                web: webData.extraRateWindows)
             let mergedProviderCost = snapshot.providerCost ?? webData.extraUsageCost
             if mergedProviderCost != snapshot.providerCost || mergedExtraRateWindows != snapshot.extraRateWindows {
                 return ClaudeUsageSnapshot(
@@ -1272,6 +1290,21 @@ extension ClaudeUsageFetcher {
             Self.log.debug("Claude web extras fetch failed: \(error.localizedDescription)")
         }
         return snapshot
+    }
+
+    private static func mergeExtraRateWindows(
+        primary: [NamedRateWindow],
+        web: [NamedRateWindow]) -> [NamedRateWindow]
+    {
+        guard !primary.isEmpty else { return web }
+        guard !web.isEmpty else { return primary }
+
+        var seenIDs = Set(primary.map(\.id))
+        var merged = primary
+        for window in web where seenIDs.insert(window.id).inserted {
+            merged.append(window)
+        }
+        return merged
     }
 
     // MARK: - Process helpers
@@ -1337,6 +1370,13 @@ extension ClaudeUsageFetcher {
 
 #if DEBUG
 extension ClaudeUsageFetcher {
+    public static func _mergeExtraRateWindowsForTesting(
+        primary: [NamedRateWindow],
+        web: [NamedRateWindow]) -> [NamedRateWindow]
+    {
+        self.mergeExtraRateWindows(primary: primary, web: web)
+    }
+
     public static func _mapOAuthUsageForTesting(
         _ data: Data,
         rateLimitTier: String? = nil,

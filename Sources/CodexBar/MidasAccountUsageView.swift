@@ -82,9 +82,10 @@ enum MidasAccountQuotaLayout {
     static func overviewMetrics(_ presentation: MidasProviderPresentation) -> [MidasQuotaMetric] {
         let metrics = self.allMetrics(presentation)
         guard let first = metrics.first else { return [] }
-        // Claude always pins both subscription limits (5-hour + weekly); other providers lead with one.
+        // Claude pins its subscription limits (5-hour, weekly, and any model-only weekly limit such as
+        // Fable); other providers lead with one.
         let pinned = presentation.provider == .claude
-            ? metrics.filter { MidasClaudeLimits.limitIDs.contains($0.id) }
+            ? metrics.filter { MidasClaudeLimits.isPinned($0.id) }
             : [first]
         let head = pinned.isEmpty ? [first] : pinned
         let headIDs = Set(head.map(\.id))
