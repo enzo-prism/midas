@@ -669,6 +669,8 @@ struct CostUsageFetcherTests {
             cacheCreationInputTokens: 6,
             outputTokens: 10) ?? 0
 
+        // Claude Code and Pi logs are both valued at Anthropic API list rates.
+        #expect(snapshot.costProvenance == .listPriceEstimate)
         #expect(snapshot.daily.count == 1)
         #expect(snapshot.daily.first?.date == "2026-04-09")
         #expect(snapshot.daily.first?.totalTokens == 205)

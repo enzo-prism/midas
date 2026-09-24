@@ -48,6 +48,13 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
 - **Claude:** the overview always shows two subscription limits: the **5-hour limit** and the
   **Weekly limit**, each with % left and its reset time. If Claude reports no 5-hour window,
   only the weekly limit is shown, labeled as weekly.
+  **Claude dollars** value Claude Code activity on this Mac at Anthropic API rates and count
+  toward the estimated total: per-model input, output, 5-minute and 1-hour cache writes, and
+  cache reads, plus fast mode, US-only inference (`inference_geo: "us"`, 1.1x), and web
+  searches ($10 per 1,000). Claude Code on a subscription is not billed per token, so this is
+  the API-equivalent value of your usage, not a charge. Days with a model Midas cannot price
+  are shown as a partial total. Only local transcripts count; Claude Code prunes old
+  transcripts (its `cleanupPeriodDays` setting), so older periods can be empty.
 - **Anthropic API:** add an organization Admin API key (`sk-ant-admin…`) under
   **Settings → Providers → Anthropic** to see billed API spend and token usage. Billed spend is
   labeled **Billed API spend** and is not added to the estimated total. See [Anthropic](anthropic.md).

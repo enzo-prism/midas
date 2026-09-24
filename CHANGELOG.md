@@ -1,5 +1,14 @@
 # Changelog
 
+## Midas 0.38.0 — September 24, 2026
+
+- Show Claude dollars: Claude Code activity on this Mac now appears as **Estimated inference spend** and counts toward the total, at Anthropic API rates. Before this release Midas computed the value but labeled its source unknown, so the Claude row read *Estimate unavailable* and the total left Claude out.
+- Price the Claude 5 family without a network catalog: Fable 5.1 and Mythos 5.1 (cache reads $0.25/MTok), Opus 5.5 ($4/$20, cache reads $0.20), Opus 5, Sonnet 5 ($2/$10), Fable 5, and Mythos 5 are built in. models.dev still wins when it lists a model.
+- Price what Claude Code records beyond tokens: fast mode (2x on Opus 5.5, Opus 5, and Opus 4.8), US-only inference (1.1x), and web searches ($10 per 1,000). The Claude cost cache moves to `claude-v5.json` and rescans local transcripts once.
+- Disclose unpriced Claude usage: a day that mixes priced and unknown models is now marked partial instead of silently dropping the unknown rows from the total.
+
+Build 111. Codex, Cursor, and Meta estimates and all quota and reset logic are unchanged.
+
 ## Midas 0.37.1 — September 23, 2026
 
 - Fix Cursor (and other cookie-based providers) showing Needs attention after updating to 0.37.0: cached browser sessions stored under the CodexBar-era Keychain cache service (`com.steipete.codexbar.cache`) are now adopted into Midas's cache the first time each is needed. macOS may ask once per item; a declined prompt is not repeated.

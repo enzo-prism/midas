@@ -63,6 +63,8 @@ runs preserve the original routing. Do not edit a signed app's plist to switch i
 
 ## Spend and provider semantics
 
+Claude contributes its local Claude Code transcript value at Anthropic API rates (`CostProvenance.listPriceEstimate`,
+see [Claude](claude.md#cost-usage-local-log-scan)); days with unpriced models mark the Claude row partial.
 `MidasTotalSpend` sums primary, finite, nonnegative estimates from all enabled providers, before
 Favorites filtering. It deduplicates providers, keeps currencies separate without conversion, and
 reports coverage and reporting periods. A missing estimate is excluded rather than converted to

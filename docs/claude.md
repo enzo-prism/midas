@@ -151,9 +151,26 @@ Admin API key setup:
   - Deduplicates streaming chunks by `message.id + requestId` (usage is cumulative per chunk).
   - pi sessions attribute `anthropic` assistant usage to Claude and bucket it by assistant-turn timestamp, so a single pi
     session can contribute to multiple models/days.
+- Pricing (`CostUsagePricing+Claude.swift`), valued at Anthropic API list rates:
+  - models.dev (`anthropic` provider) is used when its cache lists the model. The built-in table covers the
+    Claude 5 family (Fable 5.1, Fable 5, Mythos 5.1, Mythos 5, Opus 5.5, Opus 5, Sonnet 5) plus Opus/Sonnet 4.x and
+    Haiku 4.5, so estimates work offline and on first launch. Prices were checked against
+    https://platform.claude.com/docs/en/about-claude/pricing on 2026-09-24.
+  - Token classes: input, output, cache reads, 5-minute cache writes (1.25x input), and 1-hour cache writes
+    (`cache_creation.ephemeral_1h_input_tokens`, 2x input). Cache reads are 0.1x input, except Fable 5.1 / Mythos 5.1
+    (0.025x) and Opus 5.5 (0.05x).
+  - Modifiers recorded per row: `usage.speed == "fast"` (2x on Opus 5.5, Opus 5, and Opus 4.8; standard elsewhere),
+    `usage.inference_geo == "us"` (1.1x on every token class), and `usage.server_tool_use.web_search_requests`
+    ($0.01 each).
+  - Historical long-context premiums: Sonnet 4 / 4.5 above 200K input tokens; Opus/Sonnet 4.6 before 2026-03-13.
+  - Rows whose model has no price stay unpriced. The day's `unpricedRequestCount` lets period totals show as partial
+    instead of silently leaving those rows out.
+  - The token snapshot is tagged `CostProvenance.listPriceEstimate`, so Midas shows it as estimated inference spend and
+    includes it in the total. Before 0.38.0 it was `.unknown`, and Midas showed "Estimate unavailable" for Claude.
 - Cache:
-  - Native + merged provider cache: `~/Library/Caches/CodexBar/cost-usage/claude-v2.json`
-  - pi session cache: `~/Library/Caches/CodexBar/cost-usage/pi-sessions-v1.json`
+  - Native + merged provider cache: `~/Library/Caches/Midas/cost-usage/claude-v5.json` (v5 adds the billing
+    modifiers; older versions are pruned and rescanned once).
+  - pi session cache: `~/Library/Caches/Midas/cost-usage/pi-sessions-v3.json`
 
 ## Key files
 - OAuth: `Sources/CodexBarCore/Providers/Claude/ClaudeOAuth/*`

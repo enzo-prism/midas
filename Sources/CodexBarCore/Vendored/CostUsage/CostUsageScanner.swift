@@ -392,6 +392,11 @@ enum CostUsageScanner {
         let output: Int
         let costNanos: Int
         let costPriced: Bool?
+        /// Non-standard billing modifiers only; absent means standard speed, no US-only premium,
+        /// and no web searches.
+        var speed: String?
+        var inferenceGeo: String?
+        var webSearchRequests: Int?
     }
 
     static func loadDailyReport(

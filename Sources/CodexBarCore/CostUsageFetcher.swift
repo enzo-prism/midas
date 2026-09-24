@@ -278,12 +278,12 @@ public struct CostUsageFetcher: Sendable {
             return daily
         }
 
-        // Native Codex and merged Pi token logs are valued at API list rates, not billing receipts.
+        // Native Codex/Claude and merged Pi token logs are valued at API list rates, not billing receipts.
         return Self.tokenSnapshot(
             from: daily,
             now: now,
             historyDays: clampedHistoryDays,
-            costProvenance: provider == .codex ? .listPriceEstimate : .unknown)
+            costProvenance: provider == .codex || provider == .claude ? .listPriceEstimate : .unknown)
     }
 
     static func loadCachedCodexTokenSnapshot(

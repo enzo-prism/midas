@@ -12,8 +12,8 @@ struct CostUsageCacheTests {
         let vertexURL = CostUsageCacheIO.cacheFileURL(provider: .vertexai, cacheRoot: root)
 
         #expect(codexURL.lastPathComponent == "codex-v8.json")
-        #expect(claudeURL.lastPathComponent == "claude-v4.json")
-        #expect(vertexURL.lastPathComponent == "vertexai-v4.json")
+        #expect(claudeURL.lastPathComponent == "claude-v5.json")
+        #expect(vertexURL.lastPathComponent == "vertexai-v5.json")
     }
 
     @Test
@@ -98,6 +98,22 @@ struct CostUsageCacheTests {
 
         #expect(loaded.lastScanUnixMs == 123)
         #expect(loaded.days["2026-05-18"]?["gpt-5.5"] == [1, 2, 3])
+    }
+
+    @Test
+    func `codex cache from before claude estimate changes stays readable`() throws {
+        let root = try self.makeTemporaryCacheRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var cache = CostUsageCache()
+        cache.lastScanUnixMs = 456
+        CostUsageCacheIO.save(
+            provider: .codex,
+            cache: cache,
+            cacheRoot: root,
+            producerKey: "codex:cu:p6356b05b7bbb01b2")
+
+        #expect(CostUsageCacheIO.load(provider: .codex, cacheRoot: root).lastScanUnixMs == 456)
     }
 
     @Test

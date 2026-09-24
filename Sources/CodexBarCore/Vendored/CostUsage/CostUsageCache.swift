@@ -1,8 +1,11 @@
 import Foundation
 
 enum CostUsageCacheIO {
+    /// Earlier parser hashes whose Codex rows are still valid. Claude-only edits to shared
+    /// cost-usage files move the hash without changing Codex parsing or pricing.
     private static let compatibleCodexProducerKeys: Set<String> = [
         "codex:cu:p3c27f997569eb3c5",
+        "codex:cu:p6356b05b7bbb01b2",
     ]
 
     private static func artifactVersion(for provider: UsageProvider) -> Int {
@@ -10,7 +13,7 @@ enum CostUsageCacheIO {
         case .codex:
             8
         case .claude, .vertexai:
-            4
+            5
         default:
             1
         }
