@@ -81,7 +81,12 @@ Admin API key setup:
   - `five_hour` → session window.
   - `seven_day` → weekly window; also becomes the primary fallback when `five_hour` is absent or has no utilization.
   - `seven_day_sonnet` / `seven_day_opus` → model-specific weekly window.
-  - `limits[].weekly_scoped` → model-specific weekly windows; generic `All models` scopes stay in the main weekly row.
+  - `limits[]` rows with `kind: "weekly_scoped"` and `scope.model.display_name` → model-only weekly windows
+    (`claude-weekly-scoped-<model>`, titled "Fable only" etc.). Classification uses `kind`, never the label;
+    `is_active` only marks Claude's headline row, so it is not a filter. Surface-scoped rows
+    (`scope.surface`) and generic `All models` scopes stay out; the latter stay in the main weekly row.
+    The web API (`claude.ai/api/organizations/{org}/usage`) returns the same `limits[]` shape.
+  - Midas Air pins model-only weekly windows beside the 5-hour and weekly bars as "<Model> weekly limit".
   - `seven_day_routines` / `seven_day_cowork` → Daily Routines extra window.
   - Claude Design/Omelette keys are ignored because Claude Design shares the main Claude usage limit.
   - `extra_usage` → Extra usage cost (monthly spend/limit).
@@ -132,6 +137,10 @@ Admin API key setup:
   4) Optionally send `/status` to extract identity fields.
 - Parsing (`ClaudeStatusProbe`):
   - Strips ANSI, locates "Current session" + "Current week" headers.
+  - Any other "Current week (<Model>)" block (e.g. "Current week (Fable)") becomes a model-only weekly window
+    with the same `claude-weekly-scoped-<model>` id as the API paths. A garbled redraw of
+    "Current week (all models)" (edit distance ≤ 2) is ignored instead of becoming a bogus extra bar.
+  - "Reset" and "Resets" both mark reset text, including compact captures such as `ResetsFeb12…`.
   - Extracts percent left/used and reset text near those headers.
   - Parses `Account:` and `Org:` lines when present.
   - Surfaces CLI errors (e.g. token expired) directly.

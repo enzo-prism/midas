@@ -47,7 +47,10 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   guarantee an API-equivalent dollar estimate.
 - **Claude:** the overview always shows two subscription limits: the **5-hour limit** and the
   **Weekly limit**, each with % left and its reset time. If Claude reports no 5-hour window,
-  only the weekly limit is shown, labeled as weekly.
+  only the weekly limit is shown, labeled as weekly. When Claude reports a separate weekly limit for
+  one model, such as Fable, the overview adds a third bar, **Fable weekly limit**, with its own
+  % left and reset time. It matches the "Fable only" bar in Claude's Usage screen. The all-models
+  weekly limit still applies to Fable usage.
   **Claude dollars** value Claude Code activity on this Mac at Anthropic API rates and count
   toward the estimated total: per-model input, output, 5-minute and 1-hour cache writes, and
   cache reads, plus fast mode, US-only inference (`inference_geo: "us"`, 1.1x), and web

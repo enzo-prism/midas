@@ -159,7 +159,7 @@ public struct ClaudeStatusProbe: Sendable {
 
     // MARK: - Parsing helpers
 
-    private struct LabelSearchContext {
+    struct LabelSearchContext {
         let lines: [String]
         let normalizedLines: [String]
         let normalizedData: Data
@@ -366,97 +366,7 @@ public struct ClaudeStatusProbe: Sendable {
         return nil
     }
 
-    private struct ScopedWeeklyUsage {
-        let modelName: String
-        let percentLeft: Int
-        let resetDescription: String?
-    }
-
-    private static func extractScopedWeeklyUsages(context: LabelSearchContext) -> [ScopedWeeklyUsage] {
-        guard let regex = try? NSRegularExpression(
-            pattern: #"current\s+week\s*\(([^)]+)\)"#,
-            options: [.caseInsensitive])
-        else { return [] }
-
-        var seenModels: Set<String> = []
-        var usages: [ScopedWeeklyUsage] = []
-        for (index, line) in context.lines.enumerated() {
-            let range = NSRange(line.startIndex..<line.endIndex, in: line)
-            guard let match = regex.firstMatch(in: line, options: [], range: range),
-                  match.numberOfRanges >= 2,
-                  let modelRange = Range(match.range(at: 1), in: line)
-            else { continue }
-
-            let modelName = String(line[modelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedModel = self.normalizedForLabelSearch(modelName)
-            guard normalizedModel != "allmodels", !normalizedModel.isEmpty else { continue }
-            guard seenModels.insert(normalizedModel).inserted else { continue }
-
-            let window = context.lines.dropFirst(index).prefix(14)
-            var percentLeft: Int?
-            var resetDescription: String?
-            for candidate in window {
-                let normalized = self.normalizedForLabelSearch(candidate)
-                if normalized.hasPrefix("currentweek"), !normalized.contains(normalizedModel) { break }
-                if percentLeft == nil {
-                    percentLeft = self.percentFromLine(candidate)
-                }
-                if resetDescription == nil {
-                    resetDescription = self.resetFromLine(candidate)
-                }
-            }
-            guard let percentLeft else { continue }
-            usages.append(ScopedWeeklyUsage(
-                modelName: modelName,
-                percentLeft: percentLeft,
-                resetDescription: resetDescription))
-        }
-        return usages
-    }
-
-    private static func extraRateWindows(
-        fromScopedWeeklyUsages usages: [ScopedWeeklyUsage],
-        fallbackResetDescription: String?) -> [NamedRateWindow]
-    {
-        usages.compactMap { usage in
-            let normalizedModel = self.normalizedForLabelSearch(usage.modelName)
-            guard normalizedModel != "opus",
-                  normalizedModel != "sonnet",
-                  normalizedModel != "sonnetonly"
-            else { return nil }
-
-            let usedPercent = max(0, min(100, 100 - Double(usage.percentLeft)))
-            let modelTitle = normalizedModel.hasSuffix("only")
-                ? usage.modelName
-                : "\(usage.modelName) only"
-            let resetDescription = usage.resetDescription ?? fallbackResetDescription
-            return NamedRateWindow(
-                id: "claude-weekly-scoped-\(self.slug(usage.modelName))",
-                title: modelTitle,
-                window: RateWindow(
-                    usedPercent: usedPercent,
-                    windowMinutes: 7 * 24 * 60,
-                    resetsAt: self.parseResetDate(from: resetDescription),
-                    resetDescription: resetDescription))
-        }
-    }
-
-    private static func slug(_ value: String) -> String {
-        var result = ""
-        var lastWasDash = false
-        for scalar in value.lowercased().unicodeScalars {
-            if CharacterSet.alphanumerics.contains(scalar) {
-                result.unicodeScalars.append(scalar)
-                lastWasDash = false
-            } else if !lastWasDash {
-                result.append("-")
-                lastWasDash = true
-            }
-        }
-        return result.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-    }
-
-    private static func percentFromLine(_ line: String, assumeRemainingWhenUnclear: Bool = false) -> Int? {
+    static func percentFromLine(_ line: String, assumeRemainingWhenUnclear: Bool = false) -> Int? {
         if self.isLikelyStatusContextLine(line) { return nil }
 
         // Allow optional Unicode whitespace before % to handle CLI formatting changes.
@@ -677,20 +587,24 @@ public struct ClaudeStatusProbe: Sendable {
         return nil
     }
 
-    private static func resetFromLine(_ line: String) -> String? {
-        guard let range = line.range(of: #"(?i)\bresets?\b"#, options: .regularExpression) else { return nil }
+    private static let resetWordPattern = #"\b[Rr][Ee][Ss][Ee][Tt][Ss]?(?![a-z])"#
+
+    static func resetFromLine(_ line: String) -> String? {
+        // "Reset"/"Resets", also when compact TUI captures glue the date on ("ResetsFeb12…"),
+        // but not "resetting".
+        guard let range = line.range(of: resetWordPattern, options: .regularExpression) else { return nil }
         let raw = String(line[range.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         return self.cleanResetLine(raw)
     }
 
-    private static func normalizedForLabelSearch(_ text: String) -> String {
+    static func normalizedForLabelSearch(_ text: String) -> String {
         String(text.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains))
     }
 
     /// Capture all "Reset"/"Resets" strings to surface in the menu.
     private static func allResets(_ text: String) -> [String] {
-        let pat = #"\bResets?\b[^\r\n]*"#
-        guard let regex = try? NSRegularExpression(pattern: pat, options: [.caseInsensitive]) else { return [] }
+        let pat = Self.resetWordPattern + #"[^\r\n]*"#
+        guard let regex = try? NSRegularExpression(pattern: pat) else { return [] }
         let nsrange = NSRange(text.startIndex..<text.endIndex, in: text)
         var results: [String] = []
         regex.enumerateMatches(in: text, options: [], range: nsrange) { match, _, _ in

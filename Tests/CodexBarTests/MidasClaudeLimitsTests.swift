@@ -17,12 +17,14 @@ struct MidasClaudeLimitsTests {
     private func presentation(
         primary: RateWindow?,
         secondary: RateWindow?,
-        tertiary: RateWindow? = nil) throws -> MidasProviderPresentation
+        tertiary: RateWindow? = nil,
+        extraRateWindows: [NamedRateWindow]? = nil) throws -> MidasProviderPresentation
     {
         let snapshot = UsageSnapshot(
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
+            extraRateWindows: extraRateWindows,
             updatedAt: Self.now,
             identity: ProviderIdentitySnapshot(
                 providerID: .claude,
@@ -133,6 +135,72 @@ struct MidasClaudeLimitsTests {
             secondary: self.window(10, minutes: 10080, resetIn: 86400),
             tertiary: self.window(100, minutes: 10080, resetIn: 86400))
         #expect(MidasAccountQuotaLayout.overviewMetrics(exhausted).map(\.id) == ["primary", "secondary", "tertiary"])
+    }
+
+    @Test
+    func `fable only weekly limit is always pinned beside the five hour and weekly limits`() throws {
+        let fable = NamedRateWindow(
+            id: "claude-weekly-scoped-fable",
+            title: "Fable only",
+            window: self.window(5, minutes: 10080, resetIn: 86400))
+        let presentation = try self.presentation(
+            primary: self.window(20, minutes: 300, resetIn: 3600),
+            secondary: self.window(10, minutes: 10080, resetIn: 86400),
+            extraRateWindows: [fable])
+
+        let overview = MidasAccountQuotaLayout.overviewMetrics(presentation)
+
+        #expect(overview.map(\.id) == ["primary", "secondary", "claude-weekly-scoped-fable"])
+        #expect(overview.map(\.title) == [
+            MidasClaudeLimits.fiveHourTitle,
+            MidasClaudeLimits.weeklyTitle,
+            "Fable weekly limit",
+        ])
+        #expect(overview[2].valueText == "95% left")
+        #expect(overview[2].resetsAt == Self.now.addingTimeInterval(86400))
+        #expect(overview[2].resetText?.isEmpty == false)
+        #expect(overview[2].helpText?.contains("Fable only") == true)
+        #expect(overview[2].helpText?.contains("all-models weekly limit still applies") == true)
+        #expect(presentation.hero?.title == MidasClaudeLimits.fiveHourTitle)
+    }
+
+    @Test
+    func `exhausted fable limit reads as exhausted while other limits have room`() throws {
+        let presentation = try self.presentation(
+            primary: self.window(20, minutes: 300, resetIn: 3600),
+            secondary: self.window(30, minutes: 10080, resetIn: 86400),
+            extraRateWindows: [NamedRateWindow(
+                id: "claude-weekly-scoped-fable",
+                title: "Fable only",
+                window: self.window(100, minutes: 10080, resetIn: 86400))])
+
+        let fable = try #require(MidasAccountQuotaLayout.overviewMetrics(presentation).last)
+
+        #expect(fable.title == "Fable weekly limit")
+        #expect(fable.isExhausted)
+        #expect(fable.valueText == "0% left")
+    }
+
+    @Test
+    func `unknown fable usage is not drawn as a bar`() throws {
+        let presentation = try self.presentation(
+            primary: self.window(20, minutes: 300, resetIn: 3600),
+            secondary: self.window(10, minutes: 10080, resetIn: 86400),
+            extraRateWindows: [NamedRateWindow(
+                id: "claude-weekly-scoped-fable",
+                title: "Fable only",
+                window: self.window(0, minutes: 10080, resetIn: 86400),
+                usageKnown: false)])
+
+        #expect(MidasAccountQuotaLayout.overviewMetrics(presentation).map(\.id) == ["primary", "secondary"])
+    }
+
+    @Test
+    func `model weekly titles follow the model claude names`() {
+        #expect(MidasClaudeLimits.modelWeeklyTitle("Fable only") == "Fable weekly limit")
+        #expect(MidasClaudeLimits.modelWeeklyTitle("Opus 5 only") == "Opus 5 weekly limit")
+        #expect(MidasClaudeLimits.modelWeeklyTitle("Sonnet") == "Sonnet weekly limit")
+        #expect(MidasClaudeLimits.modelWeeklyTitle("  ") == MidasClaudeLimits.weeklyTitle)
     }
 
     @Test

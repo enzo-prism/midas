@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.39.0 — September 24, 2026
+
+- Show Claude's Fable-only weekly limit: when Claude reports a separate weekly limit for a model (today, Fable), Midas Air pins a third Claude bar, **Fable weekly limit**, with % left and reset time next to the 5-hour and weekly limits. It matches the "Fable only" bar in Claude's own Usage screen, and the menu-bar attention marker covers it too.
+- Read model-only weekly limits from every Claude source: the OAuth and web usage APIs (`limits[]` rows of kind `weekly_scoped`) and the Claude Code `/usage` screen ("Current week (Fable)"). Surface-scoped and generic all-models rows are ignored, and so is a garbled all-models line from a half-drawn CLI capture.
+- Parse "Reset"/"Resets" reset text from the Claude CLI more reliably, including compact captures.
+
+Build 112. Spend estimates and the 5-hour and weekly limits are unchanged.
+
 ## Midas 0.38.0 — September 24, 2026
 
 - Show Claude dollars: Claude Code activity on this Mac now appears as **Estimated inference spend** and counts toward the total, at Anthropic API rates. Before this release Midas computed the value but labeled its source unknown, so the Claude row read *Estimate unavailable* and the total left Claude out.

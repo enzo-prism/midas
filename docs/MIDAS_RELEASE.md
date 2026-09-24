@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-Source on `main` is version **0.38.0**, build **111**. 0.37.0 (build 109) was the first build with
+Source on `main` is version **0.39.0**, build **112**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -30,6 +30,14 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.39.0 changes
+
+Version 0.39.0, build 112, surfaces Claude's model-only weekly limits (today, Fable). It ports upstream
+CodexBar #1851 and its all-models follow-up (`limits[]` `weekly_scoped` rows from the OAuth and web APIs,
+`ClaudeScopedWeeklyLimitMapper`) and upstream's CLI "Current week (<Model>)" parsing, with a tolerant
+all-models filter. `MidasClaudeLimits` pins `claude-weekly-scoped-*` bars as "<Model> weekly limit". The
+CLI reset matcher accepts "Reset"/"Resets" without breaking compact captures.
 
 ## 0.38.0 changes
 

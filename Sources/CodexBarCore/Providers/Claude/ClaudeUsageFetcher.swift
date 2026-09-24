@@ -1374,7 +1374,7 @@ extension ClaudeUsageFetcher {
         primary: [NamedRateWindow],
         web: [NamedRateWindow]) -> [NamedRateWindow]
     {
-        Self.mergeExtraRateWindows(primary: primary, web: web)
+        self.mergeExtraRateWindows(primary: primary, web: web)
     }
 
     public static func _mapOAuthUsageForTesting(

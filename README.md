@@ -32,6 +32,12 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.39.0
+
+Claude's Fable-only weekly limit gets its own bar. When Claude reports a separate weekly limit for a
+model, the overview shows it as **Fable weekly limit** beside the 5-hour and weekly limits, with % left
+and reset time, from the OAuth, web, or Claude Code `/usage` source.
+
 ## Midas 0.38.0
 
 Claude now has dollars. Claude Code activity on this Mac shows as **Estimated inference spend** at
