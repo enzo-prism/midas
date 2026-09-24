@@ -63,6 +63,7 @@ public enum CostUsageCacheMaintenance {
     private static func currentArtifactNames() -> Set<String> {
         var names = Set(UsageProvider.allCases.map { CostUsageCacheIO.cacheFileName(provider: $0) })
         names.insert(PiSessionCostCacheIO.cacheFileName())
+        names.insert(CursorSpendSnapshotCache.fileName)
         return names
     }
 

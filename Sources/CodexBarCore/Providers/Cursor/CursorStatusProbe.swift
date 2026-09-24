@@ -408,6 +408,11 @@ public struct CursorSandUsageStatus: Codable, Sendable {
     public let hasAvailableUsage: Bool?
     public let hasNonZeroIncludedLimit: Bool?
     public let grokPlanLabel: String?
+    /// Current responses report the allowance as `includedLimitZero` (true = no included allowance);
+    /// older ones used `hasNonZeroIncludedLimit`.
+    public let includedLimitZero: Bool?
+    /// ISO-8601 end of a Grok Bot trial allowance. A trial end is not a recurring weekly reset.
+    public let sandTrialExpiresAt: String?
 
     public init(
         currentPeriodStart: String? = nil,
@@ -415,7 +420,9 @@ public struct CursorSandUsageStatus: Codable, Sendable {
         usagePercent: Double? = nil,
         hasAvailableUsage: Bool? = nil,
         hasNonZeroIncludedLimit: Bool? = nil,
-        grokPlanLabel: String? = nil)
+        grokPlanLabel: String? = nil,
+        includedLimitZero: Bool? = nil,
+        sandTrialExpiresAt: String? = nil)
     {
         self.currentPeriodStart = currentPeriodStart
         self.nextResetTimestampUtc = nextResetTimestampUtc
@@ -423,6 +430,40 @@ public struct CursorSandUsageStatus: Codable, Sendable {
         self.hasAvailableUsage = hasAvailableUsage
         self.hasNonZeroIncludedLimit = hasNonZeroIncludedLimit
         self.grokPlanLabel = grokPlanLabel
+        self.includedLimitZero = includedLimitZero
+        self.sandTrialExpiresAt = sandTrialExpiresAt
+    }
+
+    public struct Allowance: Equatable, Sendable {
+        public let usedPercent: Double
+        /// Weekly reset for an included allowance; nil for a trial.
+        public let resetsAt: Date?
+        /// End of a trial allowance; nil for an included allowance.
+        public let trialEndsAt: Date?
+    }
+
+    /// The Grok Bot allowance to show, or nil when the account has none.
+    ///
+    /// Included allowances keep their weekly reset. An unexpired trial shows its end date instead of a reset.
+    /// A zero included allowance with no live trial is hidden rather than drawn as an empty bar.
+    /// Payloads that report neither allowance field keep the previous behavior and show any usage percent.
+    public func allowance(now: Date = Date()) -> Allowance? {
+        guard let usagePercent, usagePercent.isFinite else { return nil }
+        let used = max(0, min(100, usagePercent))
+        let hasIncluded = self.includedLimitZero.map { !$0 } ?? self.hasNonZeroIncludedLimit
+        let trialEnd = Self.parseDate(self.sandTrialExpiresAt)
+        if hasIncluded == true || (hasIncluded == nil && trialEnd == nil) {
+            return Allowance(usedPercent: used, resetsAt: Self.parseDate(self.nextResetTimestampUtc), trialEndsAt: nil)
+        }
+        guard let trialEnd, trialEnd > now else { return nil }
+        return Allowance(usedPercent: used, resetsAt: nil, trialEndsAt: trialEnd)
+    }
+
+    private static func parseDate(_ text: String?) -> Date? {
+        guard let text, !text.isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 }
 
@@ -521,8 +562,10 @@ public struct CursorStatusSnapshot: Sendable {
     public let otherModelsUsedPercent: Double?
     /// Grok Bot weekly usage percent (nil when the plan has no Grok feature).
     public let grokBotWeeklyUsedPercent: Double?
-    /// Grok Bot weekly reset (nil when unreported).
+    /// Grok Bot weekly reset (nil when unreported or for a trial allowance).
     public let grokBotWeeklyReset: Date?
+    /// End of a Grok Bot trial allowance (nil for included allowances).
+    public let grokBotTrialEndsAt: Date?
 
     /// Whether this is a legacy request-based plan (vs token-based)
     public var isLegacyRequestPlan: Bool {
@@ -569,7 +612,8 @@ public struct CursorStatusSnapshot: Sendable {
         cursorModelsUsedPercent: Double? = nil,
         otherModelsUsedPercent: Double? = nil,
         grokBotWeeklyUsedPercent: Double? = nil,
-        grokBotWeeklyReset: Date? = nil)
+        grokBotWeeklyReset: Date? = nil,
+        grokBotTrialEndsAt: Date? = nil)
     {
         self.planPercentUsed = planPercentUsed
         self.autoPercentUsed = autoPercentUsed
@@ -596,6 +640,7 @@ public struct CursorStatusSnapshot: Sendable {
         self.otherModelsUsedPercent = otherModelsUsedPercent
         self.grokBotWeeklyUsedPercent = grokBotWeeklyUsedPercent
         self.grokBotWeeklyReset = grokBotWeeklyReset
+        self.grokBotTrialEndsAt = grokBotTrialEndsAt
     }
 
     /// Convert to UsageSnapshot for the common provider interface
@@ -710,15 +755,18 @@ public struct CursorStatusSnapshot: Sendable {
                     resetDescription: self.billingCycleEnd.map { Self.formatResetDate($0) }))]
         }
         if let grokWeekly = self.grokBotWeeklyUsedPercent {
+            // Included allowances are weekly ("Weekly usage" on the dashboard). A trial allowance ends
+            // once instead of resetting, so it carries its end date rather than a weekly reset.
+            let trialEnd = self.grokBotTrialEndsAt
             extraWindows = (extraWindows ?? []) + [NamedRateWindow(
                 id: "cursor-grok-bot",
-                title: "Grok Bot",
+                title: trialEnd == nil ? "Grok Bot" : "Grok Bot (trial)",
                 window: RateWindow(
-                    // The Grok Bot window is weekly ("Weekly usage" on the dashboard).
                     usedPercent: grokWeekly,
-                    windowMinutes: 7 * 24 * 60,
-                    resetsAt: self.grokBotWeeklyReset,
-                    resetDescription: self.grokBotWeeklyReset.map { Self.formatResetDate($0) }))]
+                    windowMinutes: trialEnd == nil ? 7 * 24 * 60 : nil,
+                    resetsAt: trialEnd == nil ? self.grokBotWeeklyReset : nil,
+                    resetDescription: trialEnd.map { Self.formatTrialEndDate($0) }
+                        ?? self.grokBotWeeklyReset.map { Self.formatResetDate($0) }))]
         }
 
         let identity = ProviderIdentitySnapshot(
@@ -735,6 +783,13 @@ public struct CursorStatusSnapshot: Sendable {
             cursorRequests: cursorRequests,
             updatedAt: Date(),
             identity: identity)
+    }
+
+    private static func formatTrialEndDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d 'at' h:mma"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return "Trial ends " + formatter.string(from: date)
     }
 
     private static func formatResetDate(_ date: Date) -> String {
@@ -1537,8 +1592,7 @@ public struct CursorStatusProbe: Sendable {
         // them (plans without the feature, team accounts needing a teamId body).
         let cursorModelsUsed = normPct(periodUsage?.planUsage?.autoPercentUsed)
         let otherModelsUsed = normPct(periodUsage?.planUsage?.apiPercentUsed)
-        let grokBotWeeklyUsed = normPct(sandStatus?.usagePercent)
-        let grokBotWeeklyReset = parseBillingCycleDate(sandStatus?.nextResetTimestampUtc)
+        let grokBotAllowance = sandStatus?.allowance()
 
         // Legacy request-based plan: maxRequestUsage being non-nil indicates a request-based plan
         let requestsUsed: Int? = requestUsage?.gpt4?.numRequestsTotal ?? requestUsage?.gpt4?.numRequests
@@ -1568,8 +1622,9 @@ public struct CursorStatusProbe: Sendable {
             nonCursorModelUsedUSD: nonCursorModelUsed,
             cursorModelsUsedPercent: cursorModelsUsed,
             otherModelsUsedPercent: otherModelsUsed,
-            grokBotWeeklyUsedPercent: grokBotWeeklyUsed,
-            grokBotWeeklyReset: grokBotWeeklyReset)
+            grokBotWeeklyUsedPercent: grokBotAllowance?.usedPercent,
+            grokBotWeeklyReset: grokBotAllowance?.resetsAt,
+            grokBotTrialEndsAt: grokBotAllowance?.trialEndsAt)
     }
 }
 

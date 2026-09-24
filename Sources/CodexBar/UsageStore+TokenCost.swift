@@ -154,3 +154,71 @@ extension UsageStore {
         ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.noDataMessage()
     }
 }
+
+// MARK: - Cursor last-known spend
+
+extension UsageStore {
+    func recordTokenRefreshFailure(provider: UsageProvider, error: Error) {
+        let hadPriorData = self.tokenSnapshots[provider] != nil
+        let shouldSurface = self.tokenFailureGates[provider]?
+            .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
+        if shouldSurface, self.keepsLastKnownCursorSpend(provider: provider, error: error) {
+            // Cursor's estimate is rebuilt from cursor.com on every refresh. Keep the last good value,
+            // labeled last known through the token error, instead of blanking it after two failures.
+            self.tokenErrors[provider] = error.localizedDescription
+        } else if shouldSurface {
+            self.tokenErrors[provider] = error.localizedDescription
+            self.tokenSnapshots.removeValue(forKey: provider)
+        } else {
+            self.tokenErrors[provider] = nil
+        }
+    }
+
+    /// Cursor's spend comes from cursor.com on every refresh, so a failed or slow fetch must not blank it.
+    func keepsLastKnownCursorSpend(provider: UsageProvider, error: Error) -> Bool {
+        guard provider == .cursor, self.tokenSnapshots[.cursor] != nil else { return false }
+        if case CostUsageError.sourceDisabled = error { return false }
+        return self.cursorSpendMatchesCurrentAccount()
+    }
+
+    func persistCursorSpendSnapshot(_ snapshot: CostUsageTokenSnapshot) {
+        let email = self.snapshots[.cursor]?.identity?.accountEmail
+        self.cursorSpendAccountKey = CursorSpendSnapshotCache.normalizedAccountKey(email)
+        Task.detached(priority: .utility) {
+            CursorSpendSnapshotCache.save(snapshot, accountEmail: email)
+        }
+    }
+
+    /// Shows the last Cursor estimate right after launch, before cursor.com answers.
+    func hydrateCachedCursorSpend() {
+        guard self.settings.costUsageEnabled, self.isEnabled(.cursor), self.tokenSnapshots[.cursor] == nil else {
+            return
+        }
+        let email = self.snapshots[.cursor]?.identity?.accountEmail
+        let historyDays = self.settings.costUsageHistoryDays
+        Task { @MainActor [weak self] in
+            let loaded = await Task.detached(priority: .utility) {
+                (
+                    snapshot: CursorSpendSnapshotCache.load(accountEmail: email, historyDays: historyDays),
+                    accountKey: CursorSpendSnapshotCache.cachedAccountKey())
+            }.value
+            guard let self, let snapshot = loaded.snapshot,
+                  self.settings.costUsageEnabled, self.isEnabled(.cursor),
+                  self.settings.costUsageHistoryDays == historyDays,
+                  self.tokenSnapshots[.cursor] == nil
+            else { return }
+            self.cursorSpendAccountKey = loaded.accountKey
+            guard self.cursorSpendMatchesCurrentAccount() else { return }
+            self.tokenSnapshots[.cursor] = snapshot
+        }
+    }
+
+    /// A cached or kept estimate belongs to the signed-in Cursor account, or the account is not yet known.
+    func cursorSpendMatchesCurrentAccount() -> Bool {
+        guard let current = CursorSpendSnapshotCache.normalizedAccountKey(
+            self.snapshots[.cursor]?.identity?.accountEmail),
+            let cached = self.cursorSpendAccountKey
+        else { return true }
+        return current == cached
+    }
+}

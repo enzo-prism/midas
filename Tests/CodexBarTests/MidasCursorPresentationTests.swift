@@ -16,6 +16,47 @@ struct MidasCursorPresentationTests {
         #expect(model.metrics.first { $0.id == "cursor-grok-bot" }?.resetText != nil)
     }
 
+    @Test func overviewPinsTheDashboardTrioLikeClaude() throws {
+        let model = try self.presentation(self.cursorSnapshot().toUsageSnapshot())
+        let overview = MidasAccountQuotaLayout.overviewMetrics(model)
+
+        #expect(overview.map(\.id) == [
+            MidasCursorLimits.cursorModelsID,
+            MidasCursorLimits.otherModelsID,
+            MidasCursorLimits.grokBotID,
+        ])
+        #expect(overview.map(\.title) == ["Cursor Models", "Other Models", "Grok Bot weekly"])
+        #expect(overview.map(\.valueText) == ["80% left", "55% left", "20% left"])
+        #expect(overview[0].resetsAt == self.now.addingTimeInterval(20 * 86400))
+        #expect(overview[2].resetsAt == self.now.addingTimeInterval(86400))
+        #expect(overview[2].helpText?.contains("weekly") == true)
+        // Total stays the headline (menu-bar ring) and remains available in details.
+        #expect(model.hero?.id == "primary")
+        #expect(model.hero?.remainingPercent == 70)
+        #expect(MidasAccountQuotaLayout.allMetrics(model).contains { $0.id == "primary" })
+    }
+
+    @Test func overviewFallsBackToTotalWhenPoolsAreUnreported() throws {
+        var status = self.cursorSnapshot(cursorModels: nil, otherModels: nil)
+        var overview = try MidasAccountQuotaLayout.overviewMetrics(self.presentation(status.toUsageSnapshot()))
+        #expect(overview.map(\.id) == ["primary", MidasCursorLimits.grokBotID])
+        #expect(overview.last?.title == "Grok Bot weekly")
+
+        status = self.cursorSnapshot(grokUsed: nil)
+        overview = try MidasAccountQuotaLayout.overviewMetrics(self.presentation(status.toUsageSnapshot()))
+        #expect(overview.map(\.id) == [MidasCursorLimits.cursorModelsID, MidasCursorLimits.otherModelsID])
+    }
+
+    @Test func grokBotTrialIsLabeledAsATrial() throws {
+        let status = self.cursorSnapshot(grokTrialEndsAt: self.now.addingTimeInterval(5 * 86400))
+        let overview = try MidasAccountQuotaLayout.overviewMetrics(self.presentation(status.toUsageSnapshot()))
+        let grok = try #require(overview.last)
+        #expect(grok.title == "Grok Bot trial")
+        #expect(grok.resetsAt == nil)
+        #expect(grok.resetText?.hasPrefix("Trial ends") == true)
+        #expect(MidasAccountQuotaLayout.resetLine(grok, includesWindow: false).hasPrefix("Trial ends"))
+    }
+
     @Test func modelSpendShareNeverMasqueradesAsRemainingQuota() throws {
         let model = try self.presentation(self.cursorSnapshot().toUsageSnapshot())
         #expect(model.metrics.contains { $0.id == "cursor-models" } == false)
@@ -135,7 +176,12 @@ struct MidasCursorPresentationTests {
             isStale: false)
     }
 
-    private func cursorSnapshot() -> CursorStatusSnapshot {
+    private func cursorSnapshot(
+        cursorModels: Double? = 20,
+        otherModels: Double? = 45,
+        grokUsed: Double? = 80,
+        grokTrialEndsAt: Date? = nil) -> CursorStatusSnapshot
+    {
         CursorStatusSnapshot(
             planPercentUsed: 30,
             planUsedUSD: 15,
@@ -152,10 +198,11 @@ struct MidasCursorPresentationTests {
             rawJSON: nil,
             cursorModelUsedUSD: 68,
             nonCursorModelUsedUSD: 32,
-            cursorModelsUsedPercent: 20,
-            otherModelsUsedPercent: 45,
-            grokBotWeeklyUsedPercent: 80,
-            grokBotWeeklyReset: self.now.addingTimeInterval(86400))
+            cursorModelsUsedPercent: cursorModels,
+            otherModelsUsedPercent: otherModels,
+            grokBotWeeklyUsedPercent: grokUsed,
+            grokBotWeeklyReset: grokTrialEndsAt == nil ? self.now.addingTimeInterval(86400) : nil,
+            grokBotTrialEndsAt: grokTrialEndsAt)
     }
 
     private func costDay(

@@ -43,8 +43,14 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   a device identifier, and a hashed account-set identifier. They do not contain prompts,
   emails, or login credentials. Midas selects a valid matching sample; it does not add samples
   together or use iCloud as an account-login service. Stale samples expire after 24 hours.
-- **Cursor:** account data supplies supported usage pools and history. Available quota does not
-  guarantee an API-equivalent dollar estimate.
+- **Cursor:** the overview shows three bars, matching cursor.com/dashboard/usage: **Cursor Models**
+  and **Other Models** (monthly pools, with the billing-cycle reset) and **Grok Bot weekly** (with its
+  weekly reset). A Grok Bot trial reads **Grok Bot trial** with its end date, and plans without a
+  Grok Bot allowance show no Grok bar. If Cursor does not report the two pools, the plan's Total
+  takes their place. Total always drives the menu-bar ring and stays in the provider details.
+  Cursor dollars come from cursor.com on each refresh. Midas keeps the last good estimate, labeled
+  last known, when a refresh fails, and shows it right after launch instead of waiting for
+  cursor.com. Available quota does not guarantee an API-equivalent dollar estimate.
 - **Claude:** the overview always shows two subscription limits: the **5-hour limit** and the
   **Weekly limit**, each with % left and its reset time. If Claude reports no 5-hour window,
   only the weekly limit is shown, labeled as weekly. When Claude reports a separate weekly limit for

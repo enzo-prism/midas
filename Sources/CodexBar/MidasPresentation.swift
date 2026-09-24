@@ -230,6 +230,14 @@ struct MidasProviderPresentation {
         if provider == .claude {
             quotaMetrics = MidasClaudeLimits.arrange(quotaMetrics, snapshot: snapshot)
         }
+        if provider == .cursor {
+            quotaMetrics = MidasCursorLimits.arrange(quotaMetrics)
+        }
+        // Named extra windows (Grok Bot, Cursor pools, model-only weekly limits) keep their reset dates.
+        for index in quotaMetrics.indices where quotaMetrics[index].resetsAt == nil {
+            quotaMetrics[index].resetsAt = snapshot?.extraRateWindows?
+                .first { $0.id == quotaMetrics[index].id }?.window.resetsAt
+        }
         var hero: MidasQuotaMetric?
         if provider == .codex,
            let snapshot,
@@ -349,6 +357,44 @@ struct MidasAccountPresentation: Identifiable {
     let isPrimary: Bool
     let presentation: MidasProviderPresentation
     var displayName: String?
+}
+
+/// Cursor's overview mirrors its usage dashboard (cursor.com/dashboard/usage): the Cursor Models and
+/// Other Models monthly pools plus the Grok Bot weekly allowance. Total stays the provider headline
+/// (menu-bar ring) and remains in details; accounts without pool data fall back to Total.
+enum MidasCursorLimits {
+    static let cursorModelsID = "cursor-pool-models"
+    static let otherModelsID = "cursor-pool-other"
+    static let grokBotID = "cursor-grok-bot"
+    static let grokBotWeeklyTitle = "Grok Bot weekly"
+    static let grokBotTrialTitle = "Grok Bot trial"
+    static let poolIDs = [cursorModelsID, otherModelsID]
+
+    static func arrange(_ metrics: [MidasQuotaMetric]) -> [MidasQuotaMetric] {
+        metrics.map { metric in
+            guard metric.id == self.grokBotID else { return metric }
+            let isTrial = metric.title.lowercased().contains("trial")
+            var result = metric.retitled(isTrial ? self.grokBotTrialTitle : self.grokBotWeeklyTitle)
+            result = MidasQuotaMetric(
+                id: result.id,
+                title: result.title,
+                remainingPercent: result.remainingPercent,
+                resetText: result.resetText,
+                helpText: isTrial
+                    ? "Cursor's Grok Bot trial allowance. It ends instead of resetting."
+                    : "Cursor's weekly Grok Bot allowance, separate from the monthly model pools.")
+            return result
+        }
+    }
+
+    /// Pinned overview bars in dashboard order; `nil` when the account reports none of them.
+    static func pinned(_ metrics: [MidasQuotaMetric]) -> [MidasQuotaMetric]? {
+        let byID = Dictionary(metrics.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let pools = self.poolIDs.compactMap { byID[$0] }
+        let monthly = pools.isEmpty ? Array(metrics.prefix(1).filter { $0.id != self.grokBotID }) : pools
+        let pinned = monthly + [byID[self.grokBotID]].compactMap(\.self)
+        return pinned.isEmpty ? nil : pinned
+    }
 }
 
 /// Claude always surfaces its subscription limits — the 5-hour session, the weekly window, and any

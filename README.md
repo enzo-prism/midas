@@ -32,6 +32,12 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.40.0
+
+Cursor gets three bars, like Claude: **Cursor Models**, **Other Models**, and **Grok Bot weekly**, straight
+from Cursor's usage dashboard. Cursor's spend estimate also stays put: Midas shows the last good value at
+launch and through failed refreshes, labeled last known, and retries reads that change mid-page.
+
 ## Midas 0.39.0
 
 Claude's Fable-only weekly limit gets its own bar. When Claude reports a separate weekly limit for a

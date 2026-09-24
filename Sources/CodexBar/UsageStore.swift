@@ -264,6 +264,8 @@ final class UsageStore {
     @ObservationIgnored let accountInfoCacheTTL: TimeInterval = 30
     @ObservationIgnored let tokenFetchTTL: TimeInterval = 60 * 60
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
+    /// Account the current Cursor spend snapshot was fetched or cached for (normalized email).
+    @ObservationIgnored var cursorSpendAccountKey: String?
     @ObservationIgnored let startupBehavior: StartupBehavior
     @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator
 
@@ -344,6 +346,7 @@ final class UsageStore {
         guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
         self.scheduleCostUsageCacheMaintenance()
         self.hydrateCachedTokenSnapshots()
+        self.hydrateCachedCursorSpend()
         self.detectVersions()
         self.updateProviderRuntimes()
         Task { @MainActor [weak self] in
@@ -1635,6 +1638,9 @@ extension UsageStore {
             self.tokenErrors[provider] = nil
             self.tokenFailureGates[provider]?.recordSuccess()
             self.persistWidgetSnapshot(reason: "token-usage")
+            if provider == .cursor {
+                self.persistCursorSpendSnapshot(snapshot)
+            }
         } catch {
             if error is CancellationError { return }
             guard self.tokenCostScope(for: provider).signature == costScope.signature,
@@ -1644,15 +1650,7 @@ extension UsageStore {
             let durationText = String(format: "%.2f", duration)
             let message = "cost usage failed provider=\(providerText) duration=\(durationText)s error=\(msg)"
             self.tokenCostLogger.error(message)
-            let hadPriorData = self.tokenSnapshots[provider] != nil
-            let shouldSurface = self.tokenFailureGates[provider]?
-                .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
-            if shouldSurface {
-                self.tokenErrors[provider] = error.localizedDescription
-                self.tokenSnapshots.removeValue(forKey: provider)
-            } else {
-                self.tokenErrors[provider] = nil
-            }
+            self.recordTokenRefreshFailure(provider: provider, error: error)
         }
     }
 }

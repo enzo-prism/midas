@@ -78,6 +78,14 @@ dashboard language, from the same endpoints as cursor.com/dashboard/usage:
   `billingCycleEnd`.
 - `POST /api/dashboard/get-sand-usage-status` (`{}` body) → **Grok Bot** weekly
   % with `nextResetTimestampUtc`. Absent for plans without the Grok feature.
+  Current responses report the allowance as `includedLimitZero` (older ones used
+  `hasNonZeroIncludedLimit`) plus `sandTrialExpiresAt` for trials
+  (`CursorSandUsageStatus.allowance`):
+  - An included allowance shows the weekly bar with its reset.
+  - An unexpired trial shows "Grok Bot (trial)", which ends at `sandTrialExpiresAt` and does not reset
+    weekly (`UsageFormatter` renders "Trial ends …" verbatim).
+  - A zero allowance with no live trial is hidden.
+  - Payloads with neither field keep showing any reported percent.
 
 Both calls are best-effort with the web session cookies: failure hides that row
 instead of erroring (team accounts needing a teamId body, plans without Grok).
@@ -92,6 +100,21 @@ reports spend, not tokens, so there are no token counts — and no pricing table
 is involved. Requires a Cursor web session (browser cookies or manual header);
 with cookies off it explains how to enable them. Included in the
 multi-provider TOTAL at face value.
+
+## Midas spend estimate reliability
+
+- `CursorUsageEventsFetcher` re-reads the whole window (3 attempts in total) when
+  `totalUsageEventsCount` moves between pages, which happens while Cursor is in use. Hitting the
+  200-page safety cap is not retried.
+- Events without `totalCents` are priced from list rates. Mode suffixes that don't change the per-token
+  price (`-thinking`, `-max`, reasoning effort) are tried stripped. Claude ids are also tried in catalog
+  form: `claude-4.5-sonnet` becomes `claude-sonnet-4-5` and `claude-opus-4.8` becomes `claude-opus-4-8`.
+  `-fast` is kept because it changes OpenAI pricing.
+- The last good token snapshot is saved to
+  `~/Library/Caches/Midas/cost-usage/cursor-spend-v1.json` (`CursorSpendSnapshotCache`), keyed by
+  account email and history window. It is shown at launch before cursor.com answers. When a refresh
+  fails, it is kept with a token error, so Midas labels it last known. That doesn't apply when the cookie
+  source is off or the signed-in account differs.
 
 ## Key files
 - `Sources/CodexBarCore/Providers/Cursor/CursorStatusProbe.swift`

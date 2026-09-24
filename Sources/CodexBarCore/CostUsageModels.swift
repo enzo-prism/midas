@@ -1009,3 +1009,46 @@ enum CostUsageDateParser {
         return nil
     }
 }
+
+// MARK: - Encoding (persisted last-known snapshots)
+
+extension CostUsageDailyReport.ModelBreakdown: Encodable {
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.modelName, forKey: .modelName)
+        try container.encodeIfPresent(self.costUSD, forKey: .costUSD)
+        try container.encodeIfPresent(self.totalTokens, forKey: .totalTokens)
+        try container.encodeIfPresent(self.requestCount, forKey: .requestCount)
+        try container.encodeIfPresent(self.inputTokens, forKey: .inputTokens)
+        try container.encodeIfPresent(self.outputTokens, forKey: .outputTokens)
+        try container.encodeIfPresent(self.cacheReadTokens, forKey: .cacheReadTokens)
+        try container.encodeIfPresent(self.cacheCreationTokens, forKey: .cacheCreationTokens)
+        try container.encodeIfPresent(self.reasoningTokens, forKey: .reasoningTokens)
+        try container.encodeIfPresent(self.standardCostUSD, forKey: .standardCostUSD)
+        try container.encodeIfPresent(self.priorityCostUSD, forKey: .priorityCostUSD)
+        try container.encodeIfPresent(self.standardTokens, forKey: .standardTokens)
+        try container.encodeIfPresent(self.priorityTokens, forKey: .priorityTokens)
+    }
+}
+
+extension CostUsageDailyReport.Entry: Encodable {
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.date, forKey: .date)
+        try container.encodeIfPresent(self.inputTokens, forKey: .inputTokens)
+        try container.encodeIfPresent(self.cacheReadTokens, forKey: .cacheReadTokens)
+        try container.encodeIfPresent(self.cacheCreationTokens, forKey: .cacheCreationTokens)
+        try container.encodeIfPresent(self.outputTokens, forKey: .outputTokens)
+        try container.encodeIfPresent(self.reasoningTokens, forKey: .reasoningTokens)
+        try container.encodeIfPresent(self.totalTokens, forKey: .totalTokens)
+        try container.encodeIfPresent(self.requestCount, forKey: .requestCount)
+        try container.encodeIfPresent(self.costUSD, forKey: .costUSD)
+        try container.encodeIfPresent(self.apiEquivalentCostUSD, forKey: .apiEquivalentCostUSD)
+        try container.encodeIfPresent(self.modelsUsed, forKey: .modelsUsed)
+        try container.encodeIfPresent(self.modelBreakdowns, forKey: .modelBreakdowns)
+        try container.encodeIfPresent(self.unpricedRequestCount, forKey: .unpricedRequestCount)
+        try container.encodeIfPresent(self.pricedRequestCount, forKey: .pricedRequestCount)
+        try container.encodeIfPresent(self.unmeteredRequestCount, forKey: .unmeteredRequestCount)
+        try container.encodeIfPresent(self.estimatedRequestCount, forKey: .estimatedRequestCount)
+    }
+}
