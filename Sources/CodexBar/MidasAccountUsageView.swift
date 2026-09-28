@@ -51,6 +51,9 @@ struct MidasAccountUsageView: View {
                         Text("\(metric.title): \(help)")
                     }
                 }
+                ForEach(Array(account.presentation.notes.enumerated()), id: \.offset) { _, note in
+                    Text(note)
+                }
                 if !account.presentation.freshness.isEmpty {
                     Text(account.presentation.freshness)
                 }
@@ -190,14 +193,14 @@ enum MidasCodexAccountPolicy {
             == CodexIdentityResolver.normalizeEmail(account.email)
         else { return false }
 
-        if let storedID = stored.storedAccountID, let currentID = account.storedAccountID {
-            return storedID == currentID
-        }
-
         let storedWorkspace = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(stored.workspaceAccountID)
         let currentWorkspace = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(account.workspaceAccountID)
         if let storedWorkspace, let currentWorkspace, storedWorkspace != currentWorkspace {
             return false
+        }
+
+        if let storedID = stored.storedAccountID, let currentID = account.storedAccountID {
+            return storedID == currentID
         }
 
         return stored.id == account.id
@@ -222,6 +225,19 @@ enum MidasCodexAccountPolicy {
             return (nil, nil)
         }
         return (providerSnapshot, providerError)
+    }
+
+    /// Cached usage is stale once it has missed about two scheduled refreshes (at least 15 minutes).
+    /// Manual refresh has no schedule to miss, so only a refresh error marks it stale.
+    static func isStale(
+        snapshot: UsageSnapshot?,
+        error: String?,
+        refreshInterval: TimeInterval?,
+        now: Date = Date()) -> Bool
+    {
+        if error != nil { return true }
+        guard let snapshot, let refreshInterval else { return false }
+        return now.timeIntervalSince(snapshot.updatedAt) > max(15 * 60, 2 * refreshInterval)
     }
 
     static func emptyUsageText(_ presentation: MidasProviderPresentation) -> String {
@@ -266,7 +282,10 @@ extension StatusItemController {
                 snapshot: snapshot,
                 tokenSnapshot: nil,
                 isRefreshing: self.store.refreshingProviders.contains(provider),
-                isStale: usage.error != nil)
+                isStale: MidasCodexAccountPolicy.isStale(
+                    snapshot: snapshot,
+                    error: usage.error,
+                    refreshInterval: self.settings.refreshFrequency.seconds))
             return MidasAccountPresentation(
                 id: account.id,
                 isPrimary: account.isActive,

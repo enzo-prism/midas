@@ -131,6 +131,26 @@ struct MidasCodexAccountPolicyTests {
         #expect(usage.error == "Refresh failed")
     }
 
+    @Test func cachedAccountUsageBecomesStaleAfterMissingTwoScheduledRefreshes() {
+        let now = Date(timeIntervalSince1970: 10000)
+        let cases: [(interval: TimeInterval?, age: TimeInterval, expected: Bool)] = [
+            (300, 0, false), (300, 900, false), (300, 901, true), // short cadences keep the 15-minute floor
+            (900, 1800, false), (900, 1801, true),
+            (1800, 1800, false), (1800, 3600, false), (1800, 3601, true), // 30m is not stale mid-cycle
+            (nil, 86400, false), // manual refresh has no schedule to miss
+        ]
+        for item in cases {
+            let snapshot = UsageSnapshot(primary: nil, secondary: nil, updatedAt: now.addingTimeInterval(-item.age))
+            #expect(MidasCodexAccountPolicy.isStale(
+                snapshot: snapshot, error: nil, refreshInterval: item.interval, now: now) == item.expected)
+        }
+        for interval in [TimeInterval?.none, 300] {
+            #expect(MidasCodexAccountPolicy.isStale(
+                snapshot: nil, error: "Refresh failed", refreshInterval: interval, now: now))
+            #expect(!MidasCodexAccountPolicy.isStale(snapshot: nil, error: nil, refreshInterval: interval, now: now))
+        }
+    }
+
     @Test func missingSnapshotIsWaitingOrRefreshingInsteadOfFailure() {
         for refreshing in [false, true] {
             let presentation = MidasProviderPresentation.make(
@@ -143,6 +163,39 @@ struct MidasCodexAccountPolicyTests {
             #expect(MidasCodexAccountPolicy.emptyUsageText(presentation)
                 == (refreshing ? "Refreshing…" : "Waiting for first update"))
         }
+    }
+
+    @Test func sameManagedAccountCannotReuseUsageFromAConflictingWorkspace() {
+        let accountID = UUID()
+        func account(workspace: String) -> CodexVisibleAccount {
+            CodexVisibleAccount(
+                id: "managed@example.com",
+                email: "managed@example.com",
+                workspaceAccountID: workspace,
+                authFingerprint: "same-fingerprint",
+                storedAccountID: accountID,
+                selectionSource: .managedAccount(id: accountID),
+                isActive: false,
+                isLive: false,
+                canReauthenticate: true,
+                canRemove: true)
+        }
+        let cached = account(workspace: "old-workspace")
+        let visible = account(workspace: "new-workspace")
+        let entry = CodexAccountUsageSnapshot(
+            account: cached,
+            snapshot: self.snapshot(cached),
+            error: nil,
+            sourceLabel: "oauth")
+        #expect(!MidasCodexAccountPolicy.entryBelongs(to: visible, entry: entry))
+        #expect(MidasCodexAccountPolicy.snapshot(for: visible, in: [entry.id: entry]) == nil)
+        let usage = MidasCodexAccountPolicy.usage(
+            for: visible,
+            entry: entry,
+            providerSnapshot: nil,
+            providerError: nil,
+            refreshGuard: nil)
+        #expect(usage.snapshot == nil)
     }
 
     @Test func managedAccountEntryBindsWhenCachedWorkspaceIsMissingOnTheVisibleAccount() {
