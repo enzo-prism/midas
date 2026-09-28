@@ -685,6 +685,38 @@ struct CodexOAuthTests {
     }
 
     @Test
+    func `saving refreshed credentials keeps auth file owner only`() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-oauth-perms-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let authURL = home.appendingPathComponent("auth.json")
+        let credentials = CodexOAuthCredentials(
+            accessToken: "access-token",
+            refreshToken: "refresh-token",
+            idToken: nil,
+            accountId: "account-id",
+            lastRefresh: Date())
+        func mode() throws -> Int {
+            try #require(FileManager.default.attributesOfItem(atPath: authURL.path)[.posixPermissions] as? NSNumber)
+                .intValue
+        }
+
+        // A freshly created file must not inherit the umask default.
+        try CodexOAuthCredentialsStore.save(credentials, env: ["CODEX_HOME": home.path])
+        #expect(try mode() == 0o600)
+
+        // A previously loosened file is tightened, and unrelated keys survive the rewrite.
+        try Data(#"{"OPENAI_API_KEY":null,"tokens":{}}"#.utf8).write(to: authURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: authURL.path)
+        try CodexOAuthCredentialsStore.save(credentials, env: ["CODEX_HOME": home.path])
+        #expect(try mode() == 0o600)
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: authURL)) as? [String: Any]
+        #expect(json?.keys.contains("OPENAI_API_KEY") == true)
+        #expect(try CodexOAuthCredentialsStore.parse(data: Data(contentsOf: authURL)).refreshToken == "refresh-token")
+    }
+
+    @Test
     func `resolves chat GPT usage URL from config`() {
         let config = "chatgpt_base_url = \"https://chatgpt.com/backend-api/\"\n"
         let url = CodexOAuthUsageFetcher._resolveUsageURLForTesting(configContents: config)

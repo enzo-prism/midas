@@ -42,7 +42,10 @@ extension StatusItemController {
             }
             return result
         }
-        guard let estimate = period.amount(snapshot: token), let amount = estimate.dollars else {
+        // OpenAI cloud history and Anthropic cost reports key days in UTC; local transcript scans use local days.
+        let reportsUTCDays = (result.provider == .codex && self.settings.midasCloudUsageEnabled) || original.isBilled
+        let timeZone = reportsUTCDays ? MidasSpendPeriod.utc : .current
+        guard let estimate = period.amount(snapshot: token, timeZone: timeZone), let amount = estimate.dollars else {
             result.spend = nil
             result.spendUnavailableReason = "No priced history for this period"
             return result
@@ -53,7 +56,7 @@ extension StatusItemController {
         } else if original.isBilled {
             "Cost report days use UTC; the latest hours can still be settling."
         } else {
-            "Uses recorded daily dates in the source’s reporting calendar."
+            "Daily dates use this Mac’s time zone."
         }
         let coverage = "Recorded history only; complete account and date coverage is not established."
         result.spend = MidasSpendPresentation(

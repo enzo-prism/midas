@@ -88,8 +88,9 @@ Finishing setup does not wait for every provider request; background refresh con
 ## Choosing a spend period
 
 Click the calendar control below the total to expand **This month**, **Last 30 days**, and any
-recorded months **inline in the panel**. Options preview their UTC date range; gold marks the
-selected period. Choosing an option updates the estimate total and collapses the list.
+recorded months **inline in the panel**. Options preview their date range in this Mac’s time zone; gold marks the
+selected period. Each provider’s days are counted in its source calendar: local days for history
+scanned on this Mac, UTC for OpenAI cloud history and Anthropic cost reports. Choosing an option updates the estimate total and collapses the list.
 **Partial total** / **Estimate details** also expand inline. The Air panel is already an
 `NSPopover`, so those lists must not open a nested SwiftUI popover or take AppKit
 first-responder focus — that combination aborts on macOS 27 (`swift_abortRetainUnowned` in

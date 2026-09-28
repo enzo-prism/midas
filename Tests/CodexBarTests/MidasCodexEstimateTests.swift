@@ -72,6 +72,18 @@ struct MidasCodexEstimateTests {
         #expect(MidasCodexEstimateMode.load(from: defaults) == .custom)
     }
 
+    @Test func calibrationWindowsLocalScanDaysInTheMacTimeZone() throws {
+        // 6 PM Pacific on September 30: the local 30-day window starts September 1, the UTC one September 2.
+        let evening = try #require(ISO8601DateFormatter().date(from: "2026-10-01T01:00:00Z"))
+        let pacific = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        let firstLocalDay = self.snapshot(date: "2026-09-01", updatedAt: evening)
+        let sample = try #require(MidasCodexCalibration.make(
+            snapshot: firstLocalDay, now: evening, timeZone: pacific))
+        #expect(sample.estimate(now: evening, timeZone: pacific) != nil)
+        #expect(MidasCodexCalibration.make(
+            snapshot: firstLocalDay, now: evening, timeZone: MidasSpendPeriod.utc) == nil)
+    }
+
     @Test func weightedRateExcludesUnpricedTokensFromDenominator() throws {
         let sample = try #require(MidasCodexCalibration.make(
             snapshot: self.snapshot(),

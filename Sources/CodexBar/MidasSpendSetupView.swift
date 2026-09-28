@@ -356,7 +356,10 @@ struct MidasSpendSetupView: View {
                 now: Date())
         } else if snapshot?.costProvenance != .listPriceEstimate { return nil }
         guard let snapshot else { return nil }
-        return MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).amount(snapshot: snapshot)?.dollars
+        // Cloud history keys days in UTC; local transcript scans key them in this Mac's time zone.
+        let timeZone = provider == .codex && self.settings.midasCloudUsageEnabled ? MidasSpendPeriod.utc : .current
+        return MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+            .amount(snapshot: snapshot, timeZone: timeZone)?.dollars
     }
 
     private func applyChoices() {

@@ -41,12 +41,14 @@ struct MidasCodexCalibration: Codable, Equatable, Sendable {
 
     static func make(
         snapshot: CostUsageTokenSnapshot,
-        now: Date) -> Self?
+        now: Date,
+        timeZone: TimeZone = .current) -> Self?
     {
         guard snapshot.currencyCode == "USD", snapshot.costProvenance == .listPriceEstimate,
               snapshot.updatedAt <= now.addingTimeInterval(300),
               now.timeIntervalSince(snapshot.updatedAt) <= 86400 else { return nil }
-        let window = CodexCloudAccountUsage.window(now: now)
+        // The local Codex scan keys days in this Mac's time zone.
+        let window = CodexCloudAccountUsage.window(now: now, timeZone: timeZone)
         var tokens = 0.0
         var observed = 0.0
         var dollars = 0.0
@@ -78,14 +80,16 @@ struct MidasCodexCalibration: Codable, Equatable, Sendable {
             lastUsageDay: lastDay)
     }
 
-    func estimate(now: Date) -> MidasCodexEstimate? {
+    func estimate(now: Date, timeZone: TimeZone = .current) -> MidasCodexEstimate? {
+        // `lastUsageDay` comes from the local scan, so recency uses local days too.
+        let window = CodexCloudAccountUsage.window(now: now, timeZone: timeZone)
         guard self.rate.isFinite, self.rate > 0,
               self.pricedTokens >= 10000, self.observedTokens >= self.pricedTokens,
               self.pricedTokens / self.observedTokens >= 0.8,
               self.sampledAt <= now.addingTimeInterval(300),
               now.timeIntervalSince(self.sampledAt) <= 86400,
-              self.lastUsageDay >= CodexCloudAccountUsage.window(now: now).start,
-              self.lastUsageDay <= CodexCloudAccountUsage.window(now: now).end else { return nil }
+              self.lastUsageDay >= window.start,
+              self.lastUsageDay <= window.end else { return nil }
         let formattedRate = self.rate.formatted(.number.precision(.fractionLength(2...4)))
         let coverage = (self.pricedTokens / self.observedTokens).formatted(.percent.precision(.fractionLength(0)))
         return MidasCodexEstimate(
