@@ -18,6 +18,8 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
     /// How this snapshot's costs were produced. Never infer this solely from whether a
     /// cost figure exists — Bedrock and OpenAI Admin costs are vendor-reported.
     public let costProvenance: CostProvenance
+    /// Account the source reported for this history (currently Cursor); `nil` when the source does not say.
+    public let accountEmail: String?
     public let daily: [CostUsageDailyReport.Entry]
     public let updatedAt: Date
 
@@ -34,6 +36,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         historyLabel: String? = nil,
         meteredCostUSD: Double? = nil,
         costProvenance: CostProvenance = .unknown,
+        accountEmail: String? = nil,
         daily: [CostUsageDailyReport.Entry],
         updatedAt: Date)
     {
@@ -51,6 +54,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         self.historyLabel = historyLabel
         self.meteredCostUSD = meteredCostUSD
         self.costProvenance = costProvenance
+        self.accountEmail = accountEmail
         self.daily = daily
         self.updatedAt = updatedAt
     }

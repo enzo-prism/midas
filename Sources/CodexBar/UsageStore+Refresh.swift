@@ -281,6 +281,9 @@ extension UsageStore {
                 self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
                 self.lastKnownResetSnapshots[provider] = backfilled
                 self.snapshots[provider] = backfilled
+                if provider == .cursor {
+                    self.dropCursorSpendFromAnotherAccount()
+                }
                 if provider == .zai {
                     // Persist the z.ai quota snapshot so the card renders instantly on cold launch
                     // (the in-memory dictionary is rebuilt on each app start). modelUsage inside

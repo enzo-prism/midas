@@ -268,6 +268,8 @@ final class UsageStore {
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
     /// Account the current Cursor spend snapshot was fetched or cached for (normalized email).
     @ObservationIgnored var cursorSpendAccountKey: String?
+    /// Overrides the Cursor spend cache location; tests point this at a temporary directory.
+    @ObservationIgnored var cursorSpendCacheRoot: URL?
     @ObservationIgnored let startupBehavior: StartupBehavior
     @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator
 
@@ -1637,13 +1639,14 @@ extension UsageStore {
                 "today=\(sessionCost) " +
                 "historyDays=\(historyDays) windowCost=\(monthCost)"
             self.tokenCostLogger.info(message)
+            if provider == .cursor, !self.acceptCursorSpendSnapshot(snapshot) {
+                self.tokenCostLogger.error("cost usage rejected provider=cursor reason=account-mismatch")
+                return
+            }
             self.tokenSnapshots[provider] = snapshot
             self.tokenErrors[provider] = nil
             self.tokenFailureGates[provider]?.recordSuccess()
             self.persistWidgetSnapshot(reason: "token-usage")
-            if provider == .cursor {
-                self.persistCursorSpendSnapshot(snapshot)
-            }
         } catch {
             if error is CancellationError { return }
             guard self.tokenCostScope(for: provider).signature == costScope.signature,

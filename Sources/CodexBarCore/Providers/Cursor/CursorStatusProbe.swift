@@ -1208,7 +1208,13 @@ public struct CursorStatusProbe: Sendable {
                 until: until,
                 calendar: calendar,
                 logger: logger)
-            return CursorCostReport(daily: result.daily, meteredCostUSD: result.meteredCostUSD)
+            // The session is resolved independently of the status fetch, so record whose history this is.
+            // Best effort: an unknown account is never matched against, or cached for, a known one.
+            let accountEmail = try? await self.fetchUserInfo(cookieHeader: cookieHeader).email
+            return CursorCostReport(
+                daily: result.daily,
+                meteredCostUSD: result.meteredCostUSD,
+                accountEmail: accountEmail)
         }
         var firstRecoverableError: CursorStatusProbeError?
 
@@ -1844,9 +1850,12 @@ public struct CursorStatusProbe: Sendable {
 public struct CursorCostReport: Sendable {
     public let daily: CostUsageDailyReport
     public let meteredCostUSD: Double?
+    /// The Cursor account whose session produced this report, when `/api/auth/me` answered.
+    public let accountEmail: String?
 
-    public init(daily: CostUsageDailyReport, meteredCostUSD: Double?) {
+    public init(daily: CostUsageDailyReport, meteredCostUSD: Double?, accountEmail: String? = nil) {
         self.daily = daily
         self.meteredCostUSD = meteredCostUSD
+        self.accountEmail = accountEmail
     }
 }
