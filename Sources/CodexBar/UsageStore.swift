@@ -629,12 +629,13 @@ final class UsageStore {
                         group.addTask { await self.refreshStatus(provider) }
                     }
                 }
-                if forceTokenUsage {
-                    group.addTask { await self.refreshCreditsNow(minimumSnapshotUpdatedAt: refreshStartedAt) }
-                }
             }
 
-            if !forceTokenUsage {
+            if forceTokenUsage {
+                // Usage and credits share Codex credentials. Finish usage first so a forced
+                // refresh cannot submit the same rotating OAuth refresh token twice in parallel.
+                await self.refreshCreditsNow(minimumSnapshotUpdatedAt: refreshStartedAt)
+            } else {
                 self.scheduleCreditsRefreshIfNeeded(minimumSnapshotUpdatedAt: refreshStartedAt)
             }
 

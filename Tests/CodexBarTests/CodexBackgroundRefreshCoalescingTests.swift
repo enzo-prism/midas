@@ -7,6 +7,43 @@ import Testing
 @MainActor
 struct CodexBackgroundRefreshCoalescingTests {
     @Test
+    func `forced credits refresh waits for provider credential refresh to finish`() async throws {
+        let settings = try self.makeSettingsStore(
+            suite: "CodexBackgroundRefreshCoalescingTests-forced-credits-ordering")
+        settings.statusChecksEnabled = false
+        settings.openAIWebAccessEnabled = false
+        let managedAccount = try Self.installManagedAccount(
+            email: "managed@example.com",
+            settings: settings)
+        defer { try? FileManager.default.removeItem(atPath: managedAccount.managedHomePath) }
+
+        let store = self.makeStore(settings: settings)
+        var providerFinished = false
+        var creditsLoaded = false
+        store._test_providerRefreshOverride = { _ in
+            // Model an asynchronous credential refresh without accessing real credentials.
+            try? await Task.sleep(for: .milliseconds(100))
+            providerFinished = true
+        }
+        store._test_codexCreditsLoaderOverride = {
+            #expect(providerFinished)
+            creditsLoaded = true
+            return CreditsSnapshot(remaining: 25, events: [], updatedAt: Date())
+        }
+        store._test_tokenUsageRefreshOverride = { _, _ in }
+        defer {
+            store._test_providerRefreshOverride = nil
+            store._test_codexCreditsLoaderOverride = nil
+            store._test_tokenUsageRefreshOverride = nil
+        }
+
+        await store.refresh(forceTokenUsage: true)
+
+        #expect(providerFinished)
+        #expect(creditsLoaded)
+    }
+
+    @Test
     func `rapid regular refreshes coalesce concurrent Codex credits fetches`() async throws {
         let settings = try self.makeSettingsStore(
             suite: "CodexBackgroundRefreshCoalescingTests-credits-coalescing")
