@@ -298,6 +298,7 @@ extension UsageStore {
                 if provider == .codex {
                     self.rememberLiveSystemCodexEmailIfNeeded(scoped.accountEmail(for: .codex))
                     self.seedCodexAccountScopedRefreshGuard(accountEmail: scoped.accountEmail(for: .codex))
+                    self.rememberCodexUsageCredits(result.credits)
                 }
                 return backfilled
             }

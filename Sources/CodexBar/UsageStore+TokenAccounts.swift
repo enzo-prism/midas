@@ -1176,7 +1176,7 @@ extension UsageStore {
         guard self.isCurrentProviderRefreshGeneration(.codex, generation: generation) else { return }
         self.lastFetchAttempts[.codex] = outcome.attempts
         switch outcome.result {
-        case .success:
+        case let .success(result):
             guard let snapshot else { return }
             self.handleSessionQuotaTransition(provider: .codex, snapshot: snapshot)
             self.lastKnownResetSnapshots[.codex] = snapshot
@@ -1189,6 +1189,7 @@ extension UsageStore {
             self.failureGates[.codex]?.recordSuccess()
             self.rememberLiveSystemCodexEmailIfNeeded(snapshot.accountEmail(for: .codex))
             self.seedCodexAccountScopedRefreshGuard(accountEmail: account.email)
+            self.rememberCodexUsageCredits(result.credits)
             await self.recordPlanUtilizationHistorySample(provider: .codex, snapshot: snapshot)
             guard self.isCurrentProviderRefreshGeneration(.codex, generation: generation) else { return }
             self.recordCodexHistoricalSampleIfNeeded(snapshot: snapshot)
