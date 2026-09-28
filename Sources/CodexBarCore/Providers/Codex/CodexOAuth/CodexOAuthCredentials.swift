@@ -58,7 +58,7 @@ public enum CodexOAuthCredentialsError: LocalizedError, Sendable {
 }
 
 public enum CodexOAuthCredentialsStore {
-    private static func authFilePath(
+    static func authFilePath(
         env: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default) -> URL
     {
