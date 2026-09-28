@@ -1,6 +1,13 @@
 import CodexBarCore
 import Foundation
 
+/// Credits that arrived with a Codex usage fetch, tagged with the account they belong to.
+struct CodexUsageCredits {
+    let credits: CreditsSnapshot
+    let accountKey: String
+    let receivedAt: Date
+}
+
 @MainActor
 extension UsageStore {
     nonisolated static let codexSnapshotWaitTimeoutSeconds: TimeInterval = 6
@@ -75,6 +82,29 @@ extension UsageStore {
         ].joined(separator: "|")
     }
 
+    /// The Codex usage response already carries the credit balance. Keep it so the credits refresh that follows
+    /// in the same cycle does not repeat the usage request.
+    func rememberCodexUsageCredits(_ credits: CreditsSnapshot?, now: Date = Date()) {
+        guard let credits else { return }
+        self.codexUsageCredits = CodexUsageCredits(
+            credits: credits,
+            accountKey: self.codexCreditsRefreshKey(expectedGuard: self.freshCodexAccountScopedRefreshGuard()),
+            receivedAt: now)
+    }
+
+    /// Credits from a usage fetch that finished during this refresh cycle for the same account, if any.
+    func codexCreditsFromCurrentUsage(
+        expectedGuard: CodexAccountScopedRefreshGuard,
+        minimumSnapshotUpdatedAt: Date?) -> CreditsSnapshot?
+    {
+        guard let minimumSnapshotUpdatedAt,
+              let stored = self.codexUsageCredits,
+              stored.receivedAt >= minimumSnapshotUpdatedAt,
+              stored.accountKey == self.codexCreditsRefreshKey(expectedGuard: expectedGuard)
+        else { return nil }
+        return stored.credits
+    }
+
     func refreshCreditsIfNeeded(minimumSnapshotUpdatedAt: Date? = nil) async {
         guard self.isEnabled(.codex) else { return }
         var expectedGuard = self.freshCodexAccountScopedRefreshGuard()
@@ -91,7 +121,14 @@ extension UsageStore {
             return
         }
         do {
-            let credits = try await self.loadLatestCodexCredits()
+            let credits = if let current = self.codexCreditsFromCurrentUsage(
+                expectedGuard: expectedGuard,
+                minimumSnapshotUpdatedAt: minimumSnapshotUpdatedAt)
+            {
+                current
+            } else {
+                try await self.loadLatestCodexCredits()
+            }
             guard !Task.isCancelled else { return }
             guard let applyGuard = self.codexScopedNonUsageSuccessApplyGuard(
                 expectedGuard: expectedGuard) else { return }

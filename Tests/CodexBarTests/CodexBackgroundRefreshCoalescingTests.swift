@@ -44,6 +44,85 @@ struct CodexBackgroundRefreshCoalescingTests {
     }
 
     @Test
+    func `forced refresh reuses credits from the usage fetch instead of fetching again`() async throws {
+        let settings = try self.makeSettingsStore(
+            suite: "CodexBackgroundRefreshCoalescingTests-credits-from-usage")
+        settings.statusChecksEnabled = false
+        settings.openAIWebAccessEnabled = false
+        let managedAccount = try Self.installManagedAccount(
+            email: "managed@example.com",
+            settings: settings)
+        defer { try? FileManager.default.removeItem(atPath: managedAccount.managedHomePath) }
+
+        let store = self.makeStore(settings: settings)
+        var loaderCalls = 0
+        store._test_providerRefreshOverride = { _ in
+            // A successful usage fetch returns the balance with the rate limits.
+            store.rememberCodexUsageCredits(CreditsSnapshot(remaining: 42, events: [], updatedAt: Date()))
+        }
+        store._test_codexCreditsLoaderOverride = {
+            loaderCalls += 1
+            return CreditsSnapshot(remaining: 7, events: [], updatedAt: Date())
+        }
+        store._test_tokenUsageRefreshOverride = { _, _ in }
+        defer {
+            store._test_providerRefreshOverride = nil
+            store._test_codexCreditsLoaderOverride = nil
+            store._test_tokenUsageRefreshOverride = nil
+        }
+
+        await store.refresh(forceTokenUsage: true)
+
+        #expect(loaderCalls == 0)
+        #expect(store.credits?.remaining == 42)
+    }
+
+    @Test
+    func `credits from an earlier cycle or another account are fetched again`() async throws {
+        let settings = try self.makeSettingsStore(
+            suite: "CodexBackgroundRefreshCoalescingTests-credits-reuse-bounds")
+        settings.statusChecksEnabled = false
+        settings.openAIWebAccessEnabled = false
+        let managedAccount = try Self.installManagedAccount(
+            email: "managed@example.com",
+            settings: settings)
+        defer { try? FileManager.default.removeItem(atPath: managedAccount.managedHomePath) }
+
+        let store = self.makeStore(settings: settings)
+        var loaderCalls = 0
+        store._test_providerRefreshOverride = { _ in }
+        store._test_codexCreditsLoaderOverride = {
+            loaderCalls += 1
+            return CreditsSnapshot(remaining: 7, events: [], updatedAt: Date())
+        }
+        store._test_tokenUsageRefreshOverride = { _, _ in }
+        defer {
+            store._test_providerRefreshOverride = nil
+            store._test_codexCreditsLoaderOverride = nil
+            store._test_tokenUsageRefreshOverride = nil
+        }
+
+        // Received before this refresh started.
+        store.rememberCodexUsageCredits(
+            CreditsSnapshot(remaining: 42, events: [], updatedAt: Date()),
+            now: Date().addingTimeInterval(-60))
+        await store.refresh(forceTokenUsage: true)
+        #expect(loaderCalls == 1)
+        #expect(store.credits?.remaining == 7)
+
+        // Received during this cycle, but for a different account.
+        store._test_providerRefreshOverride = { _ in
+            store.codexUsageCredits = CodexUsageCredits(
+                credits: CreditsSnapshot(remaining: 42, events: [], updatedAt: Date()),
+                accountKey: "live|email:other@example.com|account:nil|auth:nil",
+                receivedAt: Date())
+        }
+        await store.refresh(forceTokenUsage: true)
+        #expect(loaderCalls == 2)
+        #expect(store.credits?.remaining == 7)
+    }
+
+    @Test
     func `rapid regular refreshes coalesce concurrent Codex credits fetches`() async throws {
         let settings = try self.makeSettingsStore(
             suite: "CodexBackgroundRefreshCoalescingTests-credits-coalescing")

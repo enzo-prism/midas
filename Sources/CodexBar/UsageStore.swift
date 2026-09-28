@@ -171,6 +171,8 @@ final class UsageStore {
         @escaping (String) -> Void,
         Bool,
         TimeInterval) async throws -> OpenAIDashboardSnapshot)?
+    /// Credits returned alongside the latest Codex usage fetch, reused by the credits refresh in the same cycle.
+    @ObservationIgnored var codexUsageCredits: CodexUsageCredits?
     @ObservationIgnored var _test_codexCreditsLoaderOverride: (@MainActor () async throws -> CreditsSnapshot)?
     @ObservationIgnored var _test_widgetSnapshotSaveOverride: (@MainActor (WidgetSnapshot) async -> Void)?
     @ObservationIgnored var _test_widgetSnapshotSaveResultOverride: (@MainActor (
