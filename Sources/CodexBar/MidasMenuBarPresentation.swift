@@ -90,7 +90,8 @@ struct MidasMenuBarPresentation: Equatable {
         self.attention = !selectedIncidents.isEmpty || displayed.contains { item in
             item.error != nil || Self.quota(item).map { $0.remainingPercent <= 10 } == true
                 || item.metrics.contains { metric in
-                    item.provider != .meta && metric.id != "cursor-models" && metric.remainingPercent <= 10
+                    item.provider != .meta && metric.id != "cursor-models" && metric.statusText == nil
+                        && metric.remainingPercent <= 10
                 }
         }
         let total = MidasTotalSpend(presentations: unique)
@@ -174,10 +175,12 @@ struct MidasMenuBarPresentation: Equatable {
             text += item.provider == .codex ? "weekly quota unavailable" : "quota unavailable"
             if let activity = item.activitySummary { text += "; \(activity)" }
         }
-        for metric in item.metrics where item.provider != .meta && metric.id != "cursor-models"
-            && metric.remainingPercent.isFinite
-        {
-            text += "; \(metric.title): \(metric.remainingPercent.formatted()) percent remaining"
+        for metric in item.metrics where item.provider != .meta && metric.id != "cursor-models" {
+            if let status = metric.statusText {
+                text += "; \(metric.title): \(status.lowercased())"
+            } else if metric.remainingPercent.isFinite {
+                text += "; \(metric.title): \(metric.remainingPercent.formatted()) percent remaining"
+            }
         }
         if !hideSpend, let spend = item.spend {
             text += "; \(spend.title): \(spend.value) \(spend.currency), \(spend.period)"

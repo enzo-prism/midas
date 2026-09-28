@@ -9,6 +9,10 @@ Bundled from the public SVGL catalog on 2026-09-04. No runtime network requests.
 - https://svgl.app/library/claude-ai-icon.svg
 - https://svgl.app/library/meta.svg
 
+Added 2026-09-27:
+
+- https://svgl.app/library/grok-light.svg → `MidasLogo-grok.svg` (fill set to black; geometry unchanged and matching the official https://grok.com/images/favicon.svg mark). Rendered as a monochrome template image beside Cursor's Grok Bot allowance to identify that service. Grok is a trademark of xAI; brand reference: https://x.ai/legal/brand-guidelines.
+
 Source catalog: https://svgl.app/ · repository: https://github.com/pheralb/svgl
 Provider marks remain the property of their respective owners. Brand references: https://openai.com/codex/, https://cursor.com/brand, https://claude.ai/, https://about.meta.com/brand/resources/.
 

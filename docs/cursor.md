@@ -86,9 +86,21 @@ dashboard language, from the same endpoints as cursor.com/dashboard/usage:
     weekly (`UsageFormatter` renders "Trial ends …" verbatim).
   - A zero allowance with no live trial is hidden.
   - Payloads with neither field keep showing any reported percent.
+  - `hasAvailableUsage: false` reads as exhausted (100% used), even if the percent lags.
+  - Decoding is lenient: percents as numbers or numeric strings, dates as ISO-8601 or epoch
+    seconds/milliseconds, flags as booleans or 0/1.
 
-Both calls are best-effort with the web session cookies: failure hides that row
-instead of erroring (team accounts needing a teamId body, plans without Grok).
+Both calls are best-effort with the web session cookies and never fail the Cursor refresh. Each is
+retried once after a transient failure (8 s timeout per attempt), and its raw answer or failure is
+appended to the snapshot's debug JSON (`--- get-sand-usage-status ---`).
+
+- A 4xx other than 401/403/408/429 means the plan omits the feature (or a team account needs a
+  teamId body): that row is hidden.
+- A transport error, 5xx, auth failure, or undecodable body means Grok Bot usage is **unavailable**
+  (`CursorStatusSnapshot.grokBotUnavailableReason`). The Grok Bot row stays, marked unavailable
+  (`usageKnown: false`), instead of silently disappearing.
+- In the app, an unavailable reading keeps the last good Grok Bot value for the same account, marked
+  last known, until that week's reset (`UsageStore.retainingCursorGrokBot`). Trials are not carried forward.
 `sand-*` spend belongs to the Grok Bot window; `autoBucketModels` defines the
 Cursor Models pool; everything else counts toward Other Models.
 

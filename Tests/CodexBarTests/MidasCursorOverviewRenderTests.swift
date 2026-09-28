@@ -12,7 +12,12 @@ struct MidasCursorOverviewRenderTests {
         guard let output = ProcessInfo.processInfo.environment["MIDAS_PREVIEW_OUTPUT"] else { return }
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         let now = Date()
-        for (label, trial) in [("cursor-trio", false), ("cursor-grok-trial", true)] {
+        let cases = [
+            ("cursor-trio", false, false),
+            ("cursor-grok-trial", true, false),
+            ("cursor-grok-unavailable", false, true),
+        ]
+        for (label, trial, unavailable) in cases {
             let status = CursorStatusSnapshot(
                 planPercentUsed: 28,
                 planUsedUSD: 5.6,
@@ -29,9 +34,10 @@ struct MidasCursorOverviewRenderTests {
                 rawJSON: nil,
                 cursorModelsUsedPercent: 15,
                 otherModelsUsedPercent: 62,
-                grokBotWeeklyUsedPercent: 91,
+                grokBotWeeklyUsedPercent: unavailable ? nil : 91,
                 grokBotWeeklyReset: trial ? nil : now.addingTimeInterval(3 * 86400),
-                grokBotTrialEndsAt: trial ? now.addingTimeInterval(5 * 86400) : nil)
+                grokBotTrialEndsAt: trial ? now.addingTimeInterval(5 * 86400) : nil,
+                grokBotUnavailableReason: unavailable ? "HTTP 500" : nil)
             let snapshot = status.toUsageSnapshot()
             let card = try UsageMenuCardView.Model.make(.init(
                 provider: .cursor,

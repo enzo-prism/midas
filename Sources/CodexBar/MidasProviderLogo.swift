@@ -46,6 +46,7 @@ enum MidasProviderLogoLoader {
     }
 
     private static var cache: [CacheKey: NSImage] = [:]
+    private static var templateCache: [String: NSImage] = [:]
 
     static func resourceName(for provider: UsageProvider, dark: Bool) -> String? {
         switch provider {
@@ -64,6 +65,25 @@ enum MidasProviderLogoLoader {
         }
         let bundledName = role == .panel ? self.resourceName(for: provider, dark: dark) : nil
         let name = bundledName ?? ProviderDescriptorRegistry.descriptor(for: provider).branding.iconResourceName
+        guard let image = self.render(resourceName: name, size: size) else { return nil }
+        image.isTemplate = bundledName == nil
+        self.cache[key] = image
+        return image.copy() as? NSImage
+    }
+
+    /// A bundled monochrome mark rendered as a template image, so it follows the surrounding text color.
+    static func templateImage(named name: String, size: CGFloat) -> NSImage? {
+        let key = "\(name)@\(size)"
+        if let cached = self.templateCache[key] {
+            return cached.copy() as? NSImage
+        }
+        guard let image = self.render(resourceName: name, size: size) else { return nil }
+        image.isTemplate = true
+        self.templateCache[key] = image
+        return image.copy() as? NSImage
+    }
+
+    private static func render(resourceName name: String, size: CGFloat) -> NSImage? {
         let bundle: Bundle = {
             if let url = Bundle.main.url(forResource: "CodexBar_CodexBar", withExtension: "bundle"),
                let resourceBundle = Bundle(url: url)
@@ -80,13 +100,10 @@ enum MidasProviderLogoLoader {
         else { return nil }
         let bounds = NSRect(x: 0, y: 0, width: size, height: size)
         let destination = self.contentRect(sourceSize: source.size, canvasSize: size)
-        let image = NSImage(size: bounds.size, flipped: false) { _ in
+        return NSImage(size: bounds.size, flipped: false) { _ in
             source.draw(in: destination, from: .zero, operation: .sourceOver, fraction: 1)
             return true
         }
-        image.isTemplate = bundledName == nil
-        self.cache[key] = image
-        return image.copy() as? NSImage
     }
 
     /// CoreSVG treats CSS `1em` dimensions as one point. Use the SVG's actual coordinate space.

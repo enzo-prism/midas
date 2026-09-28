@@ -35,7 +35,9 @@ The implementation notes below also preserve older Midas presentation decisions.
   reset time, and its tooltip notes that the all-models weekly limit still applies. Cursor pins its
   dashboard trio (`MidasCursorLimits`): **Cursor Models**, **Other Models**, and **Grok Bot weekly**
   (or **Grok Bot trial**), falling back to Total when the pools are unreported; Total stays the hero for
-  the menu-bar ring. Other providers show one headline limit plus any tighter window.
+  the menu-bar ring. Grok Bot carries a small monochrome Grok mark (`MidasLogo-grok`, a template image).
+  When Cursor does not return Grok Bot usage, the row keeps the last known value until its weekly reset,
+  or shows **Unavailable** with no bar; it never becomes the headline or a low-quota warning. Other providers show one headline limit plus any tighter window.
 - **Usage window:** resizable provider navigation, Usage and Costs views, period controls,
   history, model breakdowns where available, and source-aware cost labels. Metered consumption,
   provider-reported costs, and API-equivalent estimates are distinct meanings.

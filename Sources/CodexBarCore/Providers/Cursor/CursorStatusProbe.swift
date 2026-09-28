@@ -434,6 +434,72 @@ public struct CursorSandUsageStatus: Codable, Sendable {
         self.sandTrialExpiresAt = sandTrialExpiresAt
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case currentPeriodStart
+        case nextResetTimestampUtc
+        case usagePercent
+        case hasAvailableUsage
+        case hasNonZeroIncludedLimit
+        case grokPlanLabel
+        case includedLimitZero
+        case sandTrialExpiresAt
+    }
+
+    /// Tolerates the shapes the dashboard has used: percents as numbers or numeric strings, dates as ISO-8601
+    /// strings or epoch numbers, and flags as booleans or 0/1. One odd field must not hide the whole row.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.currentPeriodStart = Self.lenientDate(container, .currentPeriodStart)
+        self.nextResetTimestampUtc = Self.lenientDate(container, .nextResetTimestampUtc)
+        self.usagePercent = Self.lenientNumber(container, .usagePercent)
+        self.hasAvailableUsage = Self.lenientBool(container, .hasAvailableUsage)
+        self.hasNonZeroIncludedLimit = Self.lenientBool(container, .hasNonZeroIncludedLimit)
+        self.grokPlanLabel = try? container.decodeIfPresent(String.self, forKey: .grokPlanLabel)
+        self.includedLimitZero = Self.lenientBool(container, .includedLimitZero)
+        self.sandTrialExpiresAt = Self.lenientDate(container, .sandTrialExpiresAt)
+    }
+
+    private static func lenientNumber(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> Double? {
+        if let value = try? container.decodeIfPresent(Double.self, forKey: key) { return value }
+        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
+            return Double(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
+    private static func lenientBool(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> Bool? {
+        if let value = try? container.decodeIfPresent(Bool.self, forKey: key) { return value }
+        if let value = try? container.decodeIfPresent(Int.self, forKey: key) { return value != 0 }
+        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
+            switch text.lowercased() {
+            case "true", "1": return true
+            case "false", "0": return false
+            default: return nil
+            }
+        }
+        return nil
+    }
+
+    /// Normalizes epoch seconds or milliseconds to the ISO-8601 text the rest of the model expects.
+    private static func lenientDate(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> String? {
+        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
+            guard let epoch = Double(text) else { return text }
+            return Self.isoString(epoch: epoch)
+        }
+        if let epoch = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return Self.isoString(epoch: epoch)
+        }
+        return nil
+    }
+
+    private static func isoString(epoch: Double) -> String? {
+        guard epoch.isFinite, epoch > 0 else { return nil }
+        let seconds = epoch > 100_000_000_000 ? epoch / 1000 : epoch
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date(timeIntervalSince1970: seconds))
+    }
+
     public struct Allowance: Equatable, Sendable {
         public let usedPercent: Double
         /// Weekly reset for an included allowance; nil for a trial.
@@ -447,9 +513,12 @@ public struct CursorSandUsageStatus: Codable, Sendable {
     /// Included allowances keep their weekly reset. An unexpired trial shows its end date instead of a reset.
     /// A zero included allowance with no live trial is hidden rather than drawn as an empty bar.
     /// Payloads that report neither allowance field keep the previous behavior and show any usage percent.
+    /// When Cursor says no usage is left (`hasAvailableUsage: false`), the allowance is exhausted even if the
+    /// reported percent lags behind or is missing.
     public func allowance(now: Date = Date()) -> Allowance? {
-        guard let usagePercent, usagePercent.isFinite else { return nil }
-        let used = max(0, min(100, usagePercent))
+        let exhausted = self.hasAvailableUsage == false
+        guard let reported = self.usagePercent ?? (exhausted ? 100 : nil), reported.isFinite else { return nil }
+        let used = exhausted ? 100 : max(0, min(100, reported))
         let hasIncluded = self.includedLimitZero.map { !$0 } ?? self.hasNonZeroIncludedLimit
         let trialEnd = Self.parseDate(self.sandTrialExpiresAt)
         if hasIncluded == true || (hasIncluded == nil && trialEnd == nil) {
@@ -566,6 +635,9 @@ public struct CursorStatusSnapshot: Sendable {
     public let grokBotWeeklyReset: Date?
     /// End of a Grok Bot trial allowance (nil for included allowances).
     public let grokBotTrialEndsAt: Date?
+    /// Why Grok Bot usage could not be read on this refresh, when the account may have an allowance but Cursor
+    /// did not answer. Nil when usage was read or the plan has no Grok Bot allowance.
+    public let grokBotUnavailableReason: String?
 
     /// Whether this is a legacy request-based plan (vs token-based)
     public var isLegacyRequestPlan: Bool {
@@ -613,7 +685,8 @@ public struct CursorStatusSnapshot: Sendable {
         otherModelsUsedPercent: Double? = nil,
         grokBotWeeklyUsedPercent: Double? = nil,
         grokBotWeeklyReset: Date? = nil,
-        grokBotTrialEndsAt: Date? = nil)
+        grokBotTrialEndsAt: Date? = nil,
+        grokBotUnavailableReason: String? = nil)
     {
         self.planPercentUsed = planPercentUsed
         self.autoPercentUsed = autoPercentUsed
@@ -641,6 +714,7 @@ public struct CursorStatusSnapshot: Sendable {
         self.grokBotWeeklyUsedPercent = grokBotWeeklyUsedPercent
         self.grokBotWeeklyReset = grokBotWeeklyReset
         self.grokBotTrialEndsAt = grokBotTrialEndsAt
+        self.grokBotUnavailableReason = grokBotUnavailableReason
     }
 
     /// Convert to UsageSnapshot for the common provider interface
@@ -767,6 +841,17 @@ public struct CursorStatusSnapshot: Sendable {
                     resetsAt: trialEnd == nil ? self.grokBotWeeklyReset : nil,
                     resetDescription: trialEnd.map { Self.formatTrialEndDate($0) }
                         ?? self.grokBotWeeklyReset.map { Self.formatResetDate($0) }))]
+        } else if self.grokBotUnavailableReason != nil {
+            // Keep the row so the overview says Grok Bot is unavailable instead of silently dropping it.
+            extraWindows = (extraWindows ?? []) + [NamedRateWindow(
+                id: "cursor-grok-bot",
+                title: "Grok Bot",
+                window: RateWindow(
+                    usedPercent: 0,
+                    windowMinutes: 7 * 24 * 60,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                usageKnown: false)]
         }
 
         let identity = ProviderIdentitySnapshot(
@@ -1358,9 +1443,9 @@ public struct CursorStatusProbe: Sendable {
             combinedRawJSON = (combinedRawJSON ?? "") + "\n\n--- /api/usage response ---\n" + usageJSON
         }
 
-        // Dashboard pools (Cursor Models / Other Models / Grok Bot weekly). Best effort:
-        // plans without the feature, or team accounts needing a teamId body, yield nil
-        // and the corresponding rows stay hidden.
+        // Dashboard pools (Cursor Models / Other Models / Grok Bot weekly). Best effort: plans without the
+        // feature, or team accounts needing a teamId body, are hidden; failures are recorded for Grok Bot and
+        // in the debug output instead of vanishing.
         async let periodUsage = self.fetchDashboard(
             path: "api/dashboard/get-current-period-usage",
             cookieHeader: cookieHeader,
@@ -1370,14 +1455,18 @@ public struct CursorStatusProbe: Sendable {
             cookieHeader: cookieHeader,
             as: CursorSandUsageStatus.self)
         let (resolvedPeriodUsage, resolvedSandStatus) = await (periodUsage, sandStatus)
+        combinedRawJSON = (combinedRawJSON ?? "")
+            + "\n\n--- get-current-period-usage ---\n" + resolvedPeriodUsage.debugText
+            + "\n\n--- get-sand-usage-status ---\n" + resolvedSandStatus.debugText
 
         return self.parseUsageSummary(
             usageSummary,
             userInfo: userInfo,
             rawJSON: combinedRawJSON,
             requestUsage: requestUsage,
-            periodUsage: resolvedPeriodUsage,
-            sandStatus: resolvedSandStatus)
+            periodUsage: resolvedPeriodUsage.value,
+            sandStatus: resolvedSandStatus.value,
+            sandFailure: resolvedSandStatus.failure)
     }
 
     private func fetchUsageSummary(cookieHeader: String) async throws -> (CursorUsageSummary, String) {
@@ -1453,30 +1542,78 @@ public struct CursorStatusProbe: Sendable {
         return (usage, rawJSON)
     }
 
-    /// Best-effort dashboard POST (`{}` body, web session cookies). Returns nil when the
-    /// plan omits the feature, the account needs a teamId body, or the call fails —
-    /// callers treat nil as "row hidden", never as an error.
-    private func fetchDashboard<RPC: Decodable>(
+    /// Outcome of a best-effort dashboard POST.
+    enum DashboardResult<RPC: Sendable>: Sendable {
+        case value(RPC, rawJSON: String)
+        /// A 4xx other than an auth failure: the plan omits the feature or the account needs a teamId body.
+        case notOffered(statusCode: Int)
+        /// Transport, server, auth, or decode failure; the account may still have the feature.
+        case failed(String)
+
+        var value: RPC? {
+            if case let .value(value, _) = self { return value }
+            return nil
+        }
+
+        var failure: String? {
+            if case let .failed(reason) = self { return reason }
+            return nil
+        }
+
+        var debugText: String {
+            switch self {
+            case let .value(_, rawJSON): rawJSON
+            case let .notOffered(statusCode): "HTTP \(statusCode) (not offered for this account)"
+            case let .failed(reason): "failed: \(reason)"
+            }
+        }
+    }
+
+    /// Dashboard POST (`{}` body, web session cookies), retried once after a transient failure. These rows are
+    /// optional: callers never fail the Cursor refresh because of them.
+    private func fetchDashboard<RPC: Decodable & Sendable>(
         path: String,
         cookieHeader: String,
-        as type: RPC.Type) async -> RPC?
+        as type: RPC.Type) async -> DashboardResult<RPC>
+    {
+        let first = await self.fetchDashboardOnce(path: path, cookieHeader: cookieHeader, as: type)
+        guard case .failed = first, !Task.isCancelled else { return first }
+        return await self.fetchDashboardOnce(path: path, cookieHeader: cookieHeader, as: type)
+    }
+
+    private func fetchDashboardOnce<RPC: Decodable & Sendable>(
+        path: String,
+        cookieHeader: String,
+        as type: RPC.Type) async -> DashboardResult<RPC>
     {
         var request = URLRequest(url: self.baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
-        request.timeoutInterval = self.timeout
+        request.timeoutInterval = min(self.timeout, 8)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("https://cursor.com", forHTTPHeaderField: "Origin")
         request.setValue("https://cursor.com/dashboard/usage", forHTTPHeaderField: "Referer")
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
         request.httpBody = Data("{}".utf8)
-        guard let (data, response) = try? await self.urlSession.data(for: request),
-              let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200
-        else {
-            return nil
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await self.urlSession.data(for: request)
+        } catch {
+            return .failed(error.localizedDescription)
         }
-        return try? JSONDecoder().decode(type, from: data)
+        guard let httpResponse = response as? HTTPURLResponse else { return .failed("Invalid response") }
+        let status = httpResponse.statusCode
+        if (400..<500).contains(status), status != 401, status != 403, status != 408, status != 429 {
+            return .notOffered(statusCode: status)
+        }
+        guard status == 200 else { return .failed("HTTP \(status)") }
+        let rawJSON = String(data: data, encoding: .utf8) ?? "<binary>"
+        do {
+            return try .value(JSONDecoder().decode(type, from: data), rawJSON: rawJSON)
+        } catch {
+            return .failed("Decode failed: \(error.localizedDescription)")
+        }
     }
 
     func parseUsageSummary(
@@ -1485,7 +1622,8 @@ public struct CursorStatusProbe: Sendable {
         rawJSON: String?,
         requestUsage: CursorUsageResponse? = nil,
         periodUsage: CursorPeriodUsage? = nil,
-        sandStatus: CursorSandUsageStatus? = nil) -> CursorStatusSnapshot
+        sandStatus: CursorSandUsageStatus? = nil,
+        sandFailure: String? = nil) -> CursorStatusSnapshot
     {
         func parseBillingCycleDate(_ dateString: String?) -> Date? {
             guard let dateString else { return nil }
@@ -1624,7 +1762,8 @@ public struct CursorStatusProbe: Sendable {
             otherModelsUsedPercent: otherModelsUsed,
             grokBotWeeklyUsedPercent: grokBotAllowance?.usedPercent,
             grokBotWeeklyReset: grokBotAllowance?.resetsAt,
-            grokBotTrialEndsAt: grokBotAllowance?.trialEndsAt)
+            grokBotTrialEndsAt: grokBotAllowance?.trialEndsAt,
+            grokBotUnavailableReason: grokBotAllowance == nil && sandStatus == nil ? sandFailure : nil)
     }
 }
 

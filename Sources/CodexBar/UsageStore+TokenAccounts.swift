@@ -1235,7 +1235,10 @@ extension UsageStore {
                 guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else {
                     return nil as UsageSnapshot?
                 }
-                let backfilled = labeled.backfillingResetTimes(from: self.lastKnownResetSnapshots[provider])
+                let retained = provider == .cursor
+                    ? Self.retainingCursorGrokBot(labeled, previous: self.snapshots[.cursor])
+                    : labeled
+                let backfilled = retained.backfillingResetTimes(from: self.lastKnownResetSnapshots[provider])
                 self.handleQuotaWarningTransitions(provider: provider, snapshot: backfilled)
                 self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
                 self.lastKnownResetSnapshots[provider] = backfilled

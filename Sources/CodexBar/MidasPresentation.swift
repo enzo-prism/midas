@@ -26,28 +26,49 @@ struct MidasQuotaMetric: Identifiable {
     let resetText: String?
     let helpText: String?
     var resetsAt: Date?
+    /// Replaces the percentage when the reading is unavailable; such a row has no bar.
+    var statusText: String?
+    /// Bundled template mark shown before the title (for example Grok Bot).
+    var iconAssetName: String?
+    /// A previous reading kept through a refresh that did not return one.
+    var isLastKnown = false
 
     var valueText: String {
-        "\(Int(self.remainingPercent.rounded()))% left"
+        self.statusText ?? "\(Int(self.remainingPercent.rounded()))% left"
     }
 
     var isExhausted: Bool {
-        self.remainingPercent <= 0
+        self.statusText == nil && self.remainingPercent <= 0
     }
 
-    func retitled(_ title: String) -> Self {
+    func retitled(_ title: String, helpText: String? = nil) -> Self {
         var copy = Self(
             id: self.id,
             title: title,
             remainingPercent: self.remainingPercent,
             resetText: self.resetText,
-            helpText: self.helpText)
+            helpText: helpText ?? self.helpText)
         copy.resetsAt = self.resetsAt
+        copy.statusText = self.statusText
+        copy.iconAssetName = self.iconAssetName
+        copy.isLastKnown = self.isLastKnown
         return copy
     }
 
     static func make(_ metric: UsageMenuCardView.Model.Metric) -> Self? {
-        guard metric.statusText == nil, metric.percent.isFinite else { return nil }
+        if metric.statusText != nil {
+            // Only Cursor's Grok Bot keeps a row while its reading is unavailable, so it stays in the overview.
+            guard metric.id == MidasCursorLimits.grokBotID else { return nil }
+            var unavailable = Self(
+                id: metric.id,
+                title: metric.title,
+                remainingPercent: 0,
+                resetText: nil,
+                helpText: nil)
+            unavailable.statusText = "Unavailable"
+            return unavailable
+        }
+        guard metric.percent.isFinite else { return nil }
         let remaining = metric.percentStyle == .left ? metric.percent : 100 - metric.percent
         return Self(
             id: metric.id,
@@ -255,7 +276,8 @@ struct MidasProviderPresentation {
                 helpText: weekly.resetsAt?.formatted(date: .complete, time: .shortened),
                 resetsAt: weekly.resetsAt)
         } else {
-            hero = provider == .codex ? nil : quotaMetrics.first
+            // An unavailable reading (no percentage) never becomes the headline or menu-bar ring.
+            hero = provider == .codex ? nil : quotaMetrics.first { $0.statusText == nil }
         }
         if provider != .codex {
             for index in quotaMetrics.indices {
@@ -368,21 +390,26 @@ enum MidasCursorLimits {
     static let grokBotID = "cursor-grok-bot"
     static let grokBotWeeklyTitle = "Grok Bot weekly"
     static let grokBotTrialTitle = "Grok Bot trial"
+    static let grokBotIconAssetName = "MidasLogo-grok"
     static let poolIDs = [cursorModelsID, otherModelsID]
 
     static func arrange(_ metrics: [MidasQuotaMetric]) -> [MidasQuotaMetric] {
         metrics.map { metric in
             guard metric.id == self.grokBotID else { return metric }
-            let isTrial = metric.title.lowercased().contains("trial")
-            var result = metric.retitled(isTrial ? self.grokBotTrialTitle : self.grokBotWeeklyTitle)
-            result = MidasQuotaMetric(
-                id: result.id,
-                title: result.title,
-                remainingPercent: result.remainingPercent,
-                resetText: result.resetText,
-                helpText: isTrial
-                    ? "Cursor's Grok Bot trial allowance. It ends instead of resetting."
-                    : "Cursor's weekly Grok Bot allowance, separate from the monthly model pools.")
+            let lowered = metric.title.lowercased()
+            let isTrial = lowered.contains("trial")
+            let helpText = if metric.statusText != nil {
+                "Cursor didn't return Grok Bot usage on the last refresh. Midas will try again on the next one."
+            } else if lowered.contains("last known") {
+                "Last known Grok Bot usage: Cursor didn't return a fresh reading. Kept until the weekly reset."
+            } else if isTrial {
+                "Cursor's Grok Bot trial allowance. It ends instead of resetting."
+            } else {
+                "Cursor's weekly Grok Bot allowance, separate from the monthly model pools."
+            }
+            var result = metric.retitled(isTrial ? self.grokBotTrialTitle : self.grokBotWeeklyTitle, helpText: helpText)
+            result.iconAssetName = self.grokBotIconAssetName
+            result.isLastKnown = lowered.contains("last known")
             return result
         }
     }
