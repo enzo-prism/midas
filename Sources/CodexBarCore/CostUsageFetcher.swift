@@ -526,23 +526,9 @@ public struct CostUsageFetcher: Sendable {
                 meteredCostUSD: report.meteredCostUSD,
                 daily: report.daily.data))
         #else
-        let probe = CursorStatusProbe(browserDetection: BrowserDetection())
-        let snapshot = try await probe.fetch(cookieHeaderOverride: manual)
-        let daily = Self.cursorDailyReport(from: snapshot, now: now)
-        var tokenSnapshot = Self.tokenSnapshot(from: daily, now: now, historyDays: historyDays)
-        tokenSnapshot = CostUsageTokenSnapshot(
-            sessionTokens: tokenSnapshot.sessionTokens,
-            sessionCostUSD: tokenSnapshot.sessionCostUSD,
-            sessionRequests: tokenSnapshot.sessionRequests,
-            last30DaysTokens: tokenSnapshot.last30DaysTokens,
-            last30DaysCostUSD: tokenSnapshot.last30DaysCostUSD,
-            last30DaysRequests: tokenSnapshot.last30DaysRequests,
-            currencyCode: tokenSnapshot.currencyCode,
-            historyDays: tokenSnapshot.historyDays,
-            historyLabel: "Current billing cycle (Cursor web session)",
-            daily: tokenSnapshot.daily,
-            updatedAt: tokenSnapshot.updatedAt)
-        return tokenSnapshot
+        // Cursor's cookie-authenticated dashboard is macOS-only; the probe cannot run here.
+        _ = (manual, now, historyDays)
+        throw CursorStatusProbeError.notSupported
         #endif
     }
 
@@ -563,6 +549,7 @@ public struct CostUsageFetcher: Sendable {
         return .unknown
     }
 
+    #if os(macOS)
     /// Single-entry cycle report from a Cursor status snapshot.
     public static func cursorDailyReport(
         from snapshot: CursorStatusSnapshot,
@@ -606,6 +593,7 @@ public struct CostUsageFetcher: Sendable {
             modelBreakdowns: breakdowns)
         return CostUsageDailyReport(data: [entry], summary: nil)
     }
+    #endif
 
     private static func loadBedrockDailyReport(
         environment: [String: String],

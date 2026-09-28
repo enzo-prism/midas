@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Private ChatGPT analytics endpoints: values retain their reported units.
 public struct CodexCloudAccountUsage: Codable, Sendable, Equatable {
