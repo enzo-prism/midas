@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.41.0 — September 27, 2026
+
+- Keep Cursor's **Grok Bot weekly** bar on the overview, now with a small Grok mark. When cursor.com doesn't return Grok Bot usage, Midas retries once, then keeps the last known value until that week's reset, or shows **Unavailable** instead of silently dropping the row. A plan without a Grok Bot allowance still shows no bar, and an exhausted allowance reads 0% left even when Cursor's percent lags.
+- Keep Cursor spend with the right account: the estimate is tied to the Cursor account that produced it, switching accounts refetches right away, and spend read from a different signed-in Cursor session than your usage limits is rejected with an explanation instead of shown.
+- Count spend periods in each source's time zone: **This month** and **Last 30 days** now use your Mac's days for local history, so the month no longer rolls over at 5 PM on the US west coast. OpenAI cloud history and Anthropic cost reports keep UTC days.
+- Make Codex sign-in more reliable: overlapping refreshes rotate the Codex login token once instead of racing (which could force a re-login), a refresh interrupted mid-rotation can no longer lose the new token, `auth.json` stays owner-only, and each refresh makes one Codex usage request instead of two.
+- Keep Codex account rows honest: cached usage is marked last known only after it misses about two scheduled refreshes (never on a timer in Manual mode), and a cached reading can no longer attach to an account that moved to another workspace.
+
+Build 114. Also removes CodexBar's unused provider-registration macros (ported from upstream) and fixes the Linux CLI build.
+
 ## Midas 0.40.0 — September 24, 2026
 
 - Give Cursor three bars in Midas Air, like Claude: **Cursor Models**, **Other Models**, and **Grok Bot weekly**, each with % left and reset time, matching cursor.com's usage dashboard. You no longer have to open Cursor's details to see Grok Bot. Total still drives the menu-bar ring, and it replaces the two pools when Cursor doesn't report them.

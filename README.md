@@ -32,6 +32,12 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.41.0
+
+Cursor's Grok Bot bar stays put, with a Grok mark: a missed refresh keeps the last known value or says
+Unavailable instead of dropping the row. Cursor spend stays with the account that produced it, spend periods
+use your Mac's calendar days, and Codex sign-in no longer races on token refresh.
+
 ## Midas 0.40.0
 
 Cursor gets three bars, like Claude: **Cursor Models**, **Other Models**, and **Grok Bot weekly**, straight

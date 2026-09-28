@@ -6,14 +6,14 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-Source on `main` is version **0.40.0**, build **113**. 0.37.0 (build 109) was the first build with
+Source on `main` is version **0.41.0**, build **114**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The last **signed, notarized, Sparkle-published** binary is **0.39.0**, build **112**, tagged
-`v0.39.0-midas.1`; 0.36.0 (build 108) was the last CodexBar-identity build. Check GitHub releases for live
+The last **signed, notarized, Sparkle-published** binary is **0.40.0**, build **113**, tagged
+`v0.40.0-midas.1`; 0.36.0 (build 108) was the last CodexBar-identity build. Check GitHub releases for live
 binary status. The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
 ### Update feeds after 0.37.0
@@ -30,6 +30,20 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.41.0 changes
+
+Version 0.41.0, build 114 (PRs #12–#16):
+
+- `CodexOAuthRefreshCoordinator` single-flights Codex token rotation per `auth.json`;
+  `CodexOAuthCredentialsStore.save` forces 0600; credits reuse the usage response
+  (`rememberCodexUsageCredits`).
+- `MidasSpendPeriod` computes ranges in the source's reporting time zone (local scans vs UTC cloud/billed).
+- Cursor spend carries its owner (`CostUsageTokenSnapshot.accountEmail`, cost scope `cursor:<account>`);
+  `CursorSpendSnapshotCache` only stores owned values.
+- Grok Bot: lenient `CursorSandUsageStatus` decoding, retried dashboard calls, `grokBotUnavailableReason`,
+  `UsageStore.retainingCursorGrokBot`, and the `MidasLogo-grok` template mark.
+- Provider registration macros removed (upstream `faab45eb9`, `30506ca7f`, `22a07ef22`); Linux CLI CI is green.
 
 ## 0.40.0 changes
 
