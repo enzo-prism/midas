@@ -151,6 +151,11 @@ public enum CodexOAuthCredentialsStore {
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
+        // An atomic write that creates the file uses the umask (usually 0644); tokens must stay owner-only,
+        // matching the 0600 file the Codex CLI writes.
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: Int16(0o600))],
+            ofItemAtPath: url.path)
     }
 
     private static func parseLastRefresh(from raw: Any?) -> Date? {
