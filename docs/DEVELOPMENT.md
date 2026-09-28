@@ -102,8 +102,9 @@ CodexBar/
 1. Add a `UsageProvider` case in `Sources/CodexBarCore/Providers/Providers.swift`
 2. Add core descriptor/fetcher wiring under `Sources/CodexBarCore/Providers/YourProvider/`
 3. Add app-side implementation under `Sources/CodexBar/Providers/YourProvider/`
-4. Register the implementation in `ProviderImplementationRegistry`
-5. Add icon assets such as `Resources/ProviderIcon-yourprovider.svg`
+4. Register the descriptor in `ProviderDescriptorRegistry`
+5. Register the implementation in `ProviderImplementationRegistry`
+6. Add icon assets such as `Resources/ProviderIcon-yourprovider.svg`
 
 ### Debug Cookie Issues
 1. Enable Debug → Logging → "Enable file logging" or raise verbosity in the app settings.

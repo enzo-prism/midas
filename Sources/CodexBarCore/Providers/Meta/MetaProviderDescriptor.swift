@@ -1,4 +1,3 @@
-import CodexBarMacroSupport
 import Foundation
 
 /// Meta provider (Muse Code, powered by Muse Spark).
@@ -8,9 +7,9 @@ import Foundation
 /// `model_completed` token usage. No browser cookies or passwords are touched.
 /// An optional `META_API_KEY` (Meta Model API, `dev.meta.ai`) can be stored for
 /// future API-backed quota; the local log remains the usage source of truth.
-@ProviderDescriptorRegistration
-@ProviderDescriptorDefinition
 public enum MetaProviderDescriptor {
+    public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .meta,

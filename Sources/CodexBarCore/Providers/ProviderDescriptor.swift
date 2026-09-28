@@ -142,8 +142,9 @@ public enum ProviderDescriptorRegistry {
 
     public static func descriptor(for id: UsageProvider) -> ProviderDescriptor {
         self.ensureBootstrapped()
-        if let found = self.store.byID[id] { return found }
-        if let found = self.all.first(where: { $0.id == id }) { return found }
+        // `register` mutates the store under the lock, so reads take it too.
+        let found = self.lock.withLock { self.store.byID[id] }
+        if let found { return found }
         fatalError("Missing ProviderDescriptor for \(id.rawValue)")
     }
 
