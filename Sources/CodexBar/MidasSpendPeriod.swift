@@ -1,8 +1,9 @@
 import CodexBarCore
 import Foundation
 
-/// Selects reported daily date keys against UTC calendar boundaries.
-/// Source calendars must be disclosed; this does not rebin local-day aggregates into UTC.
+/// Selects reported daily date keys against calendar boundaries in the source's reporting time zone.
+/// Local transcript scans key days in this Mac's time zone; OpenAI cloud and Anthropic cost reports use UTC.
+/// The period must be computed in the same zone as the keys; this does not rebin aggregates between zones.
 enum MidasSpendPeriod: Equatable, Sendable {
     case currentMonth
     case rolling30Days
@@ -34,8 +35,10 @@ enum MidasSpendPeriod: Equatable, Sendable {
         let isPartial: Bool
     }
 
-    func range(now: Date = Date()) -> Range? {
-        let calendar = Self.calendar
+    static let utc = TimeZone(secondsFromGMT: 0)!
+
+    func range(now: Date = Date(), timeZone: TimeZone = .current) -> Range? {
+        let calendar = Self.calendar(timeZone)
         let today = calendar.startOfDay(for: now)
         let start: Date
         let end: Date
@@ -58,7 +61,7 @@ enum MidasSpendPeriod: Equatable, Sendable {
             start = first
             end = min(today, last)
         }
-        return Range(start: Self.key(start), end: Self.key(end))
+        return Range(start: Self.key(start, calendar: calendar), end: Self.key(end, calendar: calendar))
     }
 
     /// Missing dates mean zero only when a caller explicitly certifies that the source covers the range.
@@ -67,9 +70,10 @@ enum MidasSpendPeriod: Equatable, Sendable {
         snapshot: CostUsageTokenSnapshot,
         sourceCoverage: Range? = nil,
         costField: CostField = .cost,
+        timeZone: TimeZone = .current,
         now: Date = Date()) -> Amount?
     {
-        guard let range = self.range(now: now) else { return nil }
+        guard let range = self.range(now: now, timeZone: timeZone) else { return nil }
         guard snapshot.currencyCode == "USD" else {
             return Amount(dollars: nil, range: range, isPartial: true)
         }
@@ -104,14 +108,14 @@ enum MidasSpendPeriod: Equatable, Sendable {
         return Amount(dollars: amount, range: range, isPartial: partial)
     }
 
-    private static var calendar: Calendar {
+    private static func calendar(_ timeZone: TimeZone) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
         return calendar
     }
 
-    private static func key(_ date: Date) -> String {
-        let components = Self.calendar.dateComponents([.year, .month, .day], from: date)
+    private static func key(_ date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
 
@@ -119,8 +123,8 @@ enum MidasSpendPeriod: Equatable, Sendable {
         let parts = text.split(separator: "-")
         guard parts.count == 3, text.count == 10,
               let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]),
-              let date = Self.calendar.date(from: DateComponents(year: year, month: month, day: day))
+              let date = Self.calendar(Self.utc).date(from: DateComponents(year: year, month: month, day: day))
         else { return false }
-        return Self.key(date) == text
+        return Self.key(date, calendar: Self.calendar(Self.utc)) == text
     }
 }

@@ -81,7 +81,7 @@ struct MidasCloudUsageTests {
             pricedTokens: 1_000_000,
             observedTokens: 1_000_000,
             sampledAt: date,
-            lastUsageDay: CodexCloudAccountUsage.window(now: date).end)
+            lastUsageDay: CodexCloudAccountUsage.window(now: date, timeZone: .current).end)
         settings.midasCodexEstimateMode = .automatic
         store.repriceMidasCloudUsage()
         #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == 0.75)
@@ -101,7 +101,7 @@ struct MidasCloudUsageTests {
                 pricedTokens: 2_000_000,
                 observedTokens: 2_000_000,
                 sampledAt: date,
-                lastUsageDay: CodexCloudAccountUsage.window(now: date).end))
+                lastUsageDay: CodexCloudAccountUsage.window(now: date, timeZone: .current).end))
         store.repriceMidasCloudUsage()
         #expect(store.tokenSnapshots[.codex]?.last30DaysCostUSD == 1.25)
         #expect(store.tokenSnapshots[.codex]?.last30DaysTokens == 1_000_000)

@@ -81,11 +81,16 @@ public struct CodexCloudAccountUsage: Codable, Sendable, Equatable {
             fetchedAt: now)
     }
 
-    public static func window(now: Date) -> (start: String, end: String) {
+    /// OpenAI reports cloud days in UTC. Pass another zone only to window history keyed in that zone.
+    public static func window(
+        now: Date,
+        timeZone: TimeZone = TimeZone(secondsFromGMT: 0)!) -> (start: String, end: String)
+    {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = timeZone
         let start = calendar.date(byAdding: .day, value: -29, to: now)!
         let formatter = Self.dayFormatter()
+        formatter.timeZone = timeZone
         return (formatter.string(from: start), formatter.string(from: now))
     }
 

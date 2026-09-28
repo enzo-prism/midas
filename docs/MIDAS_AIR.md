@@ -181,7 +181,7 @@ in this inherited README are not Midas releases.
 - `MidasMenuBarPresentation.swift`, `MidasMenuBarView.swift`: typed status readings and passive native rendering.
 - `StatusItemController+MidasMenuBar.swift`: status-item integration, activity filtering, and freshness updates.
 - `MidasPanelView.swift`, `MidasProviderDetailView.swift`: compact surfaces.
-- `MidasSpendPeriod.swift`, `MidasSpendPeriodPicker.swift`: UTC period math and the inline period list.
+- `MidasSpendPeriod.swift`, `MidasSpendPeriodPicker.swift`: period math in each source’s reporting time zone (local scans vs. UTC cloud/billed days) and the inline period list.
 - `CodexAccountUsageSnapshotStore.swift`: last-known Codex quota hydration; match on non-conflicting identity, and treat managed `providerAccountID` as the visible workspace when `workspaceAccountID` is absent.
 - `MidasAppcast.swift`, `MidasSignedReleaseUpdater.swift`: public-feed ZIP download when Sparkle cannot run.
 - `MidasUsageWindowView.swift`, `MidasUsageHistoryView.swift`, `MidasCostPresentation.swift`: history and costs.
