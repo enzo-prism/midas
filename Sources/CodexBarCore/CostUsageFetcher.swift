@@ -524,7 +524,8 @@ public struct CostUsageFetcher: Sendable {
             meteredCostUSD: report.meteredCostUSD,
             costProvenance: Self.cursorCostProvenance(
                 meteredCostUSD: report.meteredCostUSD,
-                daily: report.daily.data))
+                daily: report.daily.data),
+            accountEmail: report.accountEmail)
         #else
         // Cursor's cookie-authenticated dashboard is macOS-only; the probe cannot run here.
         _ = (manual, now, historyDays)
@@ -681,7 +682,8 @@ public struct CostUsageFetcher: Sendable {
         now: Date,
         historyDays: Int = 30,
         meteredCostUSD: Double? = nil,
-        costProvenance: CostProvenance = .unknown) -> CostUsageTokenSnapshot
+        costProvenance: CostProvenance = .unknown,
+        accountEmail: String? = nil) -> CostUsageTokenSnapshot
     {
         // Pick the most recent day; break ties by cost/tokens to keep a stable "session" row.
         let currentDay = daily.data.max { lhs, rhs in
@@ -712,6 +714,7 @@ public struct CostUsageFetcher: Sendable {
             historyDays: historyDays,
             meteredCostUSD: meteredCostUSD,
             costProvenance: costProvenance,
+            accountEmail: accountEmail,
             daily: daily.data,
             updatedAt: now)
     }

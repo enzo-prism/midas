@@ -47,15 +47,18 @@ public enum CursorSpendSnapshotCache {
         return trimmed.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// Saves the estimate for its owning account. A snapshot whose account is unknown is not cached, since an
+    /// unowned value could later be shown under any account.
     @discardableResult
     public static func save(
         _ snapshot: CostUsageTokenSnapshot,
         accountEmail: String?,
         cacheRoot: URL? = nil) -> Bool
     {
+        guard let accountKey = self.normalizedAccountKey(accountEmail) else { return false }
         let payload = Payload(
             version: self.version,
-            accountKey: self.normalizedAccountKey(accountEmail),
+            accountKey: accountKey,
             snapshot: StoredSnapshot(
                 sessionTokens: snapshot.sessionTokens,
                 sessionCostUSD: snapshot.sessionCostUSD,
@@ -86,8 +89,8 @@ public enum CursorSpendSnapshotCache {
     }
 
     /// The cached snapshot, or nil when missing, unreadable, from another version or history window, or
-    /// from a different account. Pass nil while the account is not yet known (for example at launch); the
-    /// first successful refresh then replaces the value.
+    /// not owned by the given account (including an older value saved without an owner). Pass nil while the
+    /// account is not yet known (for example at launch); callers must re-check ownership once it is.
     public static func load(
         accountEmail: String?,
         historyDays: Int,
@@ -103,7 +106,7 @@ public enum CursorSpendSnapshotCache {
         else { return nil }
         let current = self.normalizedAccountKey(accountEmail)
         if let current {
-            guard payload.accountKey == nil || payload.accountKey == current else { return nil }
+            guard payload.accountKey == current else { return nil }
         }
         let stored = payload.snapshot
         return CostUsageTokenSnapshot(

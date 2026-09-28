@@ -222,10 +222,74 @@ struct CursorSpendReliabilityTests {
     }
 
     @Test
+    func `spend cache never stores or serves an unowned estimate for a known account`() throws {
+        let root = try Self.tempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(!CursorSpendSnapshotCache.save(Self.spendSnapshot(), accountEmail: nil, cacheRoot: root))
+        #expect(!CursorSpendSnapshotCache.save(Self.spendSnapshot(), accountEmail: "  ", cacheRoot: root))
+        #expect(!FileManager.default.fileExists(atPath: CursorSpendSnapshotCache.fileURL(cacheRoot: root).path))
+
+        // A value written before ownership was required has no account key.
+        #expect(CursorSpendSnapshotCache.save(Self.spendSnapshot(), accountEmail: "me@example.com", cacheRoot: root))
+        let url = CursorSpendSnapshotCache.fileURL(cacheRoot: root)
+        var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        json["accountKey"] = NSNull()
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        #expect(CursorSpendSnapshotCache.load(accountEmail: "me@example.com", historyDays: 30, cacheRoot: root) == nil)
+        #expect(CursorSpendSnapshotCache.load(accountEmail: nil, historyDays: 30, cacheRoot: root) != nil)
+        #expect(CursorSpendSnapshotCache.cachedAccountKey(cacheRoot: root) == nil)
+    }
+
+    // MARK: - Cost report ownership
+
+    private static func costReportStub(userInfoStatus: Int) -> ProviderHTTPTransportStub {
+        ProviderHTTPTransportStub { request in
+            if request.url?.path == "/api/auth/me" {
+                let response = HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: userInfoStatus,
+                    httpVersion: nil,
+                    headerFields: nil)!
+                return (Data(#"{"email":"Work@Example.com","sub":"user_1"}"#.utf8), response)
+            }
+            return self.ok(self.page(total: 1, events: [self.event(1_758_700_000_000)]))
+        }
+    }
+
+    private static func probe(_ stub: ProviderHTTPTransportStub) -> CursorStatusProbe {
+        CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0), urlSession: stub)
+    }
+
+    @Test
+    func `cost report records the account whose session produced it`() async throws {
+        let stub = Self.costReportStub(userInfoStatus: 200)
+        let report = try await Self.probe(stub).fetchCostReport(
+            since: nil,
+            until: nil,
+            cookieHeaderOverride: "WorkosCursorSessionToken=abc")
+
+        #expect(report.accountEmail == "Work@Example.com")
+        #expect(report.meteredCostUSD == 0.10)
+        let userInfoRequest = await stub.requests().first { $0.url?.path == "/api/auth/me" }
+        #expect(userInfoRequest?.value(forHTTPHeaderField: "Cookie") == "WorkosCursorSessionToken=abc")
+    }
+
+    @Test
+    func `cost report still succeeds when the account cannot be read`() async throws {
+        let report = try await Self.probe(Self.costReportStub(userInfoStatus: 500)).fetchCostReport(
+            since: nil,
+            until: nil,
+            cookieHeaderOverride: "WorkosCursorSessionToken=abc")
+
+        #expect(report.accountEmail == nil)
+        #expect(report.meteredCostUSD == 0.10)
+    }
+
+    @Test
     func `cache maintenance keeps the cursor spend file`() throws {
         let root = try Self.tempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        CursorSpendSnapshotCache.save(Self.spendSnapshot(), accountEmail: nil, cacheRoot: root)
+        CursorSpendSnapshotCache.save(Self.spendSnapshot(), accountEmail: "me@example.com", cacheRoot: root)
         _ = CostUsageCacheMaintenance.pruneStaleArtifacts(cacheRoot: root)
         #expect(FileManager.default.fileExists(atPath: CursorSpendSnapshotCache.fileURL(cacheRoot: root).path))
     }

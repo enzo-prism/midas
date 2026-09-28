@@ -73,6 +73,10 @@ extension UsageStore {
 
     func tokenCostScope(for provider: UsageProvider)
     -> (codexHomePath: String?, additionalHomes: [String], signature: String) {
+        if provider == .cursor {
+            // Cursor spend is account-owned; a different signed-in account is a different history.
+            return (nil, [], "cursor:" + (self.cursorStatusAccountKey ?? "unknown"))
+        }
         guard provider == .codex else {
             return (nil, [], provider.rawValue)
         }
@@ -181,12 +185,43 @@ extension UsageStore {
         return self.cursorSpendMatchesCurrentAccount()
     }
 
-    func persistCursorSpendSnapshot(_ snapshot: CostUsageTokenSnapshot) {
-        let email = self.snapshots[.cursor]?.identity?.accountEmail
-        self.cursorSpendAccountKey = CursorSpendSnapshotCache.normalizedAccountKey(email)
-        Task.detached(priority: .utility) {
-            CursorSpendSnapshotCache.save(snapshot, accountEmail: email)
+    /// The signed-in Cursor account from the latest usage snapshot. A token-account label stands in for a
+    /// missing email there, so only an address identifies an account.
+    var cursorStatusAccountKey: String? {
+        CursorSpendSnapshotCache.normalizedAccountKey(self.snapshots[.cursor]?.identity?.accountEmail)
+            .flatMap { $0.contains("@") ? $0 : nil }
+    }
+
+    /// Accepts a fresh Cursor estimate only for the signed-in account, then records and caches its owner.
+    /// Returns false when the cost report came from a different Cursor session than the usage limits.
+    func acceptCursorSpendSnapshot(_ snapshot: CostUsageTokenSnapshot) -> Bool {
+        let reported = CursorSpendSnapshotCache.normalizedAccountKey(snapshot.accountEmail)
+        let current = self.cursorStatusAccountKey
+        if let reported, let current, reported != current {
+            self.tokenSnapshots.removeValue(forKey: .cursor)
+            self.tokenErrors[.cursor] = "Cursor spend came from a different signed-in Cursor account than usage; "
+                + "sign out of the other account in your browser or set a manual cookie."
+            self.cursorSpendAccountKey = nil
+            return false
         }
+        let owner = reported ?? current
+        self.cursorSpendAccountKey = owner
+        let cacheRoot = self.cursorSpendCacheRoot
+        // Like the other on-disk stores, test stores persist only to an explicit root.
+        guard self.startupBehavior.automaticallyStartsBackgroundWork || cacheRoot != nil else { return true }
+        Task.detached(priority: .utility) {
+            CursorSpendSnapshotCache.save(snapshot, accountEmail: owner, cacheRoot: cacheRoot)
+        }
+        return true
+    }
+
+    /// Drops a shown Cursor estimate once the signed-in account is known to be someone else. Unowned estimates
+    /// (an older cache, or a report whose account was unknown) cannot be attributed, so they are dropped too.
+    func dropCursorSpendFromAnotherAccount() {
+        guard self.tokenSnapshots[.cursor] != nil, !self.cursorSpendMatchesCurrentAccount() else { return }
+        self.tokenSnapshots.removeValue(forKey: .cursor)
+        self.tokenErrors[.cursor] = nil
+        self.cursorSpendAccountKey = nil
     }
 
     /// Shows the last Cursor estimate right after launch, before cursor.com answers.
@@ -194,13 +229,17 @@ extension UsageStore {
         guard self.settings.costUsageEnabled, self.isEnabled(.cursor), self.tokenSnapshots[.cursor] == nil else {
             return
         }
-        let email = self.snapshots[.cursor]?.identity?.accountEmail
+        let email = self.cursorStatusAccountKey
         let historyDays = self.settings.costUsageHistoryDays
+        let cacheRoot = self.cursorSpendCacheRoot
         Task { @MainActor [weak self] in
             let loaded = await Task.detached(priority: .utility) {
                 (
-                    snapshot: CursorSpendSnapshotCache.load(accountEmail: email, historyDays: historyDays),
-                    accountKey: CursorSpendSnapshotCache.cachedAccountKey())
+                    snapshot: CursorSpendSnapshotCache.load(
+                        accountEmail: email,
+                        historyDays: historyDays,
+                        cacheRoot: cacheRoot),
+                    accountKey: CursorSpendSnapshotCache.cachedAccountKey(cacheRoot: cacheRoot))
             }.value
             guard let self, let snapshot = loaded.snapshot,
                   self.settings.costUsageEnabled, self.isEnabled(.cursor),
@@ -213,12 +252,10 @@ extension UsageStore {
         }
     }
 
-    /// A cached or kept estimate belongs to the signed-in Cursor account, or the account is not yet known.
+    /// A cached or kept estimate belongs to the signed-in Cursor account, or that account is not yet known.
+    /// Once it is known, an estimate without a recorded owner no longer matches.
     func cursorSpendMatchesCurrentAccount() -> Bool {
-        guard let current = CursorSpendSnapshotCache.normalizedAccountKey(
-            self.snapshots[.cursor]?.identity?.accountEmail),
-            let cached = self.cursorSpendAccountKey
-        else { return true }
-        return current == cached
+        guard let current = self.cursorStatusAccountKey else { return true }
+        return self.cursorSpendAccountKey == current
     }
 }
