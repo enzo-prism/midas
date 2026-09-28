@@ -273,7 +273,10 @@ extension UsageStore {
                 let resetBackfillSource = provider == .codex
                     ? self.codexLastKnownResetSnapshot(matching: context.codexExpectedGuard)
                     : self.lastKnownResetSnapshots[provider]
-                let backfilled = scoped.backfillingResetTimes(from: resetBackfillSource)
+                let retained = provider == .cursor
+                    ? Self.retainingCursorGrokBot(scoped, previous: self.snapshots[.cursor])
+                    : scoped
+                let backfilled = retained.backfillingResetTimes(from: resetBackfillSource)
                 self.handleQuotaWarningTransitions(provider: provider, snapshot: backfilled)
                 self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
                 self.lastKnownResetSnapshots[provider] = backfilled

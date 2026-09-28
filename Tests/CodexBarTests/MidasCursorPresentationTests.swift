@@ -1,3 +1,4 @@
+import AppKit
 import CodexBarCore
 import Foundation
 import Testing
@@ -55,6 +56,117 @@ struct MidasCursorPresentationTests {
         #expect(grok.resetsAt == nil)
         #expect(grok.resetText?.hasPrefix("Trial ends") == true)
         #expect(MidasAccountQuotaLayout.resetLine(grok, includesWindow: false).hasPrefix("Trial ends"))
+    }
+
+    @Test func exhaustedOtherModelsAndGrokBotAllStayOnTheOverview() throws {
+        // The reported layout: Other Models used up, Cursor Models mostly free, Grok Bot partly used.
+        let status = self.cursorSnapshot(cursorModels: 5, otherModels: 100, grokUsed: 30)
+        let overview = try MidasAccountQuotaLayout.overviewMetrics(self.presentation(status.toUsageSnapshot()))
+        #expect(overview.map(\.title) == ["Cursor Models", "Other Models", "Grok Bot weekly"])
+        #expect(overview.map(\.valueText) == ["95% left", "0% left", "70% left"])
+        #expect(overview.last?.iconAssetName == MidasCursorLimits.grokBotIconAssetName)
+    }
+
+    @Test func unavailableGrokBotStaysPinnedWithoutInventingUsage() throws {
+        let status = self.cursorSnapshot(grokUsed: nil, grokUnavailable: "HTTP 500")
+        let model = try self.presentation(status.toUsageSnapshot())
+        let overview = MidasAccountQuotaLayout.overviewMetrics(model)
+
+        #expect(overview.map(\.id) == [
+            MidasCursorLimits.cursorModelsID,
+            MidasCursorLimits.otherModelsID,
+            MidasCursorLimits.grokBotID,
+        ])
+        let grok = try #require(overview.last)
+        #expect(grok.title == "Grok Bot weekly")
+        #expect(grok.valueText == "Unavailable")
+        #expect(!grok.isExhausted)
+        #expect(grok.iconAssetName == MidasCursorLimits.grokBotIconAssetName)
+        #expect(MidasAccountQuotaLayout.resetLine(grok, includesWindow: false).contains("retrying"))
+        #expect(grok.helpText?.contains("didn't return") == true)
+        // An unavailable reading never becomes Cursor's headline.
+        #expect(model.hero?.id == "primary")
+    }
+
+    @Test func otherUnavailableRowsAreStillHidden() throws {
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 30, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: nil,
+            extraRateWindows: [NamedRateWindow(
+                id: MidasCursorLimits.otherModelsID,
+                title: "Other Models",
+                window: RateWindow(usedPercent: 0, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+                usageKnown: false)],
+            updatedAt: self.now)
+        let model = try self.presentation(snapshot)
+        #expect(!model.metrics.contains { $0.id == MidasCursorLimits.otherModelsID })
+    }
+
+    @Test func lastKnownGrokBotIsKeptUntilItsWeeklyReset() throws {
+        let previous = self.cursorSnapshot().toUsageSnapshot()
+        let failed = self.cursorSnapshot(grokUsed: nil, grokUnavailable: "timed out").toUsageSnapshot()
+
+        let retained = UsageStore.retainingCursorGrokBot(failed, previous: previous, now: self.now)
+        let grok = try #require(MidasAccountQuotaLayout.overviewMetrics(self.presentation(retained)).last)
+        #expect(grok.title == "Grok Bot weekly")
+        #expect(grok.valueText == "20% left")
+        #expect(grok.isLastKnown)
+        #expect(MidasAccountQuotaLayout.resetLine(grok, includesWindow: false, now: self.now).hasSuffix("last known"))
+
+        // Retaining again keeps a single marker.
+        let again = UsageStore.retainingCursorGrokBot(failed, previous: retained, now: self.now)
+        #expect(again.extraRateWindows?.first { $0.id == MidasCursorLimits.grokBotID }?.title
+            == "Grok Bot (last known)")
+    }
+
+    @Test func lastKnownGrokBotIsNotCarriedAcrossResetsAccountsOrPlans() {
+        let previous = self.cursorSnapshot().toUsageSnapshot()
+        let failed = self.cursorSnapshot(grokUsed: nil, grokUnavailable: "timed out").toUsageSnapshot()
+        func grok(_ snapshot: UsageSnapshot) -> NamedRateWindow? {
+            snapshot.extraRateWindows?.first { $0.id == MidasCursorLimits.grokBotID }
+        }
+
+        // The week rolled over.
+        let afterReset = UsageStore.retainingCursorGrokBot(
+            failed, previous: previous, now: self.now.addingTimeInterval(2 * 86400))
+        #expect(grok(afterReset)?.usageKnown == false)
+
+        // Another Cursor account.
+        let otherAccount = self.cursorSnapshot(grokUsed: nil, grokUnavailable: "timed out", email: "other@example.com")
+        #expect(grok(UsageStore.retainingCursorGrokBot(
+            otherAccount.toUsageSnapshot(), previous: previous, now: self.now))?.usageKnown == false)
+
+        // A fresh reading or a plan without Grok Bot is never replaced.
+        let fresh = self.cursorSnapshot(grokUsed: 50).toUsageSnapshot()
+        #expect(grok(UsageStore.retainingCursorGrokBot(fresh, previous: previous, now: self.now))?
+            .window.usedPercent == 50)
+        let notIncluded = self.cursorSnapshot(grokUsed: nil).toUsageSnapshot()
+        #expect(grok(UsageStore.retainingCursorGrokBot(notIncluded, previous: previous, now: self.now)) == nil)
+
+        // Trials have no weekly reset to bound them.
+        let trial = self.cursorSnapshot(grokTrialEndsAt: self.now.addingTimeInterval(5 * 86400)).toUsageSnapshot()
+        #expect(grok(UsageStore.retainingCursorGrokBot(failed, previous: trial, now: self.now))?.usageKnown == false)
+    }
+
+    @MainActor @Test func grokBotMarkRendersAsAVisibleTemplateImage() throws {
+        let image = try #require(MidasProviderLogoLoader.templateImage(
+            named: MidasCursorLimits.grokBotIconAssetName,
+            size: 64))
+        #expect(image.isTemplate)
+        let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        var occupied = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                let alpha = bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0
+                if alpha > 0.01 { occupied += 1 }
+                if x == 0 || y == 0 || x == bitmap.pixelsWide - 1 || y == bitmap.pixelsHigh - 1 {
+                    #expect(alpha < 0.01, "Grok mark has a clipped edge")
+                }
+            }
+        }
+        // The mark is two diagonal strokes; a truncated path would leave far fewer pixels.
+        #expect(occupied > bitmap.pixelsWide * bitmap.pixelsHigh / 20)
+        #expect(MidasProviderLogoLoader.templateImage(named: "MidasLogo-missing", size: 13) == nil)
     }
 
     @Test func modelSpendShareNeverMasqueradesAsRemainingQuota() throws {
@@ -180,7 +292,9 @@ struct MidasCursorPresentationTests {
         cursorModels: Double? = 20,
         otherModels: Double? = 45,
         grokUsed: Double? = 80,
-        grokTrialEndsAt: Date? = nil) -> CursorStatusSnapshot
+        grokTrialEndsAt: Date? = nil,
+        grokUnavailable: String? = nil,
+        email: String = "fixture@example.com") -> CursorStatusSnapshot
     {
         CursorStatusSnapshot(
             planPercentUsed: 30,
@@ -193,7 +307,7 @@ struct MidasCursorPresentationTests {
             billingCycleStart: self.now.addingTimeInterval(-10 * 86400),
             billingCycleEnd: self.now.addingTimeInterval(20 * 86400),
             membershipType: "pro",
-            accountEmail: "fixture@example.com",
+            accountEmail: email,
             accountName: nil,
             rawJSON: nil,
             cursorModelUsedUSD: 68,
@@ -202,7 +316,8 @@ struct MidasCursorPresentationTests {
             otherModelsUsedPercent: otherModels,
             grokBotWeeklyUsedPercent: grokUsed,
             grokBotWeeklyReset: grokTrialEndsAt == nil ? self.now.addingTimeInterval(86400) : nil,
-            grokBotTrialEndsAt: grokTrialEndsAt)
+            grokBotTrialEndsAt: grokTrialEndsAt,
+            grokBotUnavailableReason: grokUnavailable)
     }
 
     private func costDay(

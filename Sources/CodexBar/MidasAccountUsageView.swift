@@ -106,11 +106,14 @@ enum MidasAccountQuotaLayout {
     static func resetLine(_ metric: MidasQuotaMetric, includesWindow: Bool, now: Date = Date()) -> String {
         let window = metric.title == "This week" ? "Weekly" : metric.title
         let reset = metric.resetText?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let detail = if let date = metric.resetsAt, date <= now {
+        var detail = if metric.statusText != nil {
+            "Not returned by the provider · retrying"
+        } else if let date = metric.resetsAt, date <= now {
             "Reset pending update"
         } else {
             reset.flatMap { $0.isEmpty ? nil : $0 } ?? "Reset unavailable"
         }
+        if metric.isLastKnown { detail += " · last known" }
         return includesWindow ? "\(window) · \(detail)" : detail
     }
 }
@@ -296,23 +299,42 @@ extension StatusItemController {
 }
 
 struct MidasAccountQuotaBar: View {
+    static let iconSize: CGFloat = 13
+
     let metric: MidasQuotaMetric
     var label: String?
 
+    private var icon: NSImage? {
+        self.metric.iconAssetName.flatMap { MidasProviderLogoLoader.templateImage(named: $0, size: Self.iconSize) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 5) {
+                if self.label == nil, let icon = self.icon {
+                    Image(nsImage: icon)
+                        .renderingMode(.template)
+                        .resizable()
+                        .frame(width: Self.iconSize, height: Self.iconSize)
+                        .foregroundStyle(MidasTheme.secondaryText)
+                        .accessibilityHidden(true)
+                }
                 Text(self.label ?? self.metric.title)
                     .lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 8)
                 Text(self.metric.valueText).monospacedDigit()
+                    .foregroundStyle(self.metric.statusText == nil ? Color.primary : MidasTheme.secondaryText)
             }
             .font(.callout)
-            MidasRemainingBar(percent: self.metric.remainingPercent)
+            if self.metric.statusText == nil {
+                MidasRemainingBar(percent: self.metric.remainingPercent)
+                    .opacity(self.metric.isLastKnown ? 0.55 : 1)
+            }
             Text(MidasAccountQuotaLayout.resetLine(self.metric, includesWindow: self.label != nil))
                 .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 .help(self.metric.helpText ?? "")
         }
+        .help(self.metric.helpText ?? "")
     }
 }
 

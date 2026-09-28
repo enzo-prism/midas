@@ -390,6 +390,32 @@ public struct UsageSnapshot: Codable, Sendable {
             identity: identity)
     }
 
+    /// Keep this initializer-style copy in sync with UsageSnapshot fields so replacing windows never drops data.
+    public func withExtraRateWindows(_ extraRateWindows: [NamedRateWindow]?) -> UsageSnapshot {
+        UsageSnapshot(
+            primary: self.primary,
+            secondary: self.secondary,
+            tertiary: self.tertiary,
+            extraRateWindows: extraRateWindows,
+            kiroUsage: self.kiroUsage,
+            ampUsage: self.ampUsage,
+            providerCost: self.providerCost,
+            zaiUsage: self.zaiUsage,
+            minimaxUsage: self.minimaxUsage,
+            deepseekUsage: self.deepseekUsage,
+            openRouterUsage: self.openRouterUsage,
+            openAIAPIUsage: self.openAIAPIUsage,
+            claudeAdminAPIUsage: self.claudeAdminAPIUsage,
+            mistralUsage: self.mistralUsage,
+            deepgramUsage: self.deepgramUsage,
+            cursorRequests: self.cursorRequests,
+            codexResetCredits: self.codexResetCredits,
+            subscriptionExpiresAt: self.subscriptionExpiresAt,
+            subscriptionRenewsAt: self.subscriptionRenewsAt,
+            updatedAt: self.updatedAt,
+            identity: self.identity)
+    }
+
     public func scoped(to provider: UsageProvider) -> UsageSnapshot {
         guard let identity else { return self }
         let scopedIdentity = identity.scoped(to: provider)

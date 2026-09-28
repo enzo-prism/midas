@@ -973,12 +973,13 @@ extension CursorStatusProbeTests {
 
         #expect(snapshot.planPercentUsed == 30.0)
         #expect(snapshot.accountEmail == nil)
-        // usage-summary + auth/me + the two best-effort dashboard pool calls.
-        #expect(CursorStatusProbeStubURLProtocol.requestCount == 4)
-        // Failed dashboard calls hide their rows instead of erroring.
+        // usage-summary + auth/me + the two best-effort dashboard calls, each retried once after a transport error.
+        #expect(CursorStatusProbeStubURLProtocol.requestCount == 6)
+        // Failed dashboard calls never fail the refresh: the pools are hidden and Grok Bot is marked unavailable.
         #expect(snapshot.cursorModelsUsedPercent == nil)
         #expect(snapshot.otherModelsUsedPercent == nil)
         #expect(snapshot.grokBotWeeklyUsedPercent == nil)
+        #expect(snapshot.grokBotUnavailableReason != nil)
     }
 
     @Test
