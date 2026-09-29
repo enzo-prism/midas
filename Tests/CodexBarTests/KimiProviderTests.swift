@@ -194,7 +194,7 @@ struct KimiUsageSnapshotConversionTests {
         let weeklyExpected = 375.0 / 2048.0 * 100.0
         #expect(abs((usageSnapshot.primary?.usedPercent ?? 0.0) - weeklyExpected) < 0.01)
         #expect(usageSnapshot.primary?.resetDescription == "375/2048 requests")
-        #expect(usageSnapshot.primary?.windowMinutes == nil)
+        #expect(usageSnapshot.primary?.windowMinutes == 7 * 24 * 60)
 
         #expect(usageSnapshot.secondary != nil)
         let rateExpected = 200.0 / 200.0 * 100.0

@@ -184,7 +184,7 @@ extension WindsurfCachedPlanInfo {
                 }
                 primary = RateWindow(
                     usedPercent: max(0, min(100, 100 - daily)),
-                    windowMinutes: nil,
+                    windowMinutes: 24 * 60,
                     resetsAt: resetDate,
                     resetDescription: Self.formatResetDescription(resetDate))
             }
@@ -196,7 +196,7 @@ extension WindsurfCachedPlanInfo {
                 }
                 secondary = RateWindow(
                     usedPercent: max(0, min(100, 100 - weekly)),
-                    windowMinutes: nil,
+                    windowMinutes: 7 * 24 * 60,
                     resetsAt: resetDate,
                     resetDescription: Self.formatResetDescription(resetDate))
             }

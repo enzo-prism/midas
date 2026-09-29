@@ -96,10 +96,12 @@ struct WindsurfStatusProbeTests {
 
         // Primary = daily: usedPercent = 100 - 9 = 91
         #expect(snapshot.primary?.usedPercent == 91)
+        #expect(snapshot.primary?.windowMinutes == 24 * 60)
         #expect(snapshot.primary?.resetsAt != nil)
 
         // Secondary = weekly: usedPercent = 100 - 54 = 46
         #expect(snapshot.secondary?.usedPercent == 46)
+        #expect(snapshot.secondary?.windowMinutes == 7 * 24 * 60)
         #expect(snapshot.secondary?.resetsAt != nil)
 
         // Identity
@@ -146,8 +148,10 @@ struct WindsurfStatusProbeTests {
 
         #expect(snapshot.primary?.usedPercent == 2.4)
         #expect(snapshot.primary?.resetDescription == "1200 / 50000 messages")
+        #expect(snapshot.primary?.windowMinutes == nil)
         #expect(snapshot.secondary?.usedPercent == 0)
         #expect(snapshot.secondary?.resetDescription == "0 / 150000 flow actions")
+        #expect(snapshot.secondary?.windowMinutes == nil)
     }
 
     @Test

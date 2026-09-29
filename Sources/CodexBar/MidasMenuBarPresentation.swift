@@ -85,12 +85,13 @@ struct MidasMenuBarPresentation: Equatable {
             ? incidentDescriptionsByProvider[focusProvider].map { [$0] } ?? [] : incidentDescriptions
         self.orbitProvider = mode == .orbit ? focusProvider : nil
         self.orbitRemainingPercent = mode == .orbit
-            ? displayed.first.flatMap(Self.quota).map { min(100, max(0, $0.remainingPercent)) } : nil
+            ? displayed.first.flatMap(Self.orbitQuota).map { min(100, max(0, $0.remainingPercent)) } : nil
         self.isRefreshing = displayed.contains { refreshingProviders.contains($0.provider) }
         self.attention = !selectedIncidents.isEmpty || displayed.contains { item in
-            item.error != nil || Self.quota(item).map { $0.remainingPercent <= 10 } == true
+            item.error != nil || (mode == .orbit ? Self.orbitQuota(item) : Self.quota(item))
+                .map { $0.remainingPercent <= 10 } == true
                 || item.metrics.contains { metric in
-                    item.provider != .meta && metric.id != "cursor-models" && metric.statusText == nil
+                    mode != .orbit && item.provider != .meta && metric.id != "cursor-models" && metric.statusText == nil
                         && metric.remainingPercent <= 10
                 }
         }
@@ -123,7 +124,9 @@ struct MidasMenuBarPresentation: Equatable {
             self.title = ""
         }
         self.width = mode == .legacy ? 24 : MidasMenuBarLayout.width(title: self.title, orbit: mode == .orbit)
-        var descriptions = displayed.map { Self.describe($0, hideSpend: hideSpend, now: now) }
+        var descriptions = displayed.map {
+            Self.describe($0, hideSpend: hideSpend, now: now, orbit: mode == .orbit)
+        }
         if displayed.isEmpty {
             descriptions.append(mode == .focus || mode == .orbit
                 ? "\(ProviderDefaults.metadata[focusProvider]?.displayName ?? focusProvider.rawValue): unavailable"
@@ -154,6 +157,11 @@ struct MidasMenuBarPresentation: Equatable {
         self.tooltip = descriptions.joined(separator: "\n")
     }
 
+    private static func orbitQuota(_ item: MidasProviderPresentation) -> MidasQuotaMetric? {
+        guard let quota = item.orbitQuota, quota.statusText == nil, quota.remainingPercent.isFinite else { return nil }
+        return quota
+    }
+
     private static func quota(_ item: MidasProviderPresentation) -> MidasQuotaMetric? {
         guard item.provider != .meta, let hero = item.hero, hero.remainingPercent.isFinite else { return nil }
         if item.provider == .codex, hero.id != "secondary" { return nil }
@@ -166,16 +174,25 @@ struct MidasMenuBarPresentation: Equatable {
         return item.isStale || updated.map { now.timeIntervalSince($0) > 15 * 60 } == true
     }
 
-    private static func describe(_ item: MidasProviderPresentation, hideSpend: Bool, now: Date) -> String {
+    private static func describe(
+        _ item: MidasProviderPresentation,
+        hideSpend: Bool,
+        now: Date,
+        orbit: Bool) -> String
+    {
         var text = item.name + ": "
-        if let quota = Self.quota(item) {
+        if let quota = orbit ? Self.orbitQuota(item) : Self.quota(item) {
             text += "\(quota.remainingPercent.formatted()) percent remaining, \(quota.title)"
             if let reset = quota.resetText { text += "; \(reset)" }
         } else {
-            text += item.provider == .codex ? "weekly quota unavailable" : "quota unavailable"
+            if orbit {
+                text += item.provider == .cursor ? "monthly quota unavailable" : "weekly quota unavailable"
+            } else {
+                text += item.provider == .codex ? "weekly quota unavailable" : "quota unavailable"
+            }
             if let activity = item.activitySummary { text += "; \(activity)" }
         }
-        for metric in item.metrics where item.provider != .meta && metric.id != "cursor-models" {
+        for metric in item.metrics where !orbit && item.provider != .meta && metric.id != "cursor-models" {
             if let status = metric.statusText {
                 text += "; \(metric.title): \(status.lowercased())"
             } else if metric.remainingPercent.isFinite {

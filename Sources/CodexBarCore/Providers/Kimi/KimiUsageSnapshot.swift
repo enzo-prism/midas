@@ -44,7 +44,7 @@ extension KimiUsageSnapshot {
 
         let weeklyWindow = RateWindow(
             usedPercent: weeklyPercent,
-            windowMinutes: nil, // Weekly doesn't have a fixed window like rate limit
+            windowMinutes: 7 * 24 * 60,
             resetsAt: Self.parseDate(self.weekly.resetTime),
             resetDescription: "\(weeklyUsed)/\(weeklyLimit) requests")
 

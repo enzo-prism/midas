@@ -41,7 +41,7 @@ extension WindsurfGetPlanStatusResponse {
                 }
                 primary = RateWindow(
                     usedPercent: max(0, min(100, 100 - Double(daily))),
-                    windowMinutes: nil,
+                    windowMinutes: 24 * 60,
                     resetsAt: resetDate,
                     resetDescription: Self.formatResetDescription(resetDate))
             }
@@ -52,7 +52,7 @@ extension WindsurfGetPlanStatusResponse {
                 }
                 secondary = RateWindow(
                     usedPercent: max(0, min(100, 100 - Double(weekly))),
-                    windowMinutes: nil,
+                    windowMinutes: 7 * 24 * 60,
                     resetsAt: resetDate,
                     resetDescription: Self.formatResetDescription(resetDate))
             }

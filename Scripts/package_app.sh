@@ -7,12 +7,25 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 LOWER_CONF=$(printf "%s" "$CONF" | tr '[:upper:]' '[:lower:]')
 
+# Optional build storage overrides. App staging and signing files remain under ROOT.
+SWIFTPM_SCRATCH_PATH="${MIDAS_SWIFTPM_SCRATCH_PATH:-$ROOT/.build}"
+case "$SWIFTPM_SCRATCH_PATH" in
+  /*) ;;
+  *) SWIFTPM_SCRATCH_PATH="$ROOT/$SWIFTPM_SCRATCH_PATH" ;;
+esac
+SWIFTPM_ARGS=(--scratch-path "$SWIFTPM_SCRATCH_PATH")
+WIDGET_DERIVED_DATA_PATH="${MIDAS_WIDGET_DERIVED_DATA_PATH:-$ROOT/.build/xcode-widget-extension-${LOWER_CONF}}"
+case "$WIDGET_DERIVED_DATA_PATH" in
+  /*) ;;
+  *) WIDGET_DERIVED_DATA_PATH="$ROOT/$WIDGET_DERIVED_DATA_PATH" ;;
+esac
+
 # Load version info
 source "$ROOT/version.env"
 
 # Clean build only when explicitly requested (slower).
 if [[ "${CODEXBAR_FORCE_CLEAN:-0}" == "1" ]]; then
-  if [[ -d "$ROOT/.build" ]]; then
+  if [[ -z "${MIDAS_SWIFTPM_SCRATCH_PATH:-}" && -d "$ROOT/.build" ]]; then
     if command -v trash >/dev/null 2>&1; then
       if ! trash "$ROOT/.build"; then
         echo "WARN: trash .build failed; continuing with swift package clean." >&2
@@ -21,7 +34,7 @@ if [[ "${CODEXBAR_FORCE_CLEAN:-0}" == "1" ]]; then
       rm -rf "$ROOT/.build" || echo "WARN: rm -rf .build failed; continuing with swift package clean." >&2
     fi
   fi
-  swift package clean >/dev/null 2>&1 || true
+  swift package "${SWIFTPM_ARGS[@]}" clean >/dev/null 2>&1 || true
 fi
 
 # Build for host architecture by default; allow overriding via ARCHES (e.g., "arm64 x86_64" for universal).
@@ -36,7 +49,7 @@ if [[ ${#ARCH_LIST[@]} -eq 0 ]]; then
 fi
 
 patch_keyboard_shortcuts() {
-  local util_path="$ROOT/.build/checkouts/KeyboardShortcuts/Sources/KeyboardShortcuts/Utilities.swift"
+  local util_path="$SWIFTPM_SCRATCH_PATH/checkouts/KeyboardShortcuts/Sources/KeyboardShortcuts/Utilities.swift"
   if [[ ! -f "$util_path" ]]; then
     return 0
   fi
@@ -99,14 +112,14 @@ path.write_text(text)
 PY
 }
 
-KEYBOARD_SHORTCUTS_UTIL="$ROOT/.build/checkouts/KeyboardShortcuts/Sources/KeyboardShortcuts/Utilities.swift"
+KEYBOARD_SHORTCUTS_UTIL="$SWIFTPM_SCRATCH_PATH/checkouts/KeyboardShortcuts/Sources/KeyboardShortcuts/Utilities.swift"
 if [[ ! -f "$KEYBOARD_SHORTCUTS_UTIL" ]]; then
-  swift build -c "$CONF" --arch "${ARCH_LIST[0]}"
+  swift build "${SWIFTPM_ARGS[@]}" -c "$CONF" --arch "${ARCH_LIST[0]}"
 fi
 patch_keyboard_shortcuts
 
 for ARCH in "${ARCH_LIST[@]}"; do
-  swift build -c "$CONF" --arch "$ARCH"
+  swift build "${SWIFTPM_ARGS[@]}" -c "$CONF" --arch "$ARCH"
 done
 
 APP_FINAL="$ROOT/Midas.app"
@@ -225,7 +238,7 @@ swiftpm_bin_path() {
   local arch="$1"
   local var="SWIFTPM_BIN_PATH_${arch//[^A-Za-z0-9]/_}"
   if [[ -z "${!var:-}" ]]; then
-    printf -v "$var" '%s' "$(swift build -c "$CONF" --arch "$arch" --show-bin-path 2>/dev/null || true)"
+    printf -v "$var" '%s' "$(swift build "${SWIFTPM_ARGS[@]}" -c "$CONF" --arch "$arch" --show-bin-path 2>/dev/null || true)"
   fi
   echo "${!var}"
 }
@@ -240,8 +253,8 @@ build_product_path() {
     return
   fi
   case "$arch" in
-    arm64|x86_64) echo ".build/${arch}-apple-macosx/$CONF/$name" ;;
-    *) echo ".build/$CONF/$name" ;;
+    arm64|x86_64) echo "$SWIFTPM_SCRATCH_PATH/${arch}-apple-macosx/$CONF/$name" ;;
+    *) echo "$SWIFTPM_SCRATCH_PATH/$CONF/$name" ;;
   esac
 }
 
@@ -255,8 +268,8 @@ resolve_binary_path() {
     echo "$candidate"
     return
   fi
-  if [[ -f ".build/$CONF/$name" ]]; then
-    echo ".build/$CONF/$name"
+  if [[ -f "$SWIFTPM_SCRATCH_PATH/$CONF/$name" ]]; then
+    echo "$SWIFTPM_SCRATCH_PATH/$CONF/$name"
   fi
 }
 
@@ -322,7 +335,7 @@ build_widget_extension() {
 
   ensure_widget_extension_project
 
-  local derived_dir="$ROOT/.build/xcode-widget-extension-${LOWER_CONF}"
+  local derived_dir="$WIDGET_DERIVED_DATA_PATH"
   local project_dir="$ROOT/WidgetExtension/CodexBarWidgetExtension.xcodeproj"
   local build_log="$derived_dir/xcodebuild.log"
   local timeout_seconds="${CODEXBAR_WIDGET_EXTENSION_TIMEOUT_SECONDS:-900}"
@@ -401,8 +414,9 @@ if [[ -n "$(resolve_binary_path "CodexBarClaudeWatchdog" "${ARCH_LIST[0]}")" ]];
 fi
 install_widget_extension
 # Embed Sparkle.framework
-if [[ -d ".build/$CONF/Sparkle.framework" ]]; then
-  cp -R ".build/$CONF/Sparkle.framework" "$APP/Contents/Frameworks/"
+SPARKLE_BUILD_PATH="$(build_product_path "Sparkle.framework" "${ARCH_LIST[0]}")"
+if [[ -d "$SPARKLE_BUILD_PATH" ]]; then
+  cp -R "$SPARKLE_BUILD_PATH" "$APP/Contents/Frameworks/"
   chmod -R a+rX "$APP/Contents/Frameworks/Sparkle.framework"
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Midas"
   # Re-sign Sparkle and all nested components with Developer ID + timestamp

@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.41.1 — September 29, 2026
+
+- Orbit shows one outer ring for the selected provider’s remaining weekly allowance, or Cursor’s total monthly allowance. Session, model-specific (including Fable), and individual Cursor pool limits no longer change Orbit’s ring or low-quota warning.
+- When the provider does not report a usable weekly allowance (monthly for Cursor), Orbit shows an unknown dashed ring instead of substituting another limit. Provider errors and service incidents remain visible.
+- Provider details and the other menu-bar designs keep their existing limits.
+
+Build 115.
+
 ## Midas 0.41.0 — September 27, 2026
 
 - Keep Cursor's **Grok Bot weekly** bar on the overview, now with a small Grok mark. When cursor.com doesn't return Grok Bot usage, Midas retries once, then keeps the last known value until that week's reset, or shows **Unavailable** instead of silently dropping the row. A plan without a Grok Bot allowance still shows no bar, and an exhausted allowance reads 0% left even when Cursor's percent lags.

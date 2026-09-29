@@ -183,6 +183,8 @@ struct MidasProviderPresentation {
     let plan: String?
     let hero: MidasQuotaMetric?
     let metrics: [MidasQuotaMetric]
+    /// Provider-wide long-term allowance, independent of the panel headline and model pools.
+    var orbitQuota: MidasQuotaMetric?
     let resetCreditsText: String?
     let resetCreditsHelp: String?
     let freshness: String
@@ -314,6 +316,7 @@ struct MidasProviderPresentation {
             plan: card?.planText,
             hero: hero,
             metrics: quotaMetrics.filter { $0.id != hero?.id },
+            orbitQuota: MidasOrbitQuota.make(provider: provider, snapshot: snapshot),
             resetCreditsText: scopedResets
                 .map { CodexResetCreditFormatting.countText(availableCount: $0.availableCount) }
                 ?? resetCredits?.statusText,
@@ -484,5 +487,64 @@ enum MidasClaudeLimits {
             helpText: explanation)
         result.resetsAt = window?.resetsAt ?? metric.resetsAt
         return result
+    }
+}
+
+/// Orbit always represents the provider-wide week (Cursor's billing month).
+/// Named/model windows must never substitute for an unavailable overall allowance.
+enum MidasOrbitQuota {
+    private static let weekMinutes = 7 * 24 * 60
+
+    static func make(provider: UsageProvider, snapshot: UsageSnapshot?) -> MidasQuotaMetric? {
+        guard provider != .meta, let snapshot else { return nil }
+        let selected: (id: String, window: RateWindow)?
+        switch provider {
+        case .codex:
+            selected = IconRemainingResolver.resolvedWindows(snapshot: snapshot, style: .codex).primary
+                .map { ("secondary", $0) }
+        case .claude:
+            // OAuth primary may fall back to a model-only week. All-model usage is secondary.
+            if let weekly = snapshot.secondary,
+               weekly.windowMinutes == nil || weekly.windowMinutes == self.weekMinutes
+            {
+                selected = ("secondary", weekly)
+            } else {
+                selected = nil
+            }
+        case .cursor:
+            // Missing billing dates retain Cursor's canonical monthly-total contract.
+            // Explicit durations must describe a calendar month (allowing daylight saving changes).
+            if let total = snapshot.primary,
+               total.windowMinutes.map({ ((28 * 24 * 60 - 60)...(31 * 24 * 60 + 60)).contains($0) }) ?? true
+            {
+                selected = ("primary", total)
+            } else {
+                selected = nil
+            }
+        default:
+            // Both the canonical label and duration must identify an overall weekly allowance.
+            // Model quotas (Gemini Pro/Flash, Premium, MCP) are not provider-wide limits.
+            let metadata = ProviderDefaults.metadata[provider]
+            let primaryLabel = provider == .grok ? "Weekly" : metadata?.sessionLabel ?? ""
+            selected = [
+                ("primary", snapshot.primary, primaryLabel),
+                ("secondary", snapshot.secondary, metadata?.weeklyLabel ?? ""),
+            ].compactMap { id, window, label -> (String, RateWindow)? in
+                guard let window, window.windowMinutes == self.weekMinutes,
+                      label.lowercased().contains("week") else { return nil }
+                return (id, window)
+            }.first
+        }
+        guard let selected, selected.window.usedPercent.isFinite else { return nil }
+        let window = selected.window
+        return MidasQuotaMetric(
+            id: selected.id,
+            title: provider == .cursor ? "Monthly limit" : "Weekly limit",
+            remainingPercent: min(100, max(0, window.remainingPercent)),
+            resetText: window.resetsAt.map {
+                "Resets \(UsageFormatter.resetCountdownDescription(from: $0, now: Date()))"
+            } ?? window.resetDescription,
+            helpText: window.resetsAt?.formatted(date: .complete, time: .shortened),
+            resetsAt: window.resetsAt)
     }
 }

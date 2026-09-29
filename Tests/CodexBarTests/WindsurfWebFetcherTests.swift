@@ -78,7 +78,9 @@ struct WindsurfWebFetcherTests {
         #expect(snapshot.identity?.providerID == .windsurf)
         #expect(snapshot.identity?.loginMethod == "Pro")
         #expect(snapshot.primary?.usedPercent == 32)
+        #expect(snapshot.primary?.windowMinutes == 24 * 60)
         #expect(snapshot.secondary?.usedPercent == 16)
+        #expect(snapshot.secondary?.windowMinutes == 7 * 24 * 60)
     }
 
     @Test

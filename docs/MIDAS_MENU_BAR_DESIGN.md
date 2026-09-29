@@ -9,8 +9,11 @@ content-sized status item puts the all-provider token-spend total before one fav
 logo and an 18-point capacity ring. The panel’s provider dropdown selects the favorite and switches to Orbit; Settings → Display →
 Orbit provider offers the same selection.
 The ring stays static during refresh; a separate satellite communicates activity. Unknown capacity
-uses a dashed neutral track, while exhausted capacity is an empty solid track. Codex uses weekly
-remaining, Cursor uses actual quota, and Meta has no quota. The small monochrome menu-bar logo
+uses a dashed neutral track, while exhausted capacity is an empty solid track. Every provider uses its canonical all-models weekly
+remaining allowance; Cursor uses its total monthly allowance. Session, model-scoped (including
+Fable), and individual Cursor pool limits never drive Orbit or its low-capacity warning. If no
+usable allowance is reported, the ring stays unknown rather than substituting another quota.
+Provider errors and service incidents remain visible. Meta has no quota. The small monochrome menu-bar logo
 assets preserve identity without reusing full-color panel artwork at an unsuitable size.
 
 Ledger, Focus, and Constellation remain available, with Legacy

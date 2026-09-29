@@ -138,6 +138,13 @@ struct MidasMenuBarRenderTests {
             ("constellation-compact", self.presentation(
                 "C 72%  U 54%  M —", width: MidasMenuBarLayout.width(title: "C 72%  U 54%  M —", orbit: false))),
             ("orbit-codex", self.presentation("$13.9k", width: 110, orbitProvider: .codex, remaining: 72)),
+            ("orbit-claude-weekly", self.presentation("$11.4k", width: 110, orbitProvider: .claude, remaining: 60)),
+            (
+                "orbit-claude-weekly-full",
+                self.presentation("$11.4k", width: 110, orbitProvider: .claude, remaining: 100)),
+            ("orbit-claude-weekly-unknown", self.presentation("$11.4k", width: 110, orbitProvider: .claude)),
+            ("orbit-cursor-monthly-low", self.presentation(
+                "$11.4k", attention: true, width: 110, orbitProvider: .cursor, remaining: 8)),
             ("orbit-cursor", self.presentation("$13.9k", width: 110, orbitProvider: .cursor, remaining: 54)),
             ("orbit-meta-neutral", self.presentation("$13.9k", width: 110, orbitProvider: .meta)),
             ("orbit-exhausted", self.presentation(
