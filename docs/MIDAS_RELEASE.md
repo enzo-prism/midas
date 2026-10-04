@@ -6,15 +6,16 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-This release candidate is version **0.41.1**, build **115**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.41.2**, build **116**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The last **signed, notarized, Sparkle-published** binary is **0.41.0**, build **114**, tagged
-`v0.41.0-midas.1`; 0.36.0 (build 108) was the last CodexBar-identity build. Check GitHub releases for live
-binary status. The downloadable app is for Apple Silicon Macs running macOS 14 or later.
+The preceding **signed, notarized, Sparkle-published** binary is **0.41.1**, build **115**, tagged
+`v0.41.1-midas.1`. Check GitHub releases for the current published binary; source and installed local
+builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
+The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
 ### Update feeds after 0.37.0
 
@@ -30,6 +31,23 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.41.2 changes
+
+Version 0.41.2, build 116, adds independent Claude account connections:
+
+- An isolated temporary sign-in session verifies the email before a checked save. Nicknames,
+  reconnect, failed-save rollback, and privacy masking use the existing account settings.
+- Saved accounts refresh with their own credentials, including when the source selector is CLI.
+  They cannot silently fall back to shared browser, CLI, or Keychain credentials.
+- Account display rejects stale credential results and mismatched returned identities. Limits,
+  reset times, freshness, and connection errors stay with the corresponding account.
+- The overview pins 5-hour and all-models weekly limits; model-specific limits stay in details.
+  Local Claude Code dollar estimates remain provider-wide.
+
+Two separate accounts were signed in, identity-verified, saved, and read back with distinct live usage
+in the local release app. Public documentation and release assets must not include their emails,
+credentials, configuration, or usage screenshots. See [setup](MIDAS_SETUP.md#multiple-claude-accounts).
 
 ## 0.41.1 changes
 
@@ -173,7 +191,9 @@ pricing and optional iCloud calibration sharing, and resumable three-step onboar
 ## Release procedure
 
 1. Run `make check` and the relevant native/menu regression tests. Inspect light/dark native fixtures.
-2. Set the next build number in `version.env`, commit the reviewed source, and push `main`.
+2. Set the next build number in `version.env` and commit the reviewed source. Build from that exact
+   commit so `CodexGitCommit` identifies the release. Push `main` only after the source and release
+   actions have been approved; do not force-push or replace published tags/assets.
 3. Confirm `security find-identity -v -p codesigning` lists a valid **Developer ID Application**
    identity with its private key. Apple Development and Apple Distribution identities are not
    substitutes for outside-the-App-Store distribution. Stop binary publication if it is missing.

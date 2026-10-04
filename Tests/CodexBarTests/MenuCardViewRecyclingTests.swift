@@ -141,7 +141,7 @@ extension StatusMenuTests {
     }
 
     @Test
-    func `merged data tick reconciles items in place without churn`() {
+    func `merged data reconciliation preserves items at a fixed width`() {
         StatusItemController.setMenuRefreshEnabledForTesting(false)
         let previousRendering = StatusItemController.menuCardRenderingEnabled
         StatusItemController.menuCardRenderingEnabled = true
@@ -175,16 +175,35 @@ extension StatusMenuTests {
         controller.selectedMenuProvider = .codex
         let menu = controller.makeMenu()
         controller.populateMenu(menu, provider: .codex)
+        // Exercise reconciliation directly: AppKit can resize a detached menu's switcher,
+        // which legitimately makes populateMenu choose its full-rebuild fallback.
+        let context = StatusItemController.MenuUpdateContext(
+            provider: .codex,
+            currentProvider: .codex,
+            switcherSelection: .provider(.codex),
+            menuWidth: StatusItemController.menuCardBaseWidth,
+            codexAccountDisplay: controller.lastCodexAccountMenuDisplay,
+            tokenAccountDisplay: controller.lastTokenAccountMenuDisplay,
+            openAIContext: StatusItemController.OpenAIWebContext(
+                hasUsageBreakdown: false,
+                hasCreditsHistory: false,
+                hasCostHistory: false,
+                canShowBuyCredits: false,
+                hasOpenAIWebMenuItems: false),
+            descriptor: controller.makeMenuDescriptor(provider: .codex, includeContextualActions: true))
+        controller.updateMenuContentPreservingSwitcher(menu, context: context)
         let itemsBefore = menu.items.map(ObjectIdentifier.init)
         let cardViewsBefore = self.cardViewIdentities(in: menu)
         #expect(!cardViewsBefore.isEmpty)
 
         controller.invalidateMenus(allowStaleContentDuringDataRefresh: true)
-        controller.populateMenu(menu, provider: .codex)
+        controller.updateMenuContentPreservingSwitcher(menu, context: context)
 
         let itemsAfter = menu.items.map(ObjectIdentifier.init)
         #expect(itemsAfter == itemsBefore, "data-only repopulate should not remove or insert menu items")
         let cardViewsAfter = self.cardViewIdentities(in: menu)
+        #expect(cardViewsAfter.keys.sorted() == cardViewsBefore.keys.sorted())
+        #expect(controller.menuCardViewRecyclePool.isEmpty)
         for (id, identity) in cardViewsBefore {
             #expect(cardViewsAfter[id] == identity, "card \(id) should reuse its hosting view")
         }

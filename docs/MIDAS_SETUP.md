@@ -3,12 +3,13 @@
 Midas puts estimated inference spend, remaining usage, and reset times in your menu bar.
 Download the signed Apple Silicon app from [Midas releases](https://github.com/enzo-prism/midas/releases/latest).
 The public app requires macOS 14 or later. Extract the ZIP and move the app to Applications;
-the bundle retains the CodexBar filename for compatibility.
+the bundle is **Midas.app**.
 
 ## Three short steps
 
-1. **Services:** choose Codex, Cursor, and/or Meta. You do not need a Codex account to use Midas.
+1. **Services:** choose Codex, Claude, Cursor, and/or Meta. You do not need a Codex account to use Midas.
 2. **Accounts:** connect the accounts you use. Codex supports multiple separate OpenAI sign-ins.
+   Claude supports separate verified account sign-ins and independent usage rows.
    Cursor opens its existing browser sign-in flow. Meta reads Muse activity on this Mac.
 3. **Overview:** preview estimates for the selected period, then choose **Open Midas**.
 
@@ -53,10 +54,10 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   cursor.com. Available quota does not guarantee an API-equivalent dollar estimate.
 - **Claude:** the overview always shows two subscription limits: the **5-hour limit** and the
   **Weekly limit**, each with % left and its reset time. If Claude reports no 5-hour window,
-  only the weekly limit is shown, labeled as weekly. When Claude reports a separate weekly limit for
-  one model, such as Fable, the overview adds a third bar, **Fable weekly limit**, with its own
-  % left and reset time. It matches the "Fable only" bar in Claude's Usage screen. The all-models
-  weekly limit still applies to Fable usage.
+  only the weekly limit is shown, labeled as weekly. Model-specific weekly limits, such as Fable,
+  appear in account details with their own remaining percentage and reset time. The all-models
+  weekly limit still applies to that usage. Each saved Claude account refreshes separately without
+  needing the Codex **Track all connected accounts** option.
   **Claude dollars** value Claude Code activity on this Mac at Anthropic API rates and count
   toward the estimated total: per-model input, output, 5-minute and 1-hour cache writes, and
   cache reads, plus fast mode, US-only inference (`inference_geo: "us"`, 1.1x), and web
@@ -73,6 +74,29 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
 The period selector offers calendar periods and a rolling 30-day view. The total includes only
 available estimates for the selected period. Missing data is excluded and disclosed as partial;
 it is never treated as zero. Different currencies are not silently converted.
+
+## Multiple Claude accounts
+
+1. Open **Settings → Providers → Claude → Add Claude account**.
+2. Sign in to the account you want to connect. If Google sign-in stalls in the embedded window,
+   cancel, reopen **Add Claude account**, and choose **Continue with email** instead.
+3. For email sign-in, open Claude's email link. If it displays a verification code, enter that code
+   in the embedded sign-in window using **Enter verification code**.
+4. Click Midas's **Continue** button below the web page. Check the verified email, optionally choose
+   a nickname, and click **Save account**. Saving also enables Claude in the panel.
+5. Repeat for the other account. Each attempt uses a separate temporary web session.
+
+Both accounts remain listed under **Claude accounts**. Select an account in settings to inspect its
+usage, email, plan, and latest refresh. The main Claude display keeps each account's limits separate.
+A failed credential cannot fall back to another account's browser, CLI, or Keychain identity.
+
+To reconnect an expired account, use **Add Claude account** and sign in to the same email. Midas shows
+**Reconnect account** and preserves the existing organization selection. A failed save leaves the
+verified sign-in available for retry. If embedded authentication is unavailable, the manual session-key
+or OAuth-token field remains available. Do not share the credential file or commit it to source control.
+
+These connections do not change the active Claude Code login. Claude Code dollar estimates cover
+local activity on this Mac and appear once per provider, rather than as an account-by-account bill.
 
 ## If data is missing
 

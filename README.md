@@ -32,6 +32,16 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.41.2
+
+Connect separate Claude accounts under **Settings → Providers → Claude → Add Claude account**.
+Midas verifies the signed-in email before saving, then refreshes each account independently and shows
+separate usage limits, reset times, and connection status. Nickname accounts **Personal** and **Business**
+if useful. Claude's overview keeps the 5-hour and all-models weekly limits prominent; model-specific
+limits stay in account details. Claude Code dollar estimates still describe local activity once per provider.
+
+See [multiple Claude accounts](docs/MIDAS_SETUP.md#multiple-claude-accounts) for sign-in and reconnect steps.
+
 ## Midas 0.41.0
 
 Cursor's Grok Bot bar stays put, with a Grok mark: a missed refresh keeps the last known value or says

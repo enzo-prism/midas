@@ -5,9 +5,10 @@
 - Add separate Claude account sign-in with verified email and Personal/Business nicknames.
 - Show independent Claude usage bars and keep saved credentials, identities, errors, and reset times isolated.
 - Refresh every saved Claude account without changing the live Claude Code login.
-- Preserve the installed 0.41.1 Orbit behavior and existing Claude overview changes.
+- Keep Claude’s 5-hour and all-models weekly limits in the overview, with model-specific limits in account details.
+- Keep the 0.41.1 weekly Orbit behavior and provider-wide local Claude Code dollar estimates.
 
-Build 116. Local update; publication is separate.
+Build 116. See GitHub Releases for signed binary availability.
 
 ## Midas 0.41.1 — September 29, 2026
 

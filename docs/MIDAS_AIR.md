@@ -214,6 +214,15 @@ with its private key, plus Sparkle `sign_update --account enzo-prism-midas`. The
 
 ## Multiple accounts
 
+Claude's saved accounts always refresh independently, including a single saved account, regardless
+of the Codex tracking option or the global Claude source selector. `ClaudeAccountSignInSheet` owns
+an isolated temporary WebKit store; `ClaudeAccountSignInModel` verifies identity and performs a
+checked save with rollback. `MidasTokenAccountPolicy` ties snapshots to the current account ID,
+credential, organization, and verified identity so late results cannot attach to a replaced connection.
+The selected account controls the provider headline and ring; the overview/detail account rows keep
+limits separate. Claude's local dollar estimate appears once per provider.
+
+
 Settings → Display → Track all connected accounts refreshes every configured account independently of the legacy menu layout. In Codex details, connected accounts show separate weekly/session limits and errors. The selected account controls the menu-bar ring; quota percentages are never summed.
 
 When enabled, Codex cost history scans the ambient Codex home and every managed account home, including archived sessions, in one scanner pass. Existing session/file deduplication prevents copied history from multiplying the total. Root changes invalidate the cache; late results from a previous scope cannot replace current results. The combined provider estimate contributes once to the existing Codex + Cursor + Meta total.

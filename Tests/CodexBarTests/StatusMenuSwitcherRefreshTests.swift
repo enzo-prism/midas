@@ -156,7 +156,7 @@ struct StatusMenuSwitcherRefreshTests {
     }
 
     @Test
-    func `merged provider switch updates live tab rows in place`() async throws {
+    func `merged provider switches preserve the switcher and selected tab content`() async throws {
         let previousMenuCardRendering = StatusItemController.menuCardRenderingEnabled
         StatusItemController.menuCardRenderingEnabled = false
         StatusItemController.setMenuRefreshEnabledForTesting(true)
@@ -198,9 +198,9 @@ struct StatusMenuSwitcherRefreshTests {
         }
         defer { controller._test_openMenuRebuildObserver = nil }
 
-        // Provider switches now reconcile matching rows in place instead of parking and
-        // restoring distinct item sets per tab: the same NSMenuItem objects carry each
-        // tab's freshly built content, so AppKit never relayouts the open menu per insert.
+        // Matching rows reconcile on the first switch. Returning to a tab can also
+        // change its account-switcher rows; verify the selected provider's content rather
+        // than requiring a fixed first-row identity across different row skeletons.
         let initialSwitcher = try #require(menu.items.first?.view as? ProviderSwitcherView)
         #expect(initialSwitcher._test_simulateRuntimeClick(buttonTag: alternateButton.tag))
         await Self.waitForRebuildCount(1, rebuildCount: { rebuildCount })
@@ -211,13 +211,27 @@ struct StatusMenuSwitcherRefreshTests {
         #expect(alternateSwitcher._test_simulateRuntimeClick(buttonTag: selectedButton.tag))
         await Self.waitForRebuildCount(2, rebuildCount: { rebuildCount })
         #expect(menu.items.indices.contains(contentStartIndex))
-        #expect(ObjectIdentifier(menu.items[contentStartIndex]) == originalContentID)
+        #expect(menu.items.first?.view === initialSwitcher)
+        #expect(controller.selectedMenuProvider == .codex)
+        #expect(controller.lastMergedMenuContentSelection == .provider(.codex))
+        #expect(Self.switcherButtons(in: menu).first { $0.tag == selectedButton.tag }?.state == .on)
+        #expect(
+            (menu.items[contentStartIndex].view is CodexAccountSwitcherView) ==
+                (controller.lastCodexAccountMenuDisplay?.showSwitcher == true))
+        #expect(menu.items.dropFirst(contentStartIndex).contains {
+            ($0.representedObject as? String)?.hasPrefix("menuCard") == true
+        })
 
         let restoredSwitcher = try #require(menu.items.first?.view as? ProviderSwitcherView)
         #expect(restoredSwitcher._test_simulateRuntimeClick(buttonTag: alternateButton.tag))
         await Self.waitForRebuildCount(3, rebuildCount: { rebuildCount })
         #expect(menu.items.indices.contains(contentStartIndex))
-        #expect(ObjectIdentifier(menu.items[contentStartIndex]) == originalContentID)
+        #expect(menu.items.first?.view === initialSwitcher)
+        #expect(controller.selectedMenuProvider == .claude)
+        #expect(controller.lastMergedMenuContentSelection == .provider(.claude))
+        #expect(Self.switcherButtons(in: menu).first { $0.tag == alternateButton.tag }?.state == .on)
+        #expect(!menu.items.contains { $0.view is CodexAccountSwitcherView })
+        #expect(menu.items[contentStartIndex].representedObject as? String == "menuCard")
 
         controller.invalidateMenus()
         #expect(controller.mergedSwitcherContentCaches.isEmpty)
