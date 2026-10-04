@@ -1,3 +1,4 @@
+import CodexBarCore
 import SwiftUI
 
 struct ProviderSettingsSection<Content: View>: View {
@@ -247,6 +248,7 @@ struct ProviderSettingsTokenAccountsRowView: View {
     @State private var newLabel: String = ""
     @State private var newToken: String = ""
     @State private var newOrgID: String = ""
+    @State private var showsClaudeAccountSignIn = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -254,6 +256,13 @@ struct ProviderSettingsTokenAccountsRowView: View {
                 Text(L(self.descriptor.title))
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
+                if self.descriptor.claudeAccountSettings != nil {
+                    Button(L("Add Claude account")) {
+                        self.showsClaudeAccountSignIn = true
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
                 if let title = self.descriptor.primaryAddActionTitle,
                    let action = self.descriptor.primaryAddAction
                 {
@@ -276,7 +285,8 @@ struct ProviderSettingsTokenAccountsRowView: View {
 
             let accounts = self.descriptor.accounts()
             if accounts.isEmpty {
-                Text(L("No token accounts yet."))
+                Text(L(self.descriptor
+                        .provider == .claude ? "No Claude accounts connected yet." : "No token accounts yet."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
@@ -292,12 +302,18 @@ struct ProviderSettingsTokenAccountsRowView: View {
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(self.isActive(index: index, accountCount: accounts.count) ?
                                             Color.accentColor : Color.secondary)
-                                    Text(account.displayName)
+                                    Text(self.descriptor.claudeAccountSettings?.hidePersonalInfo == true
+                                        ? "Account \(index + 1)" : account.displayName)
                                         .font(
                                             .footnote.weight(
                                                 self.isActive(index: index, accountCount: accounts.count) ?
                                                     .semibold : .regular))
                                         .foregroundStyle(.primary)
+                                    if self.descriptor.provider == .claude {
+                                        Text(L(ClaudeAccountConnectionPresentation.credentialKind(account.token)))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                     Spacer(minLength: 0)
                                 }
                                 .contentShape(Rectangle())
@@ -320,7 +336,9 @@ struct ProviderSettingsTokenAccountsRowView: View {
             if self.descriptor.primaryAddAction == nil {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        TextField(L("Label"), text: self.$newLabel)
+                        TextField(
+                            L(self.descriptor.provider == .claude ? "Account email or name" : "Label"),
+                            text: self.$newLabel)
                             .textFieldStyle(.roundedBorder)
                             .font(.footnote)
                         SecureField(L(self.descriptor.placeholder), text: self.$newToken)
@@ -350,6 +368,13 @@ struct ProviderSettingsTokenAccountsRowView: View {
                             .help(
                                 L("Optional organization ID for accounts linked to multiple Anthropic organizations."))
                     }
+                    if self.descriptor.provider == .claude {
+                        Text(L("Add Personal and Business separately to see each account’s limits. " +
+                                "Midas refreshes saved Claude accounts independently."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 
@@ -366,12 +391,28 @@ struct ProviderSettingsTokenAccountsRowView: View {
                 .controlSize(.small)
             }
         }
+        .sheet(isPresented: self.$showsClaudeAccountSignIn) {
+            if let settings = self.descriptor.claudeAccountSettings {
+                ClaudeAccountSignInSheet(settings: settings, onSaved: self.descriptor.reloadFromDisk)
+            }
+        }
     }
 
     private func isActive(index: Int, accountCount: Int) -> Bool {
         guard accountCount > 0 else { return false }
         let selectedIndex = min(self.descriptor.activeIndex(), max(0, accountCount - 1))
         return selectedIndex == index
+    }
+}
+
+enum ClaudeAccountConnectionPresentation {
+    static func credentialKind(_ credential: String) -> String {
+        switch ClaudeCredentialRouting.resolve(tokenAccountToken: credential, manualCookieHeader: nil) {
+        case .oauth: "OAuth"
+        case .webCookie: "Web session"
+        case .adminAPIKey: "Organization API"
+        case .none: "Connection unavailable"
+        }
     }
 }
 

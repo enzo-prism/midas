@@ -26,7 +26,7 @@ extension StatusItemController {
             snapshotOverride ?? self.store.snapshot(for: target)
         }
         let projectedTokenSnapshot = self.store.tokenSnapshot(fromProviderSnapshot: snapshot, provider: target)
-        let storedTokenSnapshot = UsageStore.tokenCostRequiresProviderSnapshot(target)
+        let storedTokenSnapshot = surface != .liveCard || UsageStore.tokenCostRequiresProviderSnapshot(target)
             ? nil
             : self.store.tokenSnapshot(for: target)
         let now = Date()
@@ -54,8 +54,8 @@ extension StatusItemController {
                 tokenSnapshot = projectedTokenSnapshot
                 tokenError = nil
             }
-        } else if ProviderDescriptorRegistry.descriptor(for: target).tokenCost.supportsTokenCost,
-                  snapshotOverride == nil
+        } else if surface == .liveCard,
+                  ProviderDescriptorRegistry.descriptor(for: target).tokenCost.supportsTokenCost
         {
             credits = nil
             creditsError = nil
@@ -72,7 +72,7 @@ extension StatusItemController {
             tokenError = nil
         }
 
-        let sourceLabel = snapshotOverride == nil ? self.store.sourceLabel(for: target) : nil
+        let sourceLabel = surface == .liveCard ? self.store.sourceLabel(for: target) : nil
         let kiloAutoMode = target == .kilo && self.settings.kiloUsageDataSource == .auto
         // Abacus uses primary for monthly credits (no secondary window)
         let paceWindow = target == .abacus ? snapshot?.primary : snapshot?.secondary
@@ -86,9 +86,14 @@ extension StatusItemController {
             }
         }
         let fallbackAccount = accountOverride
-            ?? (metadata.usesAccountFallback
+            ?? (surface == .liveCard && metadata.usesAccountFallback
                 ? self.store.accountInfo(for: target)
                 : AccountInfo(email: nil, plan: nil))
+        let lastError: String? = if surface == .overrideCard {
+            errorOverride ?? codexProjection?.userFacingErrors.usage
+        } else {
+            errorOverride ?? codexProjection?.userFacingErrors.usage ?? self.store.userFacingError(for: target)
+        }
         let input = UsageMenuCardView.Model.Input(
             provider: target,
             metadata: metadata,
@@ -102,9 +107,7 @@ extension StatusItemController {
             tokenError: tokenError,
             account: fallbackAccount,
             isRefreshing: self.store.shouldShowRefreshingMenuCardIndicator(for: target),
-            lastError: errorOverride
-                ?? codexProjection?.userFacingErrors.usage
-                ?? self.store.userFacingError(for: target),
+            lastError: lastError,
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),

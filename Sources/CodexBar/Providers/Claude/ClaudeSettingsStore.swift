@@ -64,13 +64,21 @@ extension SettingsStore {
         let account = self.selectedClaudeTokenAccount(tokenOverride: tokenOverride)
         let routing = self.claudeCredentialRouting(account: account)
         return ProviderSettingsSnapshot.ClaudeProviderSettings(
-            usageDataSource: self.claudeUsageDataSource,
-            webExtrasEnabled: self.claudeWebExtrasEnabled,
+            usageDataSource: account == nil ? self.claudeUsageDataSource : Self.claudeAccountDataSource(routing),
+            webExtrasEnabled: account == nil && self.claudeWebExtrasEnabled,
             cookieSource: self.claudeSnapshotCookieSource(tokenOverride: tokenOverride, routing: routing),
             manualCookieHeader: self.claudeSnapshotCookieHeader(
                 routing: routing,
                 hasSelectedAccount: account != nil),
             organizationID: account?.sanitizedOrganizationID)
+    }
+
+    private static func claudeAccountDataSource(_ routing: ClaudeCredentialRouting) -> ClaudeUsageDataSource {
+        switch routing {
+        case .oauth: .oauth
+        case .adminAPIKey: .api
+        case .webCookie, .none: .web
+        }
     }
 
     private static func claudeUsageDataSource(from source: ProviderSourceMode?) -> ClaudeUsageDataSource {

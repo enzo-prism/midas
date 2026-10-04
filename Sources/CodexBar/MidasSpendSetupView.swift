@@ -213,7 +213,11 @@ struct MidasSpendSetupView: View {
                 hasError: self.store.errors[provider] != nil || self.store.tokenErrors[provider] != nil,
                 isLocal: provider == .meta))
                 .font(.callout).foregroundStyle(.secondary)
-            if provider == .cursor {
+            if provider == .claude {
+                Text("Connect each personal or business Claude account separately.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Manage Claude accounts") { self.openProvider(.claude) }.disabled(self.isWorking)
+            } else if provider == .cursor {
                 Button(self.hasUsage(provider) ? "Reconnect Cursor" : "Connect Cursor") {
                     Task {
                         self.isWorking = true
@@ -231,8 +235,11 @@ struct MidasSpendSetupView: View {
                 Button("Set up Meta") { self.openProvider(.meta) }.disabled(self.isWorking)
             }
             DisclosureGroup("Connection help") {
-                Text(provider == .cursor ? "Connect the Cursor account whose usage you want to track." :
-                    "Use Muse on this Mac, then refresh Midas.")
+                Text(provider == .claude
+                    ? "Add each account in Claude settings and name it Personal or Business. "
+                    + "Each gets its own usage bars."
+                    : provider == .cursor ? "Connect the Cursor account whose usage you want to track."
+                    : "Use Muse on this Mac, then refresh Midas.")
                 Button("Open provider settings") { self.openProvider(provider) }.disabled(self.isWorking)
             }.font(.caption)
         }

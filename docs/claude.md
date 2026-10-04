@@ -86,7 +86,9 @@ Admin API key setup:
     `is_active` only marks Claude's headline row, so it is not a filter. Surface-scoped rows
     (`scope.surface`) and generic `All models` scopes stay out; the latter stay in the main weekly row.
     The web API (`claude.ai/api/organizations/{org}/usage`) returns the same `limits[]` shape.
-  - Midas Air pins model-only weekly windows beside the 5-hour and weekly bars as "<Model> weekly limit".
+  - Midas Air shows only the 5-hour and total weekly limits in the overview. Model-only weekly
+    windows remain in provider details as "<Model> weekly limit". The Orbit ring uses total weekly
+    remaining capacity, with an unknown ring when that reading is missing.
   - `seven_day_routines` / `seven_day_cowork` → Daily Routines extra window.
   - Claude Design/Omelette keys are ignored because Claude Design shares the main Claude usage limit.
   - `extra_usage` → Extra usage cost (monthly spend/limit).
@@ -191,3 +193,20 @@ Admin API key setup:
   `Sources/CodexBarCore/PiSessionCostScanner.swift`,
   `Sources/CodexBarCore/PiSessionCostCache.swift`,
   `Sources/CodexBarCore/Vendored/CostUsage/*`
+
+## Multiple Claude accounts in Midas
+
+Open **Settings → Providers → Claude → Add Claude account**. Sign in, click **Continue**, check the verified
+email, and choose a nickname such as **Personal** or **Business** before saving. Repeat for each account.
+Each sign-in uses a separate temporary web session; it does not change your Claude Code login.
+If your sign-in method blocks the embedded window, use the credential field in Claude settings to paste
+a sessionKey or OAuth token instead. An optional organization ID selects a linked workspace.
+
+Saved Claude accounts refresh independently, including when the source selector is set to CLI.
+The overview shows each account's 5-hour and weekly limits, with model limits in account details.
+A failed connection cannot fall back to another account's CLI, browser, or Keychain credentials.
+Reconnect via **Add Claude account** using the same verified email; Midas explicitly confirms replacing
+that account's session and keeps its organization selection. Saving must succeed before the sheet closes.
+
+Claude Code dollar estimates still cover local activity on this Mac. They appear once per provider and
+are not attributed to individual Claude accounts. Subscription limits are kept separate from those estimates.

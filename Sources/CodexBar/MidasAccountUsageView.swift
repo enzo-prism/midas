@@ -84,12 +84,12 @@ enum MidasAccountQuotaLayout {
 
     static func overviewMetrics(_ presentation: MidasProviderPresentation) -> [MidasQuotaMetric] {
         let metrics = self.allMetrics(presentation)
+        if presentation.provider == .claude {
+            return metrics.filter { MidasClaudeLimits.isPinned($0.id) }
+        }
         guard let first = metrics.first else { return [] }
-        // Claude pins its subscription limits (5-hour, weekly, and any model-only weekly limit such as
-        // Fable); Cursor pins its dashboard pools and Grok Bot; other providers lead with one.
+        // Cursor pins its dashboard pools and Grok Bot; other providers lead with one.
         let pinned: [MidasQuotaMetric] = switch presentation.provider {
-        case .claude:
-            metrics.filter { MidasClaudeLimits.isPinned($0.id) }
         case .cursor:
             MidasCursorLimits.pinned(metrics) ?? [first]
         default:
@@ -378,30 +378,43 @@ extension StatusItemController {
     private func midasTokenAccountPresentations(for provider: UsageProvider) -> [MidasAccountPresentation] {
         let accounts = self.settings.tokenAccounts(for: provider)
         guard accounts.count > 1 else { return [] }
+        var aliases = self.settings.midasAccountAliases
+        for account in accounts where account.externalIdentifier != nil && !account.label.contains("@") {
+            let key = provider.rawValue + ":" + account.id.uuidString
+            if aliases[key] == nil { aliases[key] = account.label }
+        }
         let names = MidasAccountNames.resolve(
-            identities: accounts.map { ($0.id.uuidString, $0.label) },
+            identities: accounts.map { ($0.id.uuidString, $0.externalIdentifier ?? $0.label) },
             provider: provider,
-            aliases: self.settings.midasAccountAliases,
+            aliases: aliases,
             hidePersonalInfo: self.settings.hidePersonalInfo)
         let snapshots = Dictionary(
             (self.store.accountSnapshots[provider] ?? []).map { ($0.id, $0) },
             uniquingKeysWith: { _, new in new })
         return accounts.map { account in
-            let entry = snapshots[account.id]
+            let entry = snapshots[account.id].flatMap {
+                MidasTokenAccountPolicy.entryBelongs(to: account, entry: $0) ? $0 : nil
+            }
             let snapshot = entry?.snapshot
+            let identity = snapshot?.identity(for: provider)
             let card = self.menuCardModel(
                 for: provider,
                 snapshotOverride: snapshot,
                 errorOverride: entry?.error,
                 forceOverrideCard: true,
-                accountOverride: AccountInfo(email: account.label, plan: nil))
+                accountOverride: AccountInfo(
+                    email: identity?.accountEmail ?? account.externalIdentifier ?? account.label,
+                    plan: identity?.loginMethod))
             let presentation = MidasProviderPresentation.make(
                 provider: provider,
                 card: card,
                 snapshot: snapshot,
                 tokenSnapshot: nil,
                 isRefreshing: self.store.refreshingProviders.contains(provider),
-                isStale: entry?.error != nil || snapshot == nil)
+                isStale: MidasCodexAccountPolicy.isStale(
+                    snapshot: snapshot,
+                    error: entry?.error,
+                    refreshInterval: self.settings.refreshFrequency.seconds))
             return MidasAccountPresentation(
                 id: account.id.uuidString,
                 isPrimary: self.settings.selectedTokenAccount(for: provider)?.id == account.id,

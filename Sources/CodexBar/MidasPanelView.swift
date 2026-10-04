@@ -147,11 +147,12 @@ struct MidasOverviewMetrics: View {
     var accounts: [MidasAccountPresentation] = []
 
     var body: some View {
+        let metrics = MidasAccountQuotaLayout.overviewMetrics(self.item)
         VStack(alignment: .leading, spacing: 10) {
             if self.accounts.count > 1 {
                 MidasAccountOverviewBars(accounts: self.accounts)
-            } else if self.item.hero != nil || !self.item.metrics.isEmpty {
-                ForEach(MidasAccountQuotaLayout.overviewMetrics(self.item)) { selected in
+            } else if !metrics.isEmpty {
+                ForEach(metrics) { selected in
                     MidasAccountQuotaBar(metric: selected)
                 }
                 if self.item.isStale || self.item.error != nil {

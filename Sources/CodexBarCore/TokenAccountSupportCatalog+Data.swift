@@ -19,8 +19,9 @@ extension TokenAccountSupportCatalog {
             cookieName: nil,
             environmentKeysToScrub: [ClaudeAdminAPISettingsReader.alternateAdminAPIKeyEnvironmentKey]),
         .claude: TokenAccountSupport(
-            title: "Claude credentials",
-            subtitle: "Store Claude sessionKey cookies, OAuth tokens, or Anthropic Admin API keys.",
+            title: "Claude accounts",
+            subtitle: "Sign in to connect Personal and Business separately. " +
+                "You can also paste a sessionKey cookie or OAuth token. Admin API keys track organization usage.",
             placeholder: "Paste sessionKey, OAuth token, or sk-ant-admin…",
             injection: .cookieHeader,
             requiresManualCookieSource: true,

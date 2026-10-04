@@ -30,9 +30,9 @@ The implementation notes below also preserve older Midas presentation decisions.
   information, and separate session constraints. Codex uses weekly remaining as its quota hero;
   missing weekly data does not turn into a session metric. Claude always pins its
   **5-hour limit** and **Weekly limit** bars in the overview (`MidasClaudeLimits`, titled by window length),
-  plus any model-only weekly limit Claude reports, such as **Fable weekly limit** (ids
-  `claude-weekly-scoped-*`, from `limits[]` rows of kind `weekly_scoped`). A model-only bar keeps Claude's
-  reset time, and its tooltip notes that the all-models weekly limit still applies. Cursor pins its
+  with model-only and other extra limits available in provider details. Model-only weekly limits
+  (ids `claude-weekly-scoped-*`, from `limits[]` rows of kind `weekly_scoped`) retain their reset
+  times and explain that the all-models weekly limit still applies. Cursor pins its
   dashboard trio (`MidasCursorLimits`): **Cursor Models**, **Other Models**, and **Grok Bot weekly**
   (or **Grok Bot trial**), falling back to Total when the pools are unreported; Total stays the hero for
   the menu-bar ring. Grok Bot carries a small monochrome Grok mark (`MidasLogo-grok`, a template image).
@@ -89,14 +89,15 @@ history when cost collection is disabled, without fabricating remaining capacity
 
 The menu bar defaults to **Orbit**: total token spend (API rates), followed by a ring around one
 favorite provider’s logo. Use the provider dropdown in the panel footer, or **Settings → Display → Orbit provider**. The total includes all
-enabled providers, regardless of this selection. Codex’s ring uses weekly remaining, Cursor uses
+enabled providers, regardless of this selection. Codex and Claude rings use total weekly remaining;
+Claude never substitutes its 5-hour or model-only limits when weekly usage is unavailable. Cursor uses
 its real quota, and Meta uses a neutral dashed ring because it has no quota. A disabled or missing
 favorite retains its identity with unknown capacity; it never silently switches to another provider.
 An empty solid ring means exhausted capacity, while a dashed ring means unknown capacity.
 
 Existing Ledger users move to Orbit once. Other explicit modes and the selected provider remain
 unchanged; choosing Ledger again is respected. **Ledger** remains available. **Focus** pins one
-provider’s quota (Codex is always weekly remaining). **Constellation** shows up to three separate
+provider’s quota (Codex and Claude use total weekly remaining). **Constellation** shows up to three separate
 readings, prioritizing enabled Codex, Cursor, and Meta, then other enabled providers. All modes
 retain one content-sized native status item. Text uses 13-point monospaced digits; equal-length
 numeric updates and status changes preserve width, while shorter readings reclaim space. Settings → Display offers these modes, focus-provider

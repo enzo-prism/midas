@@ -183,7 +183,6 @@ struct MidasProviderPresentation {
     let plan: String?
     let hero: MidasQuotaMetric?
     let metrics: [MidasQuotaMetric]
-    /// Provider-wide long-term allowance, independent of the panel headline and model pools.
     var orbitQuota: MidasQuotaMetric?
     let resetCreditsText: String?
     let resetCreditsHelp: String?
@@ -427,9 +426,9 @@ enum MidasCursorLimits {
     }
 }
 
-/// Claude always surfaces its subscription limits — the 5-hour session, the weekly window, and any
-/// model-only weekly limit Claude reports (for example Fable) — labeled by window length, because the
-/// primary slot falls back to a weekly window when Claude reports no 5-hour window.
+/// Claude's overview shows the 5-hour and all-models weekly limits; model-specific limits stay in details.
+/// Labels follow window length because the primary slot falls back to a weekly window when Claude
+/// reports no 5-hour window.
 enum MidasClaudeLimits {
     static let fiveHourTitle = "5-hour limit"
     static let weeklyTitle = "Weekly limit"
@@ -439,7 +438,7 @@ enum MidasClaudeLimits {
     private static let weekMinutes = 7 * 24 * 60
 
     static func isPinned(_ id: String) -> Bool {
-        self.limitIDs.contains(id) || self.isModelWeekly(id)
+        self.limitIDs.contains(id)
     }
 
     static func isModelWeekly(_ id: String) -> Bool {
@@ -457,6 +456,9 @@ enum MidasClaudeLimits {
     static func arrange(_ metrics: [MidasQuotaMetric], snapshot: UsageSnapshot?) -> [MidasQuotaMetric] {
         var session = metrics.first { $0.id == "primary" }
         var weekly = metrics.first { $0.id == "secondary" }
+        // Card percentages are clamped for drawing; validate the original readings before using them as quotas.
+        if snapshot?.primary?.usedPercent.isFinite == false { session = nil }
+        if snapshot?.secondary?.usedPercent.isFinite == false { weekly = nil }
         if let minutes = snapshot?.primary?.windowMinutes, minutes >= self.weekMinutes {
             // No 5-hour window was reported; the primary slot already carries a weekly window.
             if weekly == nil { weekly = session }

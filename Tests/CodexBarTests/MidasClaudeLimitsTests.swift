@@ -122,7 +122,7 @@ struct MidasClaudeLimitsTests {
     }
 
     @Test
-    func `model specific weekly window follows the limits and only surfaces when tight`() throws {
+    func `model specific weekly window stays in details even when exhausted`() throws {
         let healthy = try self.presentation(
             primary: self.window(20, minutes: 300, resetIn: 3600),
             secondary: self.window(10, minutes: 10080, resetIn: 86400),
@@ -134,11 +134,12 @@ struct MidasClaudeLimitsTests {
             primary: self.window(20, minutes: 300, resetIn: 3600),
             secondary: self.window(10, minutes: 10080, resetIn: 86400),
             tertiary: self.window(100, minutes: 10080, resetIn: 86400))
-        #expect(MidasAccountQuotaLayout.overviewMetrics(exhausted).map(\.id) == ["primary", "secondary", "tertiary"])
+        #expect(MidasAccountQuotaLayout.overviewMetrics(exhausted).map(\.id) == ["primary", "secondary"])
+        #expect(MidasAccountQuotaLayout.allMetrics(exhausted).last?.isExhausted == true)
     }
 
     @Test
-    func `fable only weekly limit is always pinned beside the five hour and weekly limits`() throws {
+    func `fable only weekly limit stays in details beside the subscription limits`() throws {
         let fable = NamedRateWindow(
             id: "claude-weekly-scoped-fable",
             title: "Fable only",
@@ -150,17 +151,15 @@ struct MidasClaudeLimitsTests {
 
         let overview = MidasAccountQuotaLayout.overviewMetrics(presentation)
 
-        #expect(overview.map(\.id) == ["primary", "secondary", "claude-weekly-scoped-fable"])
-        #expect(overview.map(\.title) == [
-            MidasClaudeLimits.fiveHourTitle,
-            MidasClaudeLimits.weeklyTitle,
-            "Fable weekly limit",
-        ])
-        #expect(overview[2].valueText == "95% left")
-        #expect(overview[2].resetsAt == Self.now.addingTimeInterval(86400))
-        #expect(overview[2].resetText?.isEmpty == false)
-        #expect(overview[2].helpText?.contains("Fable only") == true)
-        #expect(overview[2].helpText?.contains("all-models weekly limit still applies") == true)
+        #expect(overview.map(\.id) == ["primary", "secondary"])
+        #expect(overview.map(\.title) == [MidasClaudeLimits.fiveHourTitle, MidasClaudeLimits.weeklyTitle])
+        let fableMetric = try #require(MidasAccountQuotaLayout.allMetrics(presentation).last)
+        #expect(fableMetric.title == "Fable weekly limit")
+        #expect(fableMetric.valueText == "95% left")
+        #expect(fableMetric.resetsAt == Self.now.addingTimeInterval(86400))
+        #expect(fableMetric.resetText?.isEmpty == false)
+        #expect(fableMetric.helpText?.contains("Fable only") == true)
+        #expect(fableMetric.helpText?.contains("all-models weekly limit still applies") == true)
         #expect(presentation.hero?.title == MidasClaudeLimits.fiveHourTitle)
     }
 
@@ -174,7 +173,8 @@ struct MidasClaudeLimitsTests {
                 title: "Fable only",
                 window: self.window(100, minutes: 10080, resetIn: 86400))])
 
-        let fable = try #require(MidasAccountQuotaLayout.overviewMetrics(presentation).last)
+        #expect(MidasAccountQuotaLayout.overviewMetrics(presentation).map(\.id) == ["primary", "secondary"])
+        let fable = try #require(MidasAccountQuotaLayout.allMetrics(presentation).last)
 
         #expect(fable.title == "Fable weekly limit")
         #expect(fable.isExhausted)
@@ -193,6 +193,29 @@ struct MidasClaudeLimitsTests {
                 usageKnown: false)])
 
         #expect(MidasAccountQuotaLayout.overviewMetrics(presentation).map(\.id) == ["primary", "secondary"])
+    }
+
+    @Test
+    func `missing subscription windows never promote extra usage into overview`() throws {
+        let extras = [NamedRateWindow(
+            id: "claude-weekly-scoped-fable",
+            title: "Fable only",
+            window: self.window(100, minutes: 10080, resetIn: 86400))]
+        let extrasOnly = try self.presentation(primary: nil, secondary: nil, extraRateWindows: extras)
+        #expect(MidasAccountQuotaLayout.overviewMetrics(extrasOnly).isEmpty)
+        #expect(MidasAccountQuotaLayout.allMetrics(extrasOnly).map(\.id) == ["claude-weekly-scoped-fable"])
+
+        let sessionOnly = try self.presentation(
+            primary: self.window(20, minutes: 300, resetIn: 3600),
+            secondary: nil,
+            extraRateWindows: extras)
+        #expect(MidasAccountQuotaLayout.overviewMetrics(sessionOnly).map(\.title) == [MidasClaudeLimits.fiveHourTitle])
+
+        let weeklyOnly = try self.presentation(
+            primary: nil,
+            secondary: self.window(20, minutes: 10080, resetIn: 86400),
+            extraRateWindows: extras)
+        #expect(MidasAccountQuotaLayout.overviewMetrics(weeklyOnly).map(\.title) == [MidasClaudeLimits.weeklyTitle])
     }
 
     @Test

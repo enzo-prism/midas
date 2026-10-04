@@ -1,5 +1,14 @@
 # Changelog
 
+## Midas 0.41.2 — October 4, 2026
+
+- Add separate Claude account sign-in with verified email and Personal/Business nicknames.
+- Show independent Claude usage bars and keep saved credentials, identities, errors, and reset times isolated.
+- Refresh every saved Claude account without changing the live Claude Code login.
+- Preserve the installed 0.41.1 Orbit behavior and existing Claude overview changes.
+
+Build 116. Local update; publication is separate.
+
 ## Midas 0.41.1 — September 29, 2026
 
 - Orbit shows one outer ring for the selected provider’s remaining weekly allowance, or Cursor’s total monthly allowance. Session, model-specific (including Fable), and individual Cursor pool limits no longer change Orbit’s ring or low-quota warning.

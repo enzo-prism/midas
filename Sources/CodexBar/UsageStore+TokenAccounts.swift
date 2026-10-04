@@ -66,8 +66,9 @@ extension UsageStore {
 
     func shouldFetchAllTokenAccounts(provider: UsageProvider, accounts: [ProviderTokenAccount]) -> Bool {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return false }
-        return (self.settings.midasTrackAllAccounts || self.settings.multiAccountMenuLayout == .stacked) && accounts
-            .count > 1
+        if provider == .claude { return !accounts.isEmpty }
+        return (self.settings.midasTrackAllAccounts
+            || self.settings.multiAccountMenuLayout == .stacked) && accounts.count > 1
     }
 
     func shouldFetchAllCodexVisibleAccounts() -> Bool {
@@ -405,7 +406,9 @@ extension UsageStore {
         // this, cancellation produces empty/error snapshots and the menu briefly shows
         // misleading cards for accounts that previously had valid data.
         let priorSnapshots = await MainActor.run { self.accountSnapshots[provider] ?? [] }
-        let priorByAccountID = Dictionary(uniqueKeysWithValues: priorSnapshots.map { ($0.account.id, $0) })
+        let priorByAccountID = Dictionary(uniqueKeysWithValues: priorSnapshots.filter { entry in
+            accounts.contains { MidasTokenAccountPolicy.entryBelongs(to: $0, entry: entry) }
+        }.map { ($0.account.id, $0) })
 
         var snapshots: [TokenAccountUsageSnapshot] = []
         var historySamples: [(account: ProviderTokenAccount, snapshot: UsageSnapshot)] = []
@@ -417,6 +420,8 @@ extension UsageStore {
         guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return }
         for result in results {
             let account = result.account
+            guard let current = self.settings.tokenAccounts(for: provider).first(where: { $0.id == account.id }),
+                  MidasTokenAccountPolicy.sameConnection(account, current) else { continue }
             let outcome = result.outcome
             let isCancellation = Self.outcomeIsCancellation(outcome)
             if !isCancellation {
@@ -450,7 +455,10 @@ extension UsageStore {
             }
         }
 
-        if let selectedOutcome {
+        if let selectedOutcome, let effectiveSelected,
+           let currentSelected = self.settings.selectedTokenAccount(for: provider),
+           MidasTokenAccountPolicy.sameConnection(effectiveSelected, currentSelected)
+        {
             await self.applySelectedOutcome(
                 selectedOutcome,
                 provider: provider,
@@ -1065,6 +1073,13 @@ extension UsageStore {
         switch outcome.result {
         case let .success(result):
             let scoped = result.usage.scoped(to: provider)
+            if provider == .claude, !MidasTokenAccountPolicy.identityMatches(scoped, account: account) {
+                return ResolvedAccountOutcome(snapshot: TokenAccountUsageSnapshot(
+                    account: account,
+                    snapshot: nil,
+                    error: MidasTokenAccountPolicy.identityMismatch,
+                    sourceLabel: nil), usage: nil)
+            }
             let labeled = self.applyAccountLabel(scoped, provider: provider, account: account)
             let snapshot = TokenAccountUsageSnapshot(
                 account: account,
@@ -1223,6 +1238,14 @@ extension UsageStore {
             self.lastFetchAttempts[provider] = outcome.attempts
         }
         guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return }
+        if let account, provider == .claude,
+           case let .success(result) = outcome.result,
+           !MidasTokenAccountPolicy.identityMatches(result.usage, account: account)
+        {
+            self.snapshots.removeValue(forKey: provider)
+            self.errors[provider] = MidasTokenAccountPolicy.identityMismatch
+            return
+        }
         switch outcome.result {
         case let .success(result):
             let scoped = result.usage.scoped(to: provider)
@@ -1238,7 +1261,8 @@ extension UsageStore {
                 let retained = provider == .cursor
                     ? Self.retainingCursorGrokBot(labeled, previous: self.snapshots[.cursor])
                     : labeled
-                let backfilled = retained.backfillingResetTimes(from: self.lastKnownResetSnapshots[provider])
+                let previous = provider == .claude ? fallbackSnapshot : self.lastKnownResetSnapshots[provider]
+                let backfilled = retained.backfillingResetTimes(from: previous)
                 self.handleQuotaWarningTransitions(provider: provider, snapshot: backfilled)
                 self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
                 self.lastKnownResetSnapshots[provider] = backfilled

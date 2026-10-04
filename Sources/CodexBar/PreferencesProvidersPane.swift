@@ -481,7 +481,8 @@ struct ProvidersPane: View {
                         await self.store.refreshProvider(provider, allowDisabled: true)
                     }
                 }
-            })
+            },
+            claudeAccountSettings: provider == .claude ? self.settings : nil)
     }
 
     private func makeSettingsContext(provider: UsageProvider) -> ProviderSettingsContext {

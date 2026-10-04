@@ -122,7 +122,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let refreshTask = Task { @MainActor in
             await store.refresh()
         }
-        await blocker.waitUntilStarted(count: 1)
+        await blocker.waitUntilStarted(count: 2)
         XCTAssertTrue(store.isRefreshing)
 
         let menu = controller.makeMenu()
@@ -136,7 +136,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
             await Task.yield()
         }
         let startedBeforeDrain = await blocker.startedCallCount()
-        XCTAssertEqual(startedBeforeDrain, 1)
+        XCTAssertEqual(startedBeforeDrain, 2)
 
         await blocker.resumeAll(with: .success(self.snapshot(percent: 17)))
         await blocker.waitUntilStarted(count: 2)

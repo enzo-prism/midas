@@ -16,7 +16,7 @@ enum MidasOnboardingStep: Int, CaseIterable {
 }
 
 enum MidasOnboarding {
-    static let providers: [UsageProvider] = [.codex, .cursor, .meta]
+    static let providers: [UsageProvider] = [.codex, .claude, .cursor, .meta]
 
     static func canContinue(selected: Set<UsageProvider>, mode: MidasCodexEstimateMode, rate: Double?) -> Bool {
         guard !selected.isEmpty else { return false }

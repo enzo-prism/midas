@@ -91,7 +91,8 @@ struct MidasMenuBarPresentation: Equatable {
             item.error != nil || (mode == .orbit ? Self.orbitQuota(item) : Self.quota(item))
                 .map { $0.remainingPercent <= 10 } == true
                 || item.metrics.contains { metric in
-                    mode != .orbit && item.provider != .meta && metric.id != "cursor-models" && metric.statusText == nil
+                    mode != .orbit
+                        && item.provider != .meta && metric.id != "cursor-models" && metric.statusText == nil
                         && metric.remainingPercent <= 10
                 }
         }
@@ -125,7 +126,7 @@ struct MidasMenuBarPresentation: Equatable {
         }
         self.width = mode == .legacy ? 24 : MidasMenuBarLayout.width(title: self.title, orbit: mode == .orbit)
         var descriptions = displayed.map {
-            Self.describe($0, hideSpend: hideSpend, now: now, orbit: mode == .orbit)
+            Self.describe($0, hideSpend: hideSpend, now: now, weeklyOnly: mode == .orbit)
         }
         if displayed.isEmpty {
             descriptions.append(mode == .focus || mode == .orbit
@@ -163,6 +164,13 @@ struct MidasMenuBarPresentation: Equatable {
     }
 
     private static func quota(_ item: MidasProviderPresentation) -> MidasQuotaMetric? {
+        if item.provider == .claude {
+            // The outer ring represents the all-models weekly allowance, never session or model quotas.
+            return ([item.hero].compactMap(\.self) + item.metrics).first {
+                MidasClaudeLimits.limitIDs.contains($0.id) && $0.title == MidasClaudeLimits.weeklyTitle
+                    && $0.statusText == nil && $0.remainingPercent.isFinite
+            }
+        }
         guard item.provider != .meta, let hero = item.hero, hero.remainingPercent.isFinite else { return nil }
         if item.provider == .codex, hero.id != "secondary" { return nil }
         if item.provider == .cursor, hero.id == "cursor-models" { return nil }
@@ -178,21 +186,22 @@ struct MidasMenuBarPresentation: Equatable {
         _ item: MidasProviderPresentation,
         hideSpend: Bool,
         now: Date,
-        orbit: Bool) -> String
+        weeklyOnly: Bool) -> String
     {
         var text = item.name + ": "
-        if let quota = orbit ? Self.orbitQuota(item) : Self.quota(item) {
+        if let quota = weeklyOnly ? Self.orbitQuota(item) : Self.quota(item) {
             text += "\(quota.remainingPercent.formatted()) percent remaining, \(quota.title)"
             if let reset = quota.resetText { text += "; \(reset)" }
         } else {
-            if orbit {
+            if weeklyOnly {
                 text += item.provider == .cursor ? "monthly quota unavailable" : "weekly quota unavailable"
             } else {
-                text += item.provider == .codex ? "weekly quota unavailable" : "quota unavailable"
+                text += item.provider == .codex || item.provider == .claude
+                    ? "weekly quota unavailable" : "quota unavailable"
             }
             if let activity = item.activitySummary { text += "; \(activity)" }
         }
-        for metric in item.metrics where !orbit && item.provider != .meta && metric.id != "cursor-models" {
+        for metric in item.metrics where !weeklyOnly && item.provider != .meta && metric.id != "cursor-models" {
             if let status = metric.statusText {
                 text += "; \(metric.title): \(status.lowercased())"
             } else if metric.remainingPercent.isFinite {

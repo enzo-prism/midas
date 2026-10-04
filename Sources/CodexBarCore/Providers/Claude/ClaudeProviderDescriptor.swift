@@ -43,6 +43,22 @@ public enum ClaudeProviderDescriptor {
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {
+        // Stored accounts own their credentials. Never fall back to the current
+        // Claude CLI login, Keychain, or browser session for another account.
+        if context.selectedTokenAccountID != nil {
+            if ClaudeAdminAPIFetchStrategy.isSelectedAdminAPIAccount(context: context) {
+                return [ClaudeAdminAPIFetchStrategy()]
+            }
+            if ClaudeOAuthFetchStrategy.hasEnvironmentToken(context.env) {
+                return [ClaudeOAuthFetchStrategy()]
+            }
+            if let header = Self.manualCookieHeader(from: context),
+               ClaudeWebAPIFetcher.hasSessionKey(cookieHeader: header)
+            {
+                return [ClaudeWebFetchStrategy(browserDetection: context.browserDetection)]
+            }
+            return []
+        }
         if context.sourceMode == .api || self.hasAutoAdminAPIKey(context: context) {
             return [ClaudeAdminAPIFetchStrategy()]
         }
@@ -237,6 +253,12 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
     @TaskLocal static var claudeCLIAvailableOverride: Bool?
     #endif
 
+    static func hasEnvironmentToken(_ environment: [String: String]) -> Bool {
+        !(environment[ClaudeOAuthCredentialsStore.environmentTokenKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty ?? true)
+    }
+
     private func loadNonInteractiveCredentialRecord(environment: [String: String]) -> ClaudeOAuthCredentialRecord? {
         #if DEBUG
         if let override = Self.nonInteractiveCredentialRecordOverride { return override }
@@ -323,20 +345,26 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        Self.isPlausiblyAvailable(
+        if context.selectedTokenAccountID != nil {
+            return Self.hasEnvironmentToken(context.env)
+        }
+        return Self.isPlausiblyAvailable(
             runtime: context.runtime,
             sourceMode: context.sourceMode,
             environment: context.env)
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        if context.selectedTokenAccountID != nil, !Self.hasEnvironmentToken(context.env) {
+            throw ClaudeUsageError.oauthFailed("This Claude account has no saved OAuth token.")
+        }
         let fetcher = ClaudeUsageFetcher(
             browserDetection: context.browserDetection,
             environment: context.env,
             dataSource: .oauth,
             oauthKeychainPromptCooldownEnabled: context.sourceMode == .auto,
-            allowBackgroundDelegatedRefresh: context.runtime == .cli,
-            allowStartupBootstrapPrompt: context.runtime == .app &&
+            allowBackgroundDelegatedRefresh: context.selectedTokenAccountID == nil && context.runtime == .cli,
+            allowStartupBootstrapPrompt: context.selectedTokenAccountID == nil && context.runtime == .app &&
                 (context.sourceMode == .auto || context.sourceMode == .oauth),
             useWebExtras: false)
         let usage = try await fetcher.loadLatestUsage(model: "sonnet")
@@ -348,7 +376,7 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
     func shouldFallback(on _: Error, context: ProviderFetchContext) -> Bool {
         // In Auto mode, fall back to the next strategy (cli/web) if OAuth fails (e.g. user cancels keychain prompt
         // or auth breaks).
-        context.runtime == .app && context.sourceMode == .auto
+        context.selectedTokenAccountID == nil && context.runtime == .app && context.sourceMode == .auto
     }
 
     fileprivate static func snapshot(from usage: ClaudeUsageSnapshot) -> UsageSnapshot {
@@ -383,6 +411,9 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        if context.selectedTokenAccountID != nil, Self.manualCookieHeader(from: context) == nil {
+            throw ClaudeUsageError.parseFailed("This Claude account has no saved session cookie.")
+        }
         let fetcher = ClaudeUsageFetcher(
             browserDetection: browserDetection,
             dataSource: .web,
@@ -396,7 +427,7 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
-        guard context.sourceMode == .auto else { return false }
+        guard context.selectedTokenAccountID == nil, context.sourceMode == .auto else { return false }
         _ = error
         // In CLI runtime auto mode, web comes before CLI so fallback is required.
         // In app runtime auto mode, web is terminal and should surface its concrete error.
@@ -410,6 +441,7 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
         if let header = self.manualCookieHeader(from: context) {
             return ClaudeWebAPIFetcher.hasSessionKey(cookieHeader: header)
         }
+        guard context.selectedTokenAccountID == nil else { return false }
         guard context.settings?.claude?.cookieSource != .off else { return false }
         return ClaudeWebAPIFetcher.hasSessionKey(browserDetection: browserDetection)
     }

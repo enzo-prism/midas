@@ -22,9 +22,25 @@ struct ProvidersPaneCoverageTests {
 
         let claudeDescriptor = try #require(pane._test_tokenAccountDescriptor(for: .claude))
         #expect(claudeDescriptor.showsOrganizationField)
+        #expect(claudeDescriptor.claudeAccountSettings != nil)
 
         let copilotDescriptor = try #require(pane._test_tokenAccountDescriptor(for: .copilot))
         #expect(!copilotDescriptor.showsOrganizationField)
+        #expect(copilotDescriptor.claudeAccountSettings == nil)
+    }
+
+    @Test
+    func `claude accounts remain discoverable with automatic credentials`() throws {
+        let settings = Self.makeSettingsStore(suite: "ProvidersPaneCoverageTests-claude-account-visibility")
+        let store = Self.makeUsageStore(settings: settings)
+        let pane = ProvidersPane(settings: settings, store: store)
+        let descriptor = try #require(pane._test_tokenAccountDescriptor(for: .claude))
+
+        for source in [ProviderCookieSource.auto, .off, .manual] {
+            settings.claudeCookieSource = source
+            #expect(descriptor.isVisible?() == true)
+            #expect(settings.tokenAccounts(for: .claude).isEmpty)
+        }
     }
 
     @Test

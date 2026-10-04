@@ -5,11 +5,10 @@ import Testing
 @testable import CodexBar
 @testable import CodexBarCore
 
-/// End to end: a Claude usage response carrying a Fable-only weekly limit reaches the Air overview
-/// as a pinned bar next to the 5-hour and weekly limits.
+/// End to end: scoped Claude limits remain available in details without cluttering the Air overview.
 struct MidasClaudeFableLimitTests {
     @Test
-    func `oauth fable scoped limit becomes a pinned overview bar`() throws {
+    func `oauth fable scoped limit remains in details while overview shows subscription limits`() throws {
         // Shape of the claude.ai usage endpoint's `limits[]` rows as documented by Claude Code 2.1.281:
         // kind/group/percent/resets_at/scope.model.display_name/severity/is_active. Classify on `kind`,
         // never on a label; `is_active` marks the headline row only.
@@ -68,10 +67,12 @@ struct MidasClaudeFableLimitTests {
         #expect(overview.map(\.title) == [
             MidasClaudeLimits.fiveHourTitle,
             MidasClaudeLimits.weeklyTitle,
-            "Fable weekly limit",
         ])
-        #expect(overview.map(\.valueText) == ["88% left", "60% left", "25% left"])
-        #expect(overview.last?.resetsAt != nil)
+        #expect(overview.map(\.valueText) == ["88% left", "60% left"])
+        let fable = try #require(MidasAccountQuotaLayout.allMetrics(presentation).last)
+        #expect(fable.title == "Fable weekly limit")
+        #expect(fable.valueText == "25% left")
+        #expect(fable.resetsAt != nil)
     }
 
     /// Opt-in export uses synthetic data only; it never initializes stores or probes credentials.

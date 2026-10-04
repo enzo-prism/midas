@@ -141,6 +141,7 @@ struct ProviderSettingsTokenAccountsDescriptor: Identifiable {
     let primaryAddAction: (() async -> Void)?
     let openConfigFile: () -> Void
     let reloadFromDisk: () -> Void
+    var claudeAccountSettings: SettingsStore?
 }
 
 /// Shared organizations descriptor rendered in the Providers settings pane.
