@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.45.0**, build **120**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.46.0**, build **121**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -32,6 +32,34 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.46.0 changes: Meta plan usage
+
+Version 0.46.0, build 121, replaces the recorded-activity estimate with Meta's own
+plan windows:
+
+- `MetaSubscriptionUsage` parses the Muse host's MSP `SubscriptionUsage` payload
+  (current-window used percent, duration, and reset; weekly used percent and reset;
+  opaque tier id; observation stamp) and persists on `UsageSnapshot.metaUsage`.
+  `MetaSubscriptionFetchStrategy` runs before the local-log strategy, combines the
+  windows with local token totals for spend, and falls back when unobserved.
+- `MetaUsageProbe` / `MetaMSPClient` spawn `muse serve`, resume Midas's dedicated
+  "Midas usage check" session (created and named on first use), try `usage/read`,
+  and otherwise send one minimal prompt to trigger `usage/changed`.
+  `MetaSubscriptionUsageCache` throttles probes to one per 55 minutes and keeps the
+  last reading through failures. Two pipe bugs found in live testing are fixed by
+  design: SIGPIPE is ignored before writing to the child, stderr goes to the null
+  device, and reads use a readability-handler line stream (`readData(ofLength:)`
+  blocks for a full buffer on pipes).
+- Air and the legacy card render **Current usage** / **Weekly limit** as quota bars
+  (% left, reset countdowns, show-used preference honored, both pinned in the
+  overview) whenever `metaUsage` is present; the 0.45 activity bars remain the
+  fallback. Orbit still excludes Meta. Live verification: `codexbar usage
+  --provider meta` reported source `muse-usage` with Current 12% left (resets in
+  1h 3m) and Weekly 71% left (resets in 5d 16h), matching the account's usage page.
+
+Publication status for 121 is recorded below once signing, notarization, and public
+download verification finish; until then the published binary remains 0.45.0.
 
 ## 0.45.0 changes: Meta usage left
 

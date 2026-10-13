@@ -34,7 +34,8 @@ struct MetaProviderImplementation: ProviderImplementation {
             ProviderSettingsFieldDescriptor(
                 id: "meta-api-key",
                 title: "API key (optional)",
-                subtitle: "Usage comes from local Muse logs. Optional META_API_KEY for the Meta Model API.",
+                subtitle: "Plan usage comes from Muse (one minimal check at most hourly). "
+                    + "Token totals come from local Muse logs. Optional META_API_KEY for the Meta Model API.",
                 kind: .secure,
                 placeholder: "metask_...",
                 binding: context.stringBinding(\.metaAPIKey),

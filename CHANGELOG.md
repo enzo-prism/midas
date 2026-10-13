@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.46.0 — October 13, 2026
+
+- Show Meta's real plan usage: **Current usage** and **Weekly limit** now read "% left" with each window's reset time, matching the Meta Model API usage page.
+- Read the windows from Meta's provider through the Muse host (MSP `usage/read`), probing with one minimal prompt at most once an hour in a dedicated "Midas usage check" session and caching the reading between checks.
+- Keep the 0.45 recorded-activity estimate only as a fallback when no plan reading is available, and keep Meta out of Orbit.
+
+Build 121. See GitHub Releases for signed binary availability.
+
 ## Midas 0.45.0 — October 12, 2026
 
 - Show Meta bars as usage left: Today and Last 7 days now read "% left" with tokens used, tokens left, and request counts, draining as Muse usage grows and warning when headroom runs low.

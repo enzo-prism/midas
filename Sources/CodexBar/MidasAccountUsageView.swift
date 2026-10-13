@@ -87,6 +87,10 @@ enum MidasAccountQuotaLayout {
         if presentation.provider == .claude {
             return metrics.filter { MidasClaudeLimits.isPinned($0.id) }
         }
+        if presentation.provider == .meta {
+            // Both real plan windows (current + weekly) stay visible in the overview.
+            return metrics
+        }
         guard let first = metrics.first else { return [] }
         // Cursor pins its dashboard pools and Grok Bot; other providers lead with one.
         let pinned: [MidasQuotaMetric] = switch presentation.provider {

@@ -1261,9 +1261,9 @@ extension UsageMenuCardView.Model {
             {
                 metrics.append(resetsMetric)
             }
-        } else if input.provider == .meta {
-            // Meta reports no plan limit. Its bars mirror Claude's rows, showing
-            // percent left against the busiest comparable recorded window.
+        } else if input.provider == .meta, snapshot.metaUsage == nil {
+            // Without an observed plan reading, Meta's bars mirror Claude's rows,
+            // showing percent left against the busiest comparable recorded window.
             metrics.append(contentsOf: Self.metaActivityMetrics(input: input))
         } else if let primary = snapshot.primary {
             metrics.append(Self.primaryMetric(
@@ -1274,8 +1274,12 @@ extension UsageMenuCardView.Model {
                 zaiTokenDetail: zaiTokenDetail,
                 openRouterQuotaDetail: openRouterQuotaDetail))
         }
-        if input.provider != .codex, input.provider != .meta, let weekly = snapshot.secondary {
-            // Meta's weekly-shaped activity row is added by metaActivityMetrics above.
+        if input.provider != .codex,
+           input.provider != .meta || snapshot.metaUsage != nil,
+           let weekly = snapshot.secondary
+        {
+            // Meta's weekly row is the real weekly limit when observed, else the
+            // activity row added by metaActivityMetrics above.
             metrics.append(Self.secondaryMetric(
                 input: input,
                 weekly: weekly,

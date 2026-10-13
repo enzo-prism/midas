@@ -36,26 +36,33 @@ usage comes from the local session logs `muse` already writes on-device.
 
 ## Usage bars
 
-Meta publishes no quota, limit, budget, or reset for Muse Code, so there is no
-provider-reported percent remaining to show. Instead, the Air panel (overview and
-provider detail) and the legacy menu card show Claude-style bars that read as usage
-left against the only honest baseline — your own recorded history:
+Meta's provider reports the real Muse Code plan windows on every response, and
+the Muse host republishes them over MSP (`usage/read` / `usage/changed`):
+current-window used percent with its duration (5 hours) and reset time, plus the
+rolling weekly used percent and reset time. The Air panel (overview and provider
+detail) and the legacy menu card show those as Claude-style bars:
 
-- **Today** — today's recorded Muse tokens and requests, measured against the busiest
-  recorded day.
-- **Last 7 days** — the last 7 local-calendar days, measured against the busiest rolling
-  7-day window. This window is the detail-view hero.
+- **Current usage** — percent left in the current window, resetting at the
+  provider-reported time.
+- **Weekly limit** — percent left in the rolling weekly window, resetting at the
+  provider-reported time.
 
-Bar fill is `100 - (window tokens / busiest comparable window tokens * 100)`, labeled
-"N% left" with tokens used, tokens left, and the baseline named ("vs busiest day/week"),
-so it drains as usage grows and warns when headroom runs low, like every other
-provider's bar. The legacy menu card follows the global show-used preference
-(percent used, with tokens left still shown). With no recorded baseline the bar stays
-empty and says so instead of reading as full. No reset line is shown, and these bars
-never feed menu-bar quota rings or Orbit, which still mean provider-reported remaining
-capacity only. `MetaActivitySnapshot` (on `UsageSnapshot.metaActivity`) carries the
-windows and busiest-day/week totals; when only token history is available it is derived
-from that history, which follows the selected local/combined usage scope.
+Midas asks a fresh `muse serve` host for its last-observed usage; when nothing
+has been observed yet it sends one minimal prompt ("Reply with exactly: ok") in a
+dedicated, reusable "Midas usage check" session so the response carries fresh
+numbers. Probes are cached for 55 minutes (`MetaSubscriptionUsageCache`), so the
+check costs at most one minimal prompt an hour; a failed probe keeps the last
+known reading, and the plan windows persist on `UsageSnapshot.metaUsage`. The
+legacy menu card follows the global show-used preference (percent used instead of
+left). Meta's tier id from the provider is opaque and is never shown as a plan name.
+
+When no plan reading is available (for example `muse` is not installed), Midas
+falls back to recorded-activity bars: **Today** and **Last 7 days** of Muse tokens
+as percent left against the busiest comparable recorded window, with the baseline
+named and no reset line. `MetaActivitySnapshot` (on `UsageSnapshot.metaActivity`)
+carries those windows; when only token history is available it is derived from that
+history, which follows the selected local/combined usage scope. Neither form feeds
+Orbit, which still means provider-reported remaining capacity only.
 
 ## Cost estimates
 

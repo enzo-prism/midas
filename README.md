@@ -32,6 +32,15 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.46.0: Meta plan usage, for real
+
+Meta bars now show Meta's own numbers: **Current usage** and **Weekly limit** as
+**% left**, with the exact reset time for each window — the same readings as the Meta
+Model API usage page. Midas asks the Muse host for its last-observed subscription
+usage (one minimal check prompt at most once an hour, in a dedicated "Midas usage check"
+session), and keeps the recorded-activity estimate only as a fallback when no plan
+reading is available. See [Meta usage bars](docs/meta.md#usage-bars).
+
 ## Midas 0.45.0: Meta usage left
 
 Meta bars now read like every other provider's: **% left**, draining as you use Muse.

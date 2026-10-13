@@ -393,7 +393,9 @@ struct MidasProviderPresentation {
             isRefreshing: isRefreshing,
             isStale: isStale,
             updatedAt: snapshot?.updatedAt)
-        if provider == .meta {
+        if provider == .meta, snapshot?.metaUsage == nil {
+            // Real plan windows (snapshot.metaUsage) render as quota metrics above;
+            // recorded-activity bars are only the fallback when none was observed.
             result.activityMetrics = Self.metaActivityMetrics(snapshot: snapshot, tokenSnapshot: tokenSnapshot)
         }
         return result
