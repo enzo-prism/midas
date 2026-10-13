@@ -956,6 +956,11 @@ public actor CursorSessionStore {
         Task { await self.loadFromDiskIfNeeded() }
     }
 
+    init(fileURL: URL) {
+        self.fileURL = fileURL
+        Task { await self.loadFromDiskIfNeeded() }
+    }
+
     public func setCookies(_ cookies: [HTTPCookie]) {
         self.hasLoadedFromDisk = true
         self.sessionCookies = cookies

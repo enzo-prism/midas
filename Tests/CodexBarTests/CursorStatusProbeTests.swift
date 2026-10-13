@@ -801,11 +801,10 @@ struct CursorStatusProbeTests {
     // MARK: - Session Store Serialization
 
     @Test
-    func `session store saves and loads cookies`() async {
-        let store = CursorSessionStore.shared
-
-        // Clear any existing cookies
-        await store.clearCookies()
+    func `session store saves and loads cookies`() async throws {
+        let fixture = try makeCursorSessionStoreFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let store = fixture.store
 
         // Create test cookies with Date properties
         let cookieProps: [HTTPCookiePropertyKey: Any] = [
@@ -836,9 +835,10 @@ struct CursorStatusProbeTests {
     }
 
     @Test
-    func `session store reloads from disk when needed`() async {
-        let store = CursorSessionStore.shared
-        await store.resetForTesting()
+    func `session store reloads from disk when needed`() async throws {
+        let fixture = try makeCursorSessionStoreFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let store = fixture.store
 
         let cookieProps: [HTTPCookiePropertyKey: Any] = [
             .name: "diskCookie",
@@ -866,9 +866,10 @@ struct CursorStatusProbeTests {
     }
 
     @Test
-    func `session store has valid session loads from disk`() async {
-        let store = CursorSessionStore.shared
-        await store.resetForTesting()
+    func `session store has valid session loads from disk`() async throws {
+        let fixture = try makeCursorSessionStoreFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let store = fixture.store
 
         let cookieProps: [HTTPCookiePropertyKey: Any] = [
             .name: "validCookie",
@@ -905,6 +906,14 @@ struct CursorStatusProbeTests {
         let cookie = HTTPCookie(properties: cookieProps)!
         return CursorCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: sourceLabel)
     }
+}
+
+private func makeCursorSessionStoreFixture() throws -> (store: CursorSessionStore, directory: URL) {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("CursorSessionStoreTests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let store = CursorSessionStore(fileURL: directory.appendingPathComponent("cursor-session.json"))
+    return (store, directory)
 }
 
 private func makeCursorStatusProbeSession() -> URLSession {
