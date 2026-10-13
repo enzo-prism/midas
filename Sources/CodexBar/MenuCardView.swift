@@ -69,6 +69,8 @@ struct UsageMenuCardView: View {
             let title: String
             let percent: Double
             let percentStyle: PercentStyle
+            /// Replaces the percent label for non-quota bars (Meta recorded activity).
+            let valueText: String?
             let statusText: String?
             let resetText: String?
             let detailText: String?
@@ -86,6 +88,7 @@ struct UsageMenuCardView: View {
                 title: String,
                 percent: Double,
                 percentStyle: PercentStyle,
+                valueText: String? = nil,
                 statusText: String? = nil,
                 resetText: String?,
                 detailText: String?,
@@ -101,6 +104,7 @@ struct UsageMenuCardView: View {
                 self.title = title
                 self.percent = percent
                 self.percentStyle = percentStyle
+                self.valueText = valueText
                 self.statusText = statusText
                 self.resetText = resetText
                 self.detailText = detailText
@@ -114,7 +118,8 @@ struct UsageMenuCardView: View {
             }
 
             var percentLabel: String {
-                String(format: "%.0f%% %@", self.percent, self.percentStyle.labelSuffix)
+                if let valueText, !valueText.isEmpty { return valueText }
+                return String(format: "%.0f%% %@", self.percent, self.percentStyle.labelSuffix)
             }
         }
 
@@ -512,7 +517,8 @@ private struct MetricRow: View {
                 UsageProgressBar(
                     percent: self.metric.percent,
                     tint: self.progressColor,
-                    accessibilityLabel: self.metric.percentStyle.accessibilityLabel,
+                    accessibilityLabel: self.metric.valueText == nil
+                        ? self.metric.percentStyle.accessibilityLabel : L("Recorded activity"),
                     pacePercent: self.metric.pacePercent,
                     paceOnTop: self.metric.paceOnTop,
                     warningMarkerPercents: self.metric.warningMarkerPercents)
@@ -1255,9 +1261,11 @@ extension UsageMenuCardView.Model {
             {
                 metrics.append(resetsMetric)
             }
-        } else if input.provider != .meta, let primary = snapshot.primary {
-            // Meta skips window rows: its card is the 30-day API usage + costs
-            // below, and 0% window bars duplicate that story with less context.
+        } else if input.provider == .meta {
+            // Meta has no quota to show as % left. Its bars mirror Claude's rows
+            // with recorded Muse activity scaled to the busiest comparable window.
+            metrics.append(contentsOf: Self.metaActivityMetrics(input: input))
+        } else if let primary = snapshot.primary {
             metrics.append(Self.primaryMetric(
                 input: input,
                 primary: primary,
@@ -1267,6 +1275,7 @@ extension UsageMenuCardView.Model {
                 openRouterQuotaDetail: openRouterQuotaDetail))
         }
         if input.provider != .codex, input.provider != .meta, let weekly = snapshot.secondary {
+            // Meta's weekly-shaped activity row is added by metaActivityMetrics above.
             metrics.append(Self.secondaryMetric(
                 input: input,
                 weekly: weekly,

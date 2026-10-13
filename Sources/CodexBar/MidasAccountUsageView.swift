@@ -338,6 +338,31 @@ struct MidasAccountQuotaBar: View {
     }
 }
 
+/// Claude-style bar for recorded activity without a quota (Meta): title, token
+/// value, the same remaining-bar capsule, and a share-of-busiest-window caption.
+/// No reset line is shown because Meta reports no reset.
+struct MidasActivityBar: View {
+    let metric: MidasActivityMetric
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Text(self.metric.title)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                Text(self.metric.valueText).monospacedDigit()
+            }
+            .font(.callout)
+            MidasRemainingBar(percent: self.metric.sharePercent, warningWhenLow: false)
+            Text(self.metric.detailText)
+                .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(self.metric.title) activity")
+        .accessibilityValue("\(self.metric.valueText), \(self.metric.detailText)")
+    }
+}
+
 struct MidasAccountOverviewBars: View {
     let accounts: [MidasAccountPresentation]
 

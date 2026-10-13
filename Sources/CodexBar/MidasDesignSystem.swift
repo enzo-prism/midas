@@ -33,11 +33,13 @@ struct MidasQuietButtonStyle: ButtonStyle {
 
 struct MidasRemainingBar: View {
     let percent: Double
+    /// Quota bars warn when nearly exhausted; activity bars stay accent at any level.
+    var warningWhenLow = true
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule().fill(MidasTheme.surface)
-                Capsule().fill(self.percent <= 10 ? MidasTheme.warning : MidasTheme.accent)
+                Capsule().fill(self.warningWhenLow && self.percent <= 10 ? MidasTheme.warning : MidasTheme.accent)
                     .frame(width: geometry.size.width * min(100, max(0, self.percent)) / 100)
             }
         }

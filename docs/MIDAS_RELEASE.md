@@ -32,6 +32,21 @@ Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
 
+## 0.44.0 changes: Meta activity bars
+
+Version 0.44.0, build 119, gives Meta Claude-style bars without inventing a quota:
+
+- `MetaActivitySnapshot` records Today / Last 7 days / Last 30 days Muse tokens and
+  requests plus busiest-day and busiest-rolling-week totals, persisted on
+  `UsageSnapshot.metaActivity`; `MetaActivitySnapshot(tokenSnapshot:)` derives the same
+  windows from token history when only that is available.
+- Air overview and provider detail render `MidasActivityBar` rows (detail hero is Last
+  7 days) with the shared `MidasRemainingBar` capsule in activity tone; the legacy menu
+  card shows the same Today / Last 7 days rows. Labels read "N% of busiest day/week";
+  no percent-left, reset, or menu-bar quota ring is produced for Meta.
+- Focused coverage lives in `MetaActivityBarsTests`; the anti-fabrication contracts in
+  `MidasMetaPresentationTests` (no hero, no quota metrics, no % in the summary) still pass.
+
 ## 0.43.0 changes: usage sync
 
 Private shared-folder usage sync combines recorded Codex, Claude Code, Muse Code, and verified

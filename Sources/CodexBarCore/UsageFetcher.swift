@@ -134,6 +134,8 @@ public struct UsageSnapshot: Codable, Sendable {
     public let mistralUsage: MistralUsageSnapshot?
     public let deepgramUsage: DeepgramUsageSnapshot?
     public let cursorRequests: CursorRequestUsage?
+    /// Recorded Muse activity for Meta's Claude-style bars; Meta only, nil elsewhere.
+    public let metaActivity: MetaActivitySnapshot?
     /// On-demand Codex rate-limit reset credits (count + per-credit expiries). Codex only;
     /// nil for other providers and for non-OAuth Codex sources that cannot report it.
     public let codexResetCredits: CodexResetCreditsSnapshot?
@@ -156,6 +158,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case claudeAdminAPIUsage
         case mistralUsage
         case deepgramUsage
+        case metaActivity
         case codexResetCredits
         case subscriptionExpiresAt
         case subscriptionRenewsAt
@@ -183,6 +186,7 @@ public struct UsageSnapshot: Codable, Sendable {
         mistralUsage: MistralUsageSnapshot? = nil,
         deepgramUsage: DeepgramUsageSnapshot? = nil,
         cursorRequests: CursorRequestUsage? = nil,
+        metaActivity: MetaActivitySnapshot? = nil,
         codexResetCredits: CodexResetCreditsSnapshot? = nil,
         subscriptionExpiresAt: Date? = nil,
         subscriptionRenewsAt: Date? = nil,
@@ -205,6 +209,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.mistralUsage = mistralUsage
         self.deepgramUsage = deepgramUsage
         self.cursorRequests = cursorRequests
+        self.metaActivity = metaActivity
         self.codexResetCredits = codexResetCredits
         self.subscriptionExpiresAt = subscriptionExpiresAt
         self.subscriptionRenewsAt = subscriptionRenewsAt
@@ -236,6 +241,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.mistralUsage = try container.decodeIfPresent(MistralUsageSnapshot.self, forKey: .mistralUsage)
         self.deepgramUsage = try container.decodeIfPresent(DeepgramUsageSnapshot.self, forKey: .deepgramUsage)
         self.cursorRequests = nil // Not persisted, fetched fresh each time
+        self.metaActivity = try container.decodeIfPresent(MetaActivitySnapshot.self, forKey: .metaActivity)
         self.codexResetCredits = try container.decodeIfPresent(
             CodexResetCreditsSnapshot.self,
             forKey: .codexResetCredits)
@@ -276,6 +282,7 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.claudeAdminAPIUsage, forKey: .claudeAdminAPIUsage)
         try container.encodeIfPresent(self.mistralUsage, forKey: .mistralUsage)
         try container.encodeIfPresent(self.deepgramUsage, forKey: .deepgramUsage)
+        try container.encodeIfPresent(self.metaActivity, forKey: .metaActivity)
         try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
         try container.encodeIfPresent(self.subscriptionExpiresAt, forKey: .subscriptionExpiresAt)
         try container.encodeIfPresent(self.subscriptionRenewsAt, forKey: .subscriptionRenewsAt)
@@ -383,6 +390,7 @@ public struct UsageSnapshot: Codable, Sendable {
             mistralUsage: self.mistralUsage,
             deepgramUsage: self.deepgramUsage,
             cursorRequests: self.cursorRequests,
+            metaActivity: self.metaActivity,
             codexResetCredits: self.codexResetCredits,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,
@@ -409,6 +417,7 @@ public struct UsageSnapshot: Codable, Sendable {
             mistralUsage: self.mistralUsage,
             deepgramUsage: self.deepgramUsage,
             cursorRequests: self.cursorRequests,
+            metaActivity: self.metaActivity,
             codexResetCredits: self.codexResetCredits,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,
@@ -449,6 +458,7 @@ public struct UsageSnapshot: Codable, Sendable {
             mistralUsage: self.mistralUsage,
             deepgramUsage: self.deepgramUsage,
             cursorRequests: self.cursorRequests,
+            metaActivity: self.metaActivity,
             codexResetCredits: self.codexResetCredits,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,

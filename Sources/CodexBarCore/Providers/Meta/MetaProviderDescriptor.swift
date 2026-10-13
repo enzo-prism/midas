@@ -119,6 +119,7 @@ public struct MetaUsageSnapshot: Sendable {
                 resetsAt: nil,
                 resetDescription: "\(Self.formatTokens(weekTokens)) last 7d"),
             tertiary: nil,
+            metaActivity: MetaActivitySnapshot(summary: self.summary),
             updatedAt: self.summary.updatedAt,
             identity: ProviderIdentitySnapshot(
                 providerID: .meta,

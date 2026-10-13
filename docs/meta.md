@@ -34,6 +34,24 @@ usage comes from the local session logs `muse` already writes on-device.
      the local log remains the usage source of truth until a quota endpoint is
      available.
 
+## Activity bars
+
+Meta publishes no quota, limit, budget, or reset for Muse Code, so Midas cannot
+show Meta as percent remaining. Instead, the Air panel (overview and provider detail)
+and the legacy menu card show Claude-style bars for recorded activity:
+
+- **Today** — today's recorded Muse tokens and requests, bar scaled to the busiest
+  recorded day.
+- **Last 7 days** — the last 7 local-calendar days, bar scaled to the busiest rolling
+  7-day window. This window is the detail-view hero.
+
+Bar fill is `window tokens / busiest comparable window tokens`, labeled
+"N% of busiest day/week". Zero or missing history keeps the bar at zero. No reset line
+is shown, and activity bars never feed menu-bar quota rings, Orbit, or percent-left
+text. `MetaActivitySnapshot` (on `UsageSnapshot.metaActivity`) carries the windows and
+busiest-day/week totals; when only token history is available it is derived from that
+history, which follows the selected local/combined usage scope.
+
 ## Cost estimates
 
 Each priced day shows **contributor cost** (what contributor-tier usage costs)

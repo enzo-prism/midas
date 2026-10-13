@@ -32,6 +32,15 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.44.0: Meta activity bars
+
+Meta now shows Claude-style bars in Midas Air and the legacy menu card: **Today** and
+**Last 7 days** of recorded Muse tokens, with request counts. Each bar is scaled to the
+busiest comparable recorded window (busiest day / busiest rolling week) and labeled as a
+share of that window. Meta reports no quota, limit, or reset, so Meta never appears as
+percent left, and menu-bar rings still mean remaining capacity only for providers that
+report one. See [Meta activity bars](docs/meta.md#activity-bars).
+
 ## Midas 0.43.0: usage across Macs
 
 Connect the same private iCloud Drive folder in Settings → Sync on each Mac. Midas merges

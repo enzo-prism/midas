@@ -153,6 +153,15 @@ struct MidasOverviewMetrics: View {
         VStack(alignment: .leading, spacing: 10) {
             if self.accounts.count > 1 {
                 MidasAccountOverviewBars(accounts: self.accounts)
+            } else if !self.item.activityMetrics.isEmpty {
+                ForEach(self.item.activityMetrics) { metric in
+                    MidasActivityBar(metric: metric)
+                }
+                Text("No provider limit reported by Meta")
+                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                if self.item.isStale || self.item.error != nil {
+                    Text("Stale").font(.caption).foregroundStyle(MidasTheme.warning)
+                }
             } else if !metrics.isEmpty {
                 ForEach(metrics) { selected in
                     MidasAccountQuotaBar(metric: selected)

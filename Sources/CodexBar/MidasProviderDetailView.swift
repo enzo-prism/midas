@@ -21,6 +21,9 @@ struct MidasProviderDetailView: View {
                 ForEach(self.presentation.metrics) { metric in
                     MidasAccountQuotaBar(metric: metric)
                 }
+                ForEach(self.activityRows) { metric in
+                    MidasActivityBar(metric: metric)
+                }
                 MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.presentation)
             }
             if let error = self.presentation.error {
@@ -159,9 +162,39 @@ struct MidasProviderDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Activity windows shown as rows below the hero; the hero window itself is excluded.
+    private var activityRows: [MidasActivityMetric] {
+        guard self.presentation.hero == nil, let hero = self.activityHero else {
+            return self.presentation.activityMetrics
+        }
+        return self.presentation.activityMetrics.filter { $0.id != hero.id }
+    }
+
+    private var activityHero: MidasActivityMetric? {
+        self.presentation.activityMetrics.first { $0.id == "meta-activity-week" }
+            ?? self.presentation.activityMetrics.first
+    }
+
     private var hero: some View {
         Group {
-            if let metric = self.presentation.hero {
+            if self.presentation.hero == nil, let metric = self.activityHero {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(metric.title).font(.callout).foregroundStyle(MidasTheme.secondaryText)
+                        Spacer(minLength: 4)
+                        Text(metric.valueText)
+                            .font(.system(size: 28, weight: .semibold)).monospacedDigit()
+                            .foregroundStyle(MidasTheme.text)
+                            .minimumScaleFactor(0.65).lineLimit(1)
+                    }
+                    MidasRemainingBar(percent: metric.sharePercent, warningWhenLow: false)
+                    Text(metric.detailText)
+                        .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                    Text("Recorded Muse activity. Meta reports no usage limit or reset.")
+                        .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                }
+                .accessibilityElement(children: .combine)
+            } else if let metric = self.presentation.hero {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(metric.title).font(.callout).foregroundStyle(MidasTheme.secondaryText)

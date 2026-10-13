@@ -269,4 +269,39 @@ extension UsageMenuCardView.Model {
     static func clamped(_ value: Double) -> Double {
         min(100, max(0, value))
     }
+
+    /// Claude-style recorded-activity rows for Meta. Percent is share of the busiest
+    /// comparable recorded window, labeled as activity — never as usage remaining.
+    static func metaActivityMetrics(input: Input) -> [Metric] {
+        let activity: MetaActivitySnapshot? = if let tokenSnapshot = input.tokenSnapshot,
+                                                 !tokenSnapshot.daily.isEmpty
+        {
+            MetaActivitySnapshot(tokenSnapshot: tokenSnapshot)
+        } else if let recorded = input.snapshot?.metaActivity, recorded.hasActivity {
+            recorded
+        } else if let tokenSnapshot = input.tokenSnapshot {
+            MetaActivitySnapshot(tokenSnapshot: tokenSnapshot)
+        } else {
+            nil
+        }
+        guard let activity else { return [] }
+        return activity.windows.enumerated().map { index, window in
+            Metric(
+                id: window.id,
+                title: L(window.title),
+                percent: Self.clamped(window.sharePercent),
+                percentStyle: .left,
+                valueText: "\(UsageFormatter.tokenCountString(window.tokens)) \(L("tokens"))",
+                resetText: String(
+                    format: L("%.0f%% of %@"), window.sharePercent, L(window.comparisonLabel)),
+                detailText: index == activity.windows.count - 1
+                    ? L("No provider limit reported by Meta") : nil,
+                detailLeftText: window.requests > 0
+                    ? "\(UsageFormatter.tokenCountString(window.requests)) \(L("requests"))" : nil,
+                detailRightText: nil,
+                pacePercent: nil,
+                paceOnTop: true,
+                warningMarkerPercents: [])
+        }
+    }
 }

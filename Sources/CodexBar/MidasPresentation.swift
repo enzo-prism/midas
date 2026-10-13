@@ -79,6 +79,40 @@ struct MidasQuotaMetric: Identifiable {
     }
 }
 
+/// Claude-style activity bar for a provider with no reported quota (Meta).
+/// The value is recorded tokens; the fill is that window's share of the busiest
+/// comparable recorded window. It never reads as percent remaining or left.
+struct MidasActivityMetric: Identifiable {
+    let id: String
+    let title: String
+    let tokens: Int
+    let requests: Int
+    let sharePercent: Double
+    let comparisonLabel: String
+
+    var valueText: String {
+        "\(UsageFormatter.tokenCountString(self.tokens)) tokens"
+    }
+
+    var detailText: String {
+        var text = "\(Int(self.sharePercent.rounded()))% of \(self.comparisonLabel)"
+        if self.requests > 0 {
+            text += " · \(UsageFormatter.tokenCountString(self.requests)) requests"
+        }
+        return text
+    }
+
+    static func make(_ window: MetaActivityWindow) -> Self {
+        Self(
+            id: window.id,
+            title: window.title,
+            tokens: window.tokens,
+            requests: window.requests,
+            sharePercent: window.sharePercent,
+            comparisonLabel: window.comparisonLabel)
+    }
+}
+
 /// A value and its accounting meaning travel together, so the UI cannot imply a billing receipt.
 struct MidasSpendPresentation {
     let title: String
@@ -183,6 +217,8 @@ struct MidasProviderPresentation {
     let plan: String?
     let hero: MidasQuotaMetric?
     let metrics: [MidasQuotaMetric]
+    /// Recorded-activity bars for providers without a quota (Meta); empty otherwise.
+    var activityMetrics: [MidasActivityMetric] = []
     var orbitQuota: MidasQuotaMetric?
     let resetCreditsText: String?
     let resetCreditsHelp: String?
@@ -221,7 +257,10 @@ struct MidasProviderPresentation {
         isRefreshing: Bool,
         isStale: Bool) -> Self
     {
-        var quotaMetrics = card?.metrics.filter { provider != .cursor || $0.id != "cursor-models" }
+        // Meta's card rows are recorded activity, not quota; they surface as activityMetrics below.
+        var quotaMetrics = card?.metrics
+            .filter { provider != .cursor || $0.id != "cursor-models" }
+            .filter { provider != .meta || !$0.id.hasPrefix("meta-activity-") }
             .compactMap(MidasQuotaMetric.make) ?? []
         if provider == .codex, let snapshot {
             let projection = CodexConsumerProjection.make(
@@ -308,7 +347,7 @@ struct MidasProviderPresentation {
         } else {
             card?.subtitleText ?? "Waiting for first update"
         }
-        return Self(
+        var result = Self(
             provider: provider,
             name: card?.providerName ?? ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue,
             account: card?.email ?? "",
@@ -333,6 +372,30 @@ struct MidasProviderPresentation {
             isRefreshing: isRefreshing,
             isStale: isStale,
             updatedAt: snapshot?.updatedAt)
+        if provider == .meta {
+            result.activityMetrics = Self.metaActivityMetrics(snapshot: snapshot, tokenSnapshot: tokenSnapshot)
+        }
+        return result
+    }
+
+    /// Meta bars come from the recorded-activity snapshot when present, else from the
+    /// token history backing the spend estimate (which follows the selected usage scope).
+    private static func metaActivityMetrics(
+        snapshot: UsageSnapshot?,
+        tokenSnapshot: CostUsageTokenSnapshot?) -> [MidasActivityMetric]
+    {
+        if let tokenSnapshot, !tokenSnapshot.daily.isEmpty,
+           let derived = MetaActivitySnapshot(tokenSnapshot: tokenSnapshot)
+        {
+            return derived.windows.map(MidasActivityMetric.make)
+        }
+        if let activity = snapshot?.metaActivity, activity.hasActivity {
+            return activity.windows.map(MidasActivityMetric.make)
+        }
+        if let tokenSnapshot, let derived = MetaActivitySnapshot(tokenSnapshot: tokenSnapshot) {
+            return derived.windows.map(MidasActivityMetric.make)
+        }
+        return []
     }
 
     private static func supplementalNotes(provider: UsageProvider, card: UsageMenuCardView.Model?) -> [String] {

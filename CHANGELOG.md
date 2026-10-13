@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.44.0 — October 12, 2026
+
+- Show Meta with Claude-style bars in Midas Air and the legacy menu card: **Today** and **Last 7 days** recorded Muse tokens, each with a bar and request count.
+- Scale each bar to the busiest comparable recorded window (busiest day / busiest rolling week), labeled as a share of that window. Meta reports no quota, limit, or reset, so Midas never shows Meta as percent left.
+- Keep Meta out of menu-bar quota rings and percentages, which still mean remaining capacity for providers that report one.
+
+Build 119. See GitHub Releases for signed binary availability.
+
 ## Midas 0.43.0 — October 12, 2026
 
 - Combine recorded usage across Macs using an opt-in private folder, including iCloud Drive.
