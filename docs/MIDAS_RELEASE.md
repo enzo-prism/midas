@@ -6,14 +6,14 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.43.0**, build **118**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.44.0**, build **119**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.43.0**, build **118**, tagged
-`v0.43.0-midas.1`. Check GitHub releases for the current published binary; source and installed local
+The current **signed, notarized, Sparkle-published** binary is **0.44.0**, build **119**, tagged
+`v0.44.0-midas.1`. Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
@@ -46,6 +46,12 @@ Version 0.44.0, build 119, gives Meta Claude-style bars without inventing a quot
   no percent-left, reset, or menu-bar quota ring is produced for Meta.
 - Focused coverage lives in `MetaActivityBarsTests`; the anti-fabrication contracts in
   `MidasMetaPresentationTests` (no hero, no quota metrics, no % in the summary) still pass.
+
+Build 119 passed the focused Meta suites and lint, Developer ID signing, notarization
+(submission `047758b0-3b49-4d9f-af85-00550a2f6fe5`, Accepted), stapling, Sparkle archive/feed
+signature checks, and downloaded draft and public asset verification. The binary identifies
+source commit `a7c7ac71e`. Three AppKit menu-timing tests flaked under full-suite parallel
+load and passed when their suites were rerun; they are unrelated to this change.
 
 ## 0.43.0 changes: usage sync
 
