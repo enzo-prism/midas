@@ -123,7 +123,7 @@ multi-provider TOTAL at face value.
   form: `claude-4.5-sonnet` becomes `claude-sonnet-4-5` and `claude-opus-4.8` becomes `claude-opus-4-8`.
   `-fast` is kept because it changes OpenAI pricing.
 - The last good token snapshot is saved to
-  `~/Library/Caches/Midas/cost-usage/cursor-spend-v1.json` (`CursorSpendSnapshotCache`), keyed by
+  `~/Library/Caches/Midas/cost-usage/cursor-spend-utc-v2.json` (`CursorSpendSnapshotCache`), keyed by
   account email and history window. It is shown at launch before cursor.com answers. When a refresh
   fails, it is kept with a token error, so Midas labels it last known. That doesn't apply when the cookie
   source is off or the signed-in account differs.

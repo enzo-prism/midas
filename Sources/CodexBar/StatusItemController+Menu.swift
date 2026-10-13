@@ -447,8 +447,9 @@ extension StatusItemController {
             surface: .liveCard)
         let hasCreditsHistory = codexProjection?.hasCreditsHistory == true
         let hasUsageBreakdown = codexProjection?.hasUsageBreakdown == true
-        let hasCostHistory = self.settings.isCostUsageEffectivelyEnabled(for: currentProvider) &&
-            (self.store.tokenSnapshot(for: currentProvider)?.daily.isEmpty == false)
+        let hasCostHistory = (self.settings.isCostUsageEffectivelyEnabled(for: currentProvider)
+            || self.store.usesSyncedUsage(for: currentProvider)) &&
+            (self.store.displayTokenSnapshot(for: currentProvider)?.daily.isEmpty == false)
         let canShowBuyCredits = self.settings.showOptionalCreditsAndExtraUsage &&
             codexProjection?.canShowBuyCredits == true
         let hasOpenAIWebMenuItems = !showAllAccounts &&
@@ -1464,7 +1465,8 @@ extension StatusItemController {
     private func addCostHistorySubmenu(to menu: NSMenu, provider: UsageProvider) -> Bool {
         guard let submenu = self.makeCostHistorySubmenu(provider: provider, width: self.renderedMenuWidth(for: menu))
         else { return false }
-        let days = self.store.settings.costUsageHistoryDays
+        let days = self.tokenSnapshotForCostHistorySubmenu(provider: provider)?.historyDays
+            ?? self.store.settings.costUsageHistoryDays
         let title = days == 1 ? L("Usage history (today)") : String(format: L("Usage history (%d days)"), days)
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = true
@@ -1561,13 +1563,7 @@ extension StatusItemController {
     }
 
     func tokenSnapshotForCostHistorySubmenu(provider: UsageProvider) -> CostUsageTokenSnapshot? {
-        let projected = self.store.tokenSnapshot(
-            fromProviderSnapshot: self.store.snapshot(for: provider),
-            provider: provider)
-        if UsageStore.tokenCostRequiresProviderSnapshot(provider) {
-            return projected
-        }
-        return projected ?? self.store.tokenSnapshot(for: provider)
+        self.store.displayTokenSnapshot(for: provider)
     }
 
     func makeOpenAIAPIUsageSubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {

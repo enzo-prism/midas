@@ -274,6 +274,7 @@ final class UsageStore {
     /// Overrides the Cursor spend cache location; tests point this at a temporary directory.
     @ObservationIgnored var cursorSpendCacheRoot: URL?
     @ObservationIgnored let startupBehavior: StartupBehavior
+    let midasUsageSync: MidasUsageSyncCoordinator
     @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator
 
     init(
@@ -302,6 +303,9 @@ final class UsageStore {
         self.planUtilizationHistoryStore = planUtilizationHistoryStore
         self.sessionQuotaNotifier = sessionQuotaNotifier
         self.startupBehavior = startupBehavior.resolved(isRunningTests: Self.isRunningTestsProcess())
+        self.midasUsageSync = MidasUsageSyncCoordinator(
+            defaults: settings.userDefaults,
+            automaticallySyncs: self.startupBehavior.automaticallyStartsBackgroundWork)
         self.codexAccountUsageSnapshotStore = codexAccountUsageSnapshotStore ??
             (self.startupBehavior.automaticallyStartsBackgroundWork ? FileCodexAccountUsageSnapshotStore() : nil)
         self.zaiSnapshotStore = zaiSnapshotStore ??
@@ -351,6 +355,7 @@ final class UsageStore {
             effectivePATH: "",
             loginShellPATH: LoginShellPathCache.shared.current?.joined(separator: ":"))
         guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
+        self.startMidasUsageSync()
         self.scheduleCostUsageCacheMaintenance()
         self.hydrateCachedTokenSnapshots()
         self.hydrateCachedCursorSpend()
@@ -370,16 +375,6 @@ final class UsageStore {
         Task { await self.refresh() }
         self.startTimer()
         self.startTokenTimer()
-    }
-
-    private static func isRunningTestsProcess() -> Bool {
-        let environment = ProcessInfo.processInfo.environment
-        if environment["XCTestConfigurationFilePath"] != nil { return true }
-        if environment["XCTestSessionIdentifier"] != nil { return true }
-        if environment["SWIFT_TESTING_ENABLED"] != nil || environment["SWIFT_TESTING"] != nil { return true }
-        return CommandLine.arguments.contains { argument in
-            argument.contains("xctest") || argument.contains("swift-testing")
-        }
     }
 
     /// Returns the login method (plan type) for the specified provider, if available.

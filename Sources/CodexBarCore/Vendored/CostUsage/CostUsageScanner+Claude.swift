@@ -77,6 +77,7 @@ extension CostUsageScanner {
                 checkCancellation: nil)) ?? ClaudeParseResult(days: [:], rows: [], parsedBytes: startOffset)
     }
 
+    // swiftlint:disable:next function_body_length
     static func parseClaudeFileCancellable(
         fileURL: URL,
         range: CostUsageDayRange,
@@ -92,21 +93,16 @@ extension CostUsageScanner {
             let normModel = CostUsagePricing.normalizeClaudeModel(model)
             var dayModels = days[dayKey] ?? [:]
             var packed = dayModels[normModel] ?? [0, 0, 0, 0, 0, 0, 0, 0]
-            packed[0] = (packed[safe: 0] ?? 0) + tokens.input
-            packed[1] = (packed[safe: 1] ?? 0) + tokens.cacheRead
-            packed[2] = (packed[safe: 2] ?? 0) + tokens.cacheCreate
-            packed[3] = (packed[safe: 3] ?? 0) + tokens.output
-            packed[4] = (packed[safe: 4] ?? 0) + tokens.costNanos
-            packed[5] = (packed[safe: 5] ?? 0) + 1
-            packed[6] = (packed[safe: 6] ?? 0) + (tokens.costPriced ? 1 : 0)
-            packed[7] = (packed[safe: 7] ?? 0) + tokens.cacheCreate1h
+            packed[0] = Self.boundedAdd(packed[safe: 0] ?? 0, tokens.input)
+            packed[1] = Self.boundedAdd(packed[safe: 1] ?? 0, tokens.cacheRead)
+            packed[2] = Self.boundedAdd(packed[safe: 2] ?? 0, tokens.cacheCreate)
+            packed[3] = Self.boundedAdd(packed[safe: 3] ?? 0, tokens.output)
+            packed[4] = Self.boundedAdd(packed[safe: 4] ?? 0, tokens.costNanos)
+            packed[5] = Self.boundedAdd(packed[safe: 5] ?? 0, 1)
+            packed[6] = Self.boundedAdd(packed[safe: 6] ?? 0, tokens.costPriced ? 1 : 0)
+            packed[7] = Self.boundedAdd(packed[safe: 7] ?? 0, tokens.cacheCreate1h)
             dayModels[normModel] = packed
             days[dayKey] = dayModels
-        }
-
-        func toInt(_ v: Any?) -> Int {
-            if let n = v as? NSNumber { return n.intValue }
-            return 0
         }
 
         func toBool(_ value: Any?) -> Bool {
@@ -118,11 +114,11 @@ extension CostUsageScanner {
         let pathRole = Self.claudePathRole(fileURL: fileURL)
         var keyedRows: [String: ClaudeUsageRow] = [:]
         var unkeyedRows: [ClaudeUsageRow] = []
+        var excludedSyncRecords = 0
 
         let maxLineBytes = 512 * 1024
         // Keep the full line so usage at the tail isn't dropped on large tool outputs.
         let prefixBytes = maxLineBytes
-        let costScale = 1_000_000_000.0
 
         let parsedBytes: Int64
         do {
@@ -147,7 +143,10 @@ extension CostUsageScanner {
                         guard Self.matchesClaudeProviderFilter(obj: obj, filter: providerFilter) else { return }
 
                         guard let tsText = obj["timestamp"] as? String, let timestamp = Self.dateFromTimestamp(tsText)
-                        else { return }
+                        else {
+                            excludedSyncRecords += 1
+                            return
+                        }
                         guard let dayKey = Self.dayKeyFromTimestamp(tsText) ?? Self.dayKeyFromParsedISO(tsText)
                         else { return }
 
@@ -155,17 +154,29 @@ extension CostUsageScanner {
                         guard let model = message["model"] as? String else { return }
                         guard let usage = message["usage"] as? [String: Any] else { return }
 
-                        let input = max(0, toInt(usage["input_tokens"]))
-                        let cacheCreate = max(0, toInt(usage["cache_creation_input_tokens"]))
+                        guard let input = Self.sourceCount(usage["input_tokens"]),
+                              let cacheCreate = Self.sourceCount(usage["cache_creation_input_tokens"]),
+                              let cacheRead = Self.sourceCount(usage["cache_read_input_tokens"]),
+                              let output = Self.sourceCount(usage["output_tokens"]),
+                              Self
+                                  .sourceCount(
+                                      (usage["cache_creation"] as? [String: Any])?["ephemeral_1h_input_tokens"]) !=
+                                  nil,
+                                  Self
+                                      .sourceCount(
+                                          (usage["server_tool_use"] as? [String: Any])?["web_search_requests"]) !=
+                                      nil
+                        else {
+                            excludedSyncRecords += 1
+                            return
+                        }
                         let cacheCreate1h = Self.claudeOneHourCacheCreationTokens(
                             usage: usage,
                             total: cacheCreate)
-                        let cacheRead = max(0, toInt(usage["cache_read_input_tokens"]))
-                        let output = max(0, toInt(usage["output_tokens"]))
                         if input == 0, cacheCreate == 0, cacheRead == 0, output == 0 { return }
                         let modifiers = Self.claudeBillingModifiers(usage: usage)
 
-                        let cost = CostUsagePricing.claudeCostUSD(
+                        let cost = Self.boundedSourceCost(CostUsagePricing.claudeCostUSD(
                             model: model,
                             inputTokens: input,
                             cacheReadInputTokens: cacheRead,
@@ -177,8 +188,8 @@ extension CostUsageScanner {
                             webSearchRequests: modifiers.webSearchRequests,
                             pricingDate: timestamp,
                             modelsDevCatalog: modelsDevCatalog,
-                            modelsDevCacheRoot: modelsDevCacheRoot)
-                        let costNanos = cost.map { Int(($0 * costScale).rounded()) } ?? 0
+                            modelsDevCacheRoot: modelsDevCacheRoot))
+                        let costNanos = Self.costNanos(cost).map(Int.init) ?? 0
                         let tokens = ClaudeTokens(
                             input: input,
                             cacheRead: cacheRead,
@@ -252,7 +263,8 @@ extension CostUsageScanner {
             add(dayKey: row.dayKey, model: row.model, tokens: tokens, days: &days)
         }
 
-        return ClaudeParseResult(days: days, rows: rows, parsedBytes: parsedBytes)
+        return ClaudeParseResult(
+            days: days, rows: rows, parsedBytes: parsedBytes, excludedSyncRecords: excludedSyncRecords)
     }
 
     private static func claudeOneHourCacheCreationTokens(usage: [String: Any], total: Int) -> Int {
@@ -324,7 +336,7 @@ extension CostUsageScanner {
         return lhs.path < rhs.path
     }
 
-    private static func reconciledClaudeRows(cache: CostUsageCache) -> [ClaudeUsageRow] {
+    static func reconciledClaudeRows(cache: CostUsageCache) -> [ClaudeUsageRow] {
         var rows: [ClaudeUsageRow] = []
         var winners: [String: (path: String, row: ClaudeUsageRow)] = [:]
 
@@ -356,14 +368,14 @@ extension CostUsageScanner {
         for row in Self.reconciledClaudeRows(cache: cache) {
             var dayModels = days[row.dayKey] ?? [:]
             var packed = dayModels[row.model] ?? [0, 0, 0, 0, 0, 0, 0, 0]
-            packed[0] = (packed[safe: 0] ?? 0) + row.input
-            packed[1] = (packed[safe: 1] ?? 0) + row.cacheRead
-            packed[2] = (packed[safe: 2] ?? 0) + row.cacheCreate
-            packed[3] = (packed[safe: 3] ?? 0) + row.output
-            packed[4] = (packed[safe: 4] ?? 0) + row.costNanos
-            packed[5] = (packed[safe: 5] ?? 0) + 1
-            packed[6] = (packed[safe: 6] ?? 0) + ((row.costPriced ?? (row.costNanos > 0)) ? 1 : 0)
-            packed[7] = (packed[safe: 7] ?? 0) + (row.cacheCreate1h ?? 0)
+            packed[0] = Self.boundedAdd(packed[safe: 0] ?? 0, row.input)
+            packed[1] = Self.boundedAdd(packed[safe: 1] ?? 0, row.cacheRead)
+            packed[2] = Self.boundedAdd(packed[safe: 2] ?? 0, row.cacheCreate)
+            packed[3] = Self.boundedAdd(packed[safe: 3] ?? 0, row.output)
+            packed[4] = Self.boundedAdd(packed[safe: 4] ?? 0, row.costNanos)
+            packed[5] = Self.boundedAdd(packed[safe: 5] ?? 0, 1)
+            packed[6] = Self.boundedAdd(packed[safe: 6] ?? 0, (row.costPriced ?? (row.costNanos > 0)) ? 1 : 0)
+            packed[7] = Self.boundedAdd(packed[safe: 7] ?? 0, row.cacheCreate1h ?? 0)
             dayModels[row.model] = packed
             days[row.dayKey] = dayModels
         }
@@ -375,13 +387,15 @@ extension CostUsageScanner {
         mtimeMs: Int64,
         size: Int64,
         rows: [ClaudeUsageRow],
-        parsedBytes: Int64?) -> CostUsageFileUsage
+        parsedBytes: Int64?,
+        excludedSyncRecords: Int = 0) -> CostUsageFileUsage
     {
         makeFileUsage(
             mtimeUnixMs: mtimeMs,
             size: size,
             days: [:],
             parsedBytes: parsedBytes,
+            syncExcludedRecords: excludedSyncRecords,
             claudeRows: rows)
     }
 
@@ -573,7 +587,8 @@ extension CostUsageScanner {
                     mtimeMs: mtimeMs,
                     size: size,
                     rows: mergedRows,
-                    parsedBytes: delta.parsedBytes)
+                    parsedBytes: delta.parsedBytes,
+                    excludedSyncRecords: (cached.syncExcludedRecords ?? 0) + delta.excludedSyncRecords)
                 return
             }
         }
@@ -589,7 +604,8 @@ extension CostUsageScanner {
             mtimeMs: mtimeMs,
             size: size,
             rows: parsed.rows,
-            parsedBytes: parsed.parsedBytes)
+            parsedBytes: parsed.parsedBytes,
+            excludedSyncRecords: parsed.excludedSyncRecords)
         state.cache.files[path] = usage
     }
 
@@ -725,6 +741,7 @@ extension CostUsageScanner {
             }
         }
 
+        options.cacheSnapshot?(cache)
         let modelsDevCatalog = CostUsagePricing.modelsDevCatalog(now: now, cacheRoot: options.cacheRoot)
         return Self.buildClaudeReportFromCache(
             cache: cache,
@@ -813,13 +830,15 @@ extension CostUsageScanner {
                 let cacheCreate = packed[safe: 2] ?? 0
                 let output = packed[safe: 3] ?? 0
                 let sampleCount = packed[safe: 5] ?? 0
-                let totalTokens = input + cacheRead + cacheCreate + output
+                let totalTokens = Self.boundedAdd(
+                    Self.boundedAdd(input, cacheRead),
+                    Self.boundedAdd(cacheCreate, output))
 
                 // Cache tokens are tracked separately; totalTokens includes input + cache.
-                dayInput += input
-                dayCacheRead += cacheRead
-                dayCacheCreate += cacheCreate
-                dayOutput += output
+                dayInput = Self.boundedAdd(dayInput, input)
+                dayCacheRead = Self.boundedAdd(dayCacheRead, cacheRead)
+                dayCacheCreate = Self.boundedAdd(dayCacheCreate, cacheCreate)
+                dayOutput = Self.boundedAdd(dayOutput, output)
 
                 let repricedCost = repricedCosts[ClaudeDayModelKey(day: day, model: model)]
                 let currentPricingCost: Double? = if let repricedCost,
@@ -831,8 +850,8 @@ extension CostUsageScanner {
                     nil
                 }
                 let cost = currentPricingCost
-                dayRequests += sampleCount
-                if cost == nil { dayUnpricedRequests += sampleCount }
+                dayRequests = Self.boundedAdd(dayRequests, sampleCount)
+                if cost == nil { dayUnpricedRequests = Self.boundedAdd(dayUnpricedRequests, sampleCount) }
                 breakdown.append(
                     CostUsageDailyReport.ModelBreakdown(
                         modelName: model,
@@ -846,7 +865,9 @@ extension CostUsageScanner {
 
             let sortedBreakdown = Self.sortedModelBreakdowns(breakdown)
 
-            let dayTotal = dayInput + dayCacheRead + dayCacheCreate + dayOutput
+            let dayTotal = Self.boundedAdd(
+                Self.boundedAdd(dayInput, dayCacheRead),
+                Self.boundedAdd(dayCacheCreate, dayOutput))
             let entryCost = dayCostSeen ? dayCost : nil
             entries.append(CostUsageDailyReport.Entry(
                 date: day,
@@ -864,11 +885,11 @@ extension CostUsageScanner {
                 unpricedRequestCount: dayUnpricedRequests > 0 ? dayUnpricedRequests : nil,
                 pricedRequestCount: dayRequests > 0 ? dayRequests - dayUnpricedRequests : nil))
 
-            totalInput += dayInput
-            totalOutput += dayOutput
-            totalCacheRead += dayCacheRead
-            totalCacheCreate += dayCacheCreate
-            totalTokens += dayTotal
+            totalInput = Self.boundedAdd(totalInput, dayInput)
+            totalOutput = Self.boundedAdd(totalOutput, dayOutput)
+            totalCacheRead = Self.boundedAdd(totalCacheRead, dayCacheRead)
+            totalCacheCreate = Self.boundedAdd(totalCacheCreate, dayCacheCreate)
+            totalTokens = Self.boundedAdd(totalTokens, dayTotal)
             if let entryCost {
                 totalCost += entryCost
                 costSeen = true

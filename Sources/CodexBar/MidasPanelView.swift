@@ -70,14 +70,16 @@ struct MidasPanelView: View {
     }
 
     private var providers: [UsageProvider] {
-        self.store.enabledProvidersForDisplay()
+        self.store.midasProvidersForUsageDisplay()
     }
 
     private var overview: some View {
         VStack(alignment: .leading, spacing: 24) {
+            MidasSyncStatusView(coordinator: self.store.midasUsageSync)
             MidasTotalSpendView(
                 presentations: self.providers.map(self.presentation),
-                periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label,
+                periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+                    .label(reportingTimeZone: self.store.midasDisplayTimeZone),
                 periodControl: AnyView(MidasSpendPeriodControl(settings: self.settings, store: self.store)))
             if self.providers.isEmpty {
                 Button("Connect an account", action: self.actions.settings)

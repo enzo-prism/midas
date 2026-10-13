@@ -128,7 +128,7 @@ struct MidasMonthlySpend {
         localTimeZone: TimeZone = .current) -> TimeZone
     {
         switch provider {
-        case .openai, .anthropic, .mistral:
+        case .openai, .anthropic, .mistral, .cursor:
             MidasSpendPeriod.utc
         case .codex where codexCloudEnabled:
             MidasSpendPeriod.utc

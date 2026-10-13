@@ -26,22 +26,31 @@ enum MidasTokenTooltip {
     static func count(_ snapshot: CostUsageTokenSnapshot, now: Date, calendar: Calendar) -> Int? {
         // This historically named field can contain seven-day or billing-cycle totals.
         let rollingLabel = "Last \(snapshot.historyDays) days"
+        let isSharedHistory = snapshot.historyLabel == "Across devices · 12 months"
         let isRolling = snapshot.historyLabel.map {
             $0 == rollingLabel || $0.hasPrefix(rollingLabel + " (")
         } ?? true
-        guard snapshot.historyDays >= 30, isRolling else { return nil }
-        if snapshot.historyDays == 30, calendar.isDate(snapshot.updatedAt, inSameDayAs: now),
+        guard snapshot.historyDays >= 30, isRolling || isSharedHistory else { return nil }
+        var reportingCalendar = calendar
+        if isSharedHistory {
+            reportingCalendar = Calendar(identifier: .gregorian)
+            reportingCalendar.timeZone = MidasSpendPeriod.utc
+        }
+        if snapshot.historyDays == 30, reportingCalendar.isDate(snapshot.updatedAt, inSameDayAs: now),
            let total = snapshot.last30DaysTokens
         {
             return total >= 0 ? total : nil
         }
-        guard let start = calendar.date(byAdding: .day, value: -29, to: calendar.startOfDay(for: now)),
-              let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+        guard let start = reportingCalendar.date(
+            byAdding: .day,
+            value: -29,
+            to: reportingCalendar.startOfDay(for: now)),
+            let end = reportingCalendar.date(byAdding: .day, value: 1, to: reportingCalendar.startOfDay(for: now))
         else { return nil }
         let formatter = DateFormatter()
-        formatter.calendar = calendar
+        formatter.calendar = reportingCalendar
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = calendar.timeZone
+        formatter.timeZone = reportingCalendar.timeZone
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.isLenient = false
         let rows = snapshot.daily.filter {

@@ -4,6 +4,27 @@ import Testing
 @testable import CodexBar
 
 struct MenuCardCostHintTests {
+    @Test func sharedHistoryUsesUTCTodayAndExplainsItsActualScope() throws {
+        let snapshot = CostUsageTokenSnapshot(
+            sessionTokens: 100,
+            sessionCostUSD: 1,
+            last30DaysTokens: 500,
+            last30DaysCostUSD: 5,
+            historyDays: 365,
+            historyLabel: "Across devices · 12 months",
+            daily: [],
+            updatedAt: Date())
+        let cursor = try #require(UsageMenuCardView.Model.tokenUsageSection(
+            provider: .cursor, enabled: true, snapshot: snapshot, error: nil))
+        #expect(cursor.sessionLine.hasPrefix("Today (UTC):"))
+        #expect(cursor.hintLine?.contains("once per account") == true)
+        #expect(!cursor.sessionLine.contains("Billing cycle"))
+        let codex = try #require(UsageMenuCardView.Model.tokenUsageSection(
+            provider: .codex, enabled: true, snapshot: snapshot, error: nil))
+        #expect(codex.hintLine?.contains("across Macs") == true)
+        #expect(codex.hintLine?.contains("selected account") == false)
+    }
+
     @Test
     func `claude cost hint explains cache tokens and status line drift`() throws {
         let now = Date()

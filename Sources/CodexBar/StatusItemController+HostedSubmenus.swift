@@ -386,6 +386,8 @@ extension StatusItemController {
             return true
         }
 
+        var reportingCalendar = Calendar(identifier: .gregorian)
+        reportingCalendar.timeZone = self.store.spendReportingTimeZone(for: provider, snapshot: tokenSnapshot)
         let chartView = CostHistoryChartMenuView(
             provider: provider,
             daily: tokenSnapshot.daily,
@@ -393,6 +395,7 @@ extension StatusItemController {
             currencyCode: tokenSnapshot.currencyCode,
             historyDays: tokenSnapshot.historyDays,
             windowLabel: tokenSnapshot.historyLabel,
+            reportingCalendar: reportingCalendar,
             width: width)
         let hosting = MenuHostingView(rootView: chartView)
         hosting.frame = NSRect(

@@ -112,7 +112,7 @@ extension StatusItemController {
             "planHistoryRevision=\(self.store.planUtilizationHistoryRevision)",
         ]
 
-        for provider in self.store.enabledProvidersForDisplay() {
+        for provider in self.store.midasProvidersForUsageDisplay() {
             let tokenSignature = self.tokenSnapshotReadinessSignature(for: provider)
             let usageHistoryVisible = self.store.supportsPlanUtilizationHistory(for: provider) &&
                 !self.store.shouldHidePlanUtilizationMenuItem(for: provider)
@@ -146,7 +146,7 @@ extension StatusItemController {
     }
 
     private func tokenSnapshotReadinessSignature(for provider: UsageProvider) -> String {
-        guard let snapshot = self.store.tokenSnapshot(for: provider) else { return "none" }
+        guard let snapshot = self.store.displayTokenSnapshot(for: provider) else { return "none" }
         let daily = snapshot.daily
             .map { entry in
                 [

@@ -3,6 +3,7 @@ import CryptoKit
 #else
 import Crypto
 #endif
+import CoreFoundation
 import Foundation
 
 // swiftlint:disable type_body_length file_length
@@ -13,13 +14,59 @@ enum CostUsageScanner {
     static let codexActiveSessionLookbackDays = 30
     static let costScale = 1_000_000_000.0
 
-    enum ClaudeLogProviderFilter {
+    /// Numeric source rows must fit the shared usage schema before any arithmetic or Int conversion.
+    static let maximumSourceCount = 1_000_000_000_000
+
+    static func sourceCount(_ value: Any?) -> Int? {
+        guard let value else { return 0 }
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let raw = number.doubleValue
+        guard raw.isFinite, raw >= 0, raw <= Double(Self.maximumSourceCount), raw.rounded(.towardZero) == raw
+        else { return nil }
+        return Int(raw)
+    }
+
+    static func boundedSourceCost(_ cost: Double?) -> Double? {
+        guard let cost, cost.isFinite, (0...1_000_000_000).contains(cost) else { return nil }
+        return cost
+    }
+
+    static func costNanos(_ cost: Double?) -> Int64? {
+        guard let cost, cost.isFinite, cost >= 0 else { return nil }
+        let scaled = (cost * Self.costScale).rounded()
+        guard scaled.isFinite, scaled >= 0, scaled < Double(Int64.max) else { return nil }
+        return Int64(scaled)
+    }
+
+    /// Only internal fixed-width caches saturate. USD is repriced from retained numeric rows when needed.
+    static func boundedAdd(_ lhs: Int, _ rhs: Int) -> Int {
+        let result = lhs.addingReportingOverflow(rhs)
+        return result.overflow ? (rhs >= 0 ? Int.max : Int.min) : result.partialValue
+    }
+
+    static func boundedAddNanos(_ lhs: Int64, _ rhs: Int64) -> Int64 {
+        let result = lhs.addingReportingOverflow(rhs)
+        return result.overflow ? Int64.max : result.partialValue
+    }
+
+    private static func safeCodexTotals(_ totals: CostUsageCodexTotals?) -> Bool {
+        guard let totals else { return true }
+        return [totals.input, totals.cached, totals.output].allSatisfy { (0...Self.maximumSourceCount).contains($0) }
+    }
+
+    private static func safeCodexUsage(_ usage: [String: Any]?) -> Bool {
+        guard let usage else { return true }
+        return ["input_tokens", "cached_input_tokens", "cache_read_input_tokens", "output_tokens"]
+            .allSatisfy { Self.sourceCount(usage[$0]) != nil }
+    }
+
+    enum ClaudeLogProviderFilter: Sendable {
         case all
         case vertexAIOnly
         case excludeVertexAI
     }
 
-    struct Options {
+    struct Options: Sendable {
         var codexAdditionalSessionsRoots: [URL] = []
         var codexSessionsRoot: URL?
         var claudeProjectsRoots: [URL]?
@@ -29,6 +76,9 @@ enum CostUsageScanner {
         var claudeLogProviderFilter: ClaudeLogProviderFilter = .all
         /// Force a full rescan, ignoring per-file cache and incremental offsets.
         var forceRescan: Bool = false
+        /// Opt-in retention of numeric event rows for cross-device reconciliation.
+        var retainSyncRows = false
+        var cacheSnapshot: (@Sendable (CostUsageCache) -> Void)?
 
         init(
             codexSessionsRoot: URL? = nil,
@@ -59,6 +109,7 @@ enum CostUsageScanner {
         let sessionId: String?
         let forkedFromId: String?
         let rows: [CodexUsageRow]
+        var excludedSyncRecords = 0
     }
 
     struct CodexUsageRow: Codable, Equatable {
@@ -68,6 +119,9 @@ enum CostUsageScanner {
         let input: Int
         let cached: Int
         let output: Int
+        /// Exact source timestamp; absent in older caches. Never substitute file modification time.
+        var timestamp: String?
+        var unsafeNumericSource: Bool?
     }
 
     struct CodexScanState {
@@ -115,9 +169,9 @@ enum CostUsageScanner {
         _ rhs: CostUsageCodexTotals) -> CostUsageCodexTotals
     {
         CostUsageCodexTotals(
-            input: lhs.input + rhs.input,
-            cached: lhs.cached + rhs.cached,
-            output: lhs.output + rhs.output)
+            input: self.boundedAdd(lhs.input, rhs.input),
+            cached: self.boundedAdd(lhs.cached, rhs.cached),
+            output: self.boundedAdd(lhs.output, rhs.output))
     }
 
     private static func codexMinTotals(
@@ -178,6 +232,7 @@ enum CostUsageScanner {
         let changedPriorityTurnIDs: Set<String>
         let resources: CodexScanResources
         let checkCancellation: CancellationCheck?
+        var retainSyncRows = false
     }
 
     struct CodexRefreshPlan {
@@ -369,6 +424,7 @@ enum CostUsageScanner {
         let days: [String: [String: [Int]]]
         let rows: [ClaudeUsageRow]
         let parsedBytes: Int64
+        var excludedSyncRecords = 0
     }
 
     enum ClaudePathRole: String, Codable {
@@ -466,12 +522,14 @@ enum CostUsageScanner {
     // MARK: - Day keys
 
     struct CostUsageDayRange {
+        let untilDate: Date
         let sinceKey: String
         let untilKey: String
         let scanSinceKey: String
         let scanUntilKey: String
 
         init(since: Date, until: Date) {
+            self.untilDate = until
             self.sinceKey = Self.dayKey(from: since)
             self.untilKey = Self.dayKey(from: until)
             self.scanSinceKey = Self.dayKey(from: Calendar.current.date(byAdding: .day, value: -1, to: since) ?? since)
@@ -954,6 +1012,7 @@ enum CostUsageScanner {
         let turnID: String?
         let last: CostUsageCodexTotals?
         let total: CostUsageCodexTotals?
+        var unsafeNumericSource = false
     }
 
     private enum CodexFastLine {
@@ -1058,27 +1117,44 @@ enum CostUsageScanner {
 
     private static func codexTotals(
         from bytes: UnsafeBufferPointer<UInt8>,
-        in objectRange: Range<Int>?) -> CostUsageCodexTotals?
+        in objectRange: Range<Int>?,
+        unsafeNumericSource: inout Bool) -> CostUsageCodexTotals?
     {
         guard let objectRange else { return nil }
-        let input = max(
-            0,
-            Self.extractJSONByteIntField(Self.codexJSONFieldInputTokens, from: bytes, in: objectRange, atDepth: 1) ?? 0)
-        let cached = max(
-            0,
-            Self.extractJSONByteIntField(Self.codexJSONFieldCachedInputTokens, from: bytes, in: objectRange, atDepth: 1)
-                ?? Self.extractJSONByteIntField(
-                    Self.codexJSONFieldCacheReadInputTokens,
-                    from: bytes,
-                    in: objectRange,
-                    atDepth: 1)
-                ?? 0)
-        let output = max(
-            0,
-            Self
-                .extractJSONByteIntField(Self.codexJSONFieldOutputTokens, from: bytes, in: objectRange, atDepth: 1) ??
-                0)
-        return CostUsageCodexTotals(input: input, cached: cached, output: output)
+        let input = Self.extractJSONByteIntField(
+            Self.codexJSONFieldInputTokens,
+            from: bytes,
+            in: objectRange,
+            atDepth: 1)
+        let cached = Self.extractJSONByteIntField(
+            Self.codexJSONFieldCachedInputTokens,
+            from: bytes,
+            in: objectRange,
+            atDepth: 1)
+            ?? Self.extractJSONByteIntField(
+                Self.codexJSONFieldCacheReadInputTokens,
+                from: bytes,
+                in: objectRange,
+                atDepth: 1)
+        let output = Self.extractJSONByteIntField(
+            Self.codexJSONFieldOutputTokens,
+            from: bytes,
+            in: objectRange,
+            atDepth: 1)
+        func invalid(_ parsed: Int?, field: [UInt8]) -> Bool {
+            if let parsed { return !(0...Self.maximumSourceCount).contains(parsed) }
+            return Self.hasJSONByteField(field, from: bytes, in: objectRange, atDepth: 1)
+        }
+        unsafeNumericSource = unsafeNumericSource
+            || invalid(input, field: Self.codexJSONFieldInputTokens)
+            || invalid(output, field: Self.codexJSONFieldOutputTokens)
+            || invalid(cached, field: Self.codexJSONFieldCachedInputTokens)
+            || (cached == nil && Self.hasJSONByteField(
+                Self.codexJSONFieldCacheReadInputTokens,
+                from: bytes,
+                in: objectRange,
+                atDepth: 1))
+        return CostUsageCodexTotals(input: max(0, input ?? 0), cached: max(0, cached ?? 0), output: max(0, output ?? 0))
     }
 
     private static func parseCodexFastLine(_ bytes: Data) -> CodexFastLine? {
@@ -1200,26 +1276,30 @@ enum CostUsageScanner {
                         from: rawBuffer,
                         in: objectRange,
                         atDepth: 1)
+                var unsafeNumericSource = false
                 let total = Self.codexTotals(
                     from: rawBuffer,
                     in: Self.extractJSONByteObjectField(
                         Self.codexJSONFieldTotalTokenUsage,
                         from: rawBuffer,
                         in: infoRange,
-                        atDepth: 1))
+                        atDepth: 1),
+                    unsafeNumericSource: &unsafeNumericSource)
                 let last = Self.codexTotals(
                     from: rawBuffer,
                     in: Self.extractJSONByteObjectField(
                         Self.codexJSONFieldLastTokenUsage,
                         from: rawBuffer,
                         in: infoRange,
-                        atDepth: 1))
+                        atDepth: 1),
+                    unsafeNumericSource: &unsafeNumericSource)
                 return .tokenCount(CodexTokenCountRecord(
                     timestamp: timestamp,
                     model: model,
                     turnID: Self.codexTurnID(from: rawBuffer, in: payloadRange),
                     last: last,
-                    total: total))
+                    total: total,
+                    unsafeNumericSource: unsafeNumericSource))
 
             default:
                 return nil
@@ -1302,6 +1382,7 @@ enum CostUsageScanner {
         return nil
     }
 
+    // swiftlint:disable:next function_body_length
     private static func parseCodexTokenSnapshots(
         fileURL: URL,
         checkCancellation: CancellationCheck? = nil) throws -> (
@@ -1327,7 +1408,13 @@ enum CostUsageScanner {
             return date
         }
 
-        func appendSnapshot(timestamp: String, last: CostUsageCodexTotals?, total: CostUsageCodexTotals?) {
+        func appendSnapshot(
+            timestamp: String,
+            last: CostUsageCodexTotals?,
+            total: CostUsageCodexTotals?,
+            unsafeNumericSource: Bool = false)
+        {
+            guard !unsafeNumericSource, Self.safeCodexTotals(last), Self.safeCodexTotals(total) else { return }
             if let last {
                 let rawDelta = last
                 let base = previousTotals ?? .init(input: 0, cached: 0, output: 0)
@@ -1398,7 +1485,11 @@ enum CostUsageScanner {
                                 sessionId = metadata.sessionId
                             }
                         case let .tokenCount(record):
-                            appendSnapshot(timestamp: record.timestamp, last: record.last, total: record.total)
+                            appendSnapshot(
+                                timestamp: record.timestamp,
+                                last: record.last,
+                                total: record.total,
+                                unsafeNumericSource: record.unsafeNumericSource)
                         case .turnContext, .taskStarted:
                             break
                         }
@@ -1433,6 +1524,9 @@ enum CostUsageScanner {
                             return 0
                         }
 
+                        guard Self.safeCodexUsage(info["total_token_usage"] as? [String: Any]),
+                              Self.safeCodexUsage(info["last_token_usage"] as? [String: Any])
+                        else { return }
                         let total = (info["total_token_usage"] as? [String: Any]).map {
                             CostUsageCodexTotals(
                                 input: toInt($0["input_tokens"]),
@@ -1528,6 +1622,7 @@ enum CostUsageScanner {
 
         var days: [String: [String: [Int]]] = [:]
         var rows: [CodexUsageRow] = []
+        var excludedSyncRecords = 0
 
         func add(dayKey: String, model: String, input: Int, cached: Int, output: Int) {
             guard CostUsageDayRange.isInRange(dayKey: dayKey, since: range.scanSinceKey, until: range.scanUntilKey)
@@ -1536,9 +1631,9 @@ enum CostUsageScanner {
 
             var dayModels = days[dayKey] ?? [:]
             var packed = dayModels[normModel] ?? [0, 0, 0]
-            packed[0] = (packed[safe: 0] ?? 0) + input
-            packed[1] = (packed[safe: 1] ?? 0) + cached
-            packed[2] = (packed[safe: 2] ?? 0) + output
+            packed[0] = Self.boundedAdd(packed[safe: 0] ?? 0, input)
+            packed[1] = Self.boundedAdd(packed[safe: 1] ?? 0, cached)
+            packed[2] = Self.boundedAdd(packed[safe: 2] ?? 0, output)
             dayModels[normModel] = packed
             days[dayKey] = dayModels
         }
@@ -1571,8 +1666,16 @@ enum CostUsageScanner {
 
         // swiftlint:disable:next function_body_length
         func handleTokenCount(_ record: CodexTokenCountRecord) throws {
+            if record.unsafeNumericSource { excludedSyncRecords += 1 }
+            guard Self.safeCodexTotals(record.last), Self.safeCodexTotals(record.total) else {
+                if !record.unsafeNumericSource { excludedSyncRecords += 1 }
+                return
+            }
             guard let dayKey = Self.dayKeyFromTimestamp(record.timestamp) ?? Self.dayKeyFromParsedISO(record.timestamp)
-            else { return }
+            else {
+                excludedSyncRecords += 1
+                return
+            }
 
             let model = currentModel ?? record.model ?? "gpt-5"
             let total = record.total
@@ -1613,6 +1716,7 @@ enum CostUsageScanner {
                 guard let last,
                       let watermark = unresolvedForkTotalWatermark
                 else {
+                    excludedSyncRecords += 1
                     return
                 }
 
@@ -1754,7 +1858,9 @@ enum CostUsageScanner {
                     turnID: record.turnID ?? currentTurnID,
                     input: deltaInput,
                     cached: cachedClamp,
-                    output: deltaOutput))
+                    output: deltaOutput,
+                    timestamp: record.timestamp,
+                    unsafeNumericSource: record.unsafeNumericSource ? true : nil))
             }
         }
 
@@ -1865,9 +1971,14 @@ enum CostUsageScanner {
                             return
                         }
 
-                        guard let tsText = obj["timestamp"] as? String else { return }
-                        guard let dayKey = Self.dayKeyFromTimestamp(tsText) ?? Self.dayKeyFromParsedISO(tsText)
-                        else { return }
+                        let isTokenCount = type == "event_msg"
+                            && ((obj["payload"] as? [String: Any])?["type"] as? String) == "token_count"
+                        guard let tsText = obj["timestamp"] as? String,
+                              let dayKey = Self.dayKeyFromTimestamp(tsText) ?? Self.dayKeyFromParsedISO(tsText)
+                        else {
+                            if isTokenCount { excludedSyncRecords += 1 }
+                            return
+                        }
 
                         if type == "turn_context" {
                             if let payload = obj["payload"] as? [String: Any] {
@@ -1911,6 +2022,10 @@ enum CostUsageScanner {
 
                         let total = (info?["total_token_usage"] as? [String: Any])
                         let last = (info?["last_token_usage"] as? [String: Any])
+                        guard Self.safeCodexUsage(total), Self.safeCodexUsage(last) else {
+                            excludedSyncRecords += 1
+                            return
+                        }
 
                         var deltaInput = 0
                         var deltaCached = 0
@@ -1947,6 +2062,7 @@ enum CostUsageScanner {
                             guard let last,
                                   let watermark = unresolvedForkTotalWatermark
                             else {
+                                excludedSyncRecords += 1
                                 return
                             }
 
@@ -2091,7 +2207,8 @@ enum CostUsageScanner {
                                 turnID: Self.codexTurnID(from: payload) ?? currentTurnID,
                                 input: deltaInput,
                                 cached: cachedClamp,
-                                output: deltaOutput))
+                                output: deltaOutput,
+                                timestamp: tsText))
                         }
                     }
                 })
@@ -2120,7 +2237,8 @@ enum CostUsageScanner {
             lastCodexTurnID: currentTurnID,
             sessionId: sessionId,
             forkedFromId: forkedFromId,
-            rows: rows)
+            rows: rows,
+            excludedSyncRecords: excludedSyncRecords)
     }
 
     private static func codexTurnID(from payload: [String: Any]) -> String? {
@@ -2253,6 +2371,7 @@ enum CostUsageScanner {
             shouldRefresh: shouldRefresh)
     }
 
+    // swiftlint:disable:next function_body_length
     private static func loadCodexDaily(
         range: CostUsageDayRange,
         now: Date,
@@ -2345,7 +2464,8 @@ enum CostUsageScanner {
                         requiresTurnIDCache: plan.needsTurnIDCacheMigration,
                         changedPriorityTurnIDs: plan.changedPriorityTurnIDs,
                         resources: resources,
-                        checkCancellation: checkCancellation),
+                        checkCancellation: checkCancellation,
+                        retainSyncRows: options.retainSyncRows),
                     cache: &cache,
                     state: &scanState)
             }
@@ -2412,6 +2532,7 @@ enum CostUsageScanner {
             Self.persistCodexCacheLoggingFailures(cache, cacheRoot: options.cacheRoot)
         }
 
+        options.cacheSnapshot?(cache)
         return Self.buildCodexReportFromCache(
             cache: cache,
             range: range,

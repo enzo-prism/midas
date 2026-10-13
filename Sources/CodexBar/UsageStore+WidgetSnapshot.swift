@@ -62,7 +62,7 @@ extension UsageStore {
     }
 
     private func makeWidgetSnapshot() -> WidgetSnapshot {
-        let enabledProviders = self.enabledProviders()
+        let enabledProviders = self.midasProvidersForUsageDisplay()
         let entries = UsageProvider.allCases.compactMap { provider in
             self.makeWidgetEntry(for: provider)
         }
@@ -70,10 +70,12 @@ extension UsageStore {
     }
 
     private func makeWidgetEntry(for provider: UsageProvider) -> WidgetSnapshot.ProviderEntry? {
-        guard let snapshot = self.snapshots[provider] else { return nil }
+        let shared = self.usesSyncedUsage(for: provider) ? self.midasUsageSync.snapshots[provider] : nil
+        guard let snapshot = self.snapshots[provider] ?? shared.map({
+            UsageSnapshot(primary: nil, secondary: nil, updatedAt: $0.updatedAt)
+        }) else { return nil }
 
-        let tokenSnapshot = self.tokenSnapshot(fromProviderSnapshot: snapshot, provider: provider) ?? self
-            .tokenSnapshots[provider]
+        let tokenSnapshot = self.displayTokenSnapshot(for: provider)
         let dailyUsage = tokenSnapshot?.daily.map { entry in
             WidgetSnapshot.DailyUsagePoint(
                 dayKey: entry.date,

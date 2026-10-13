@@ -40,6 +40,15 @@ extension CostUsageScanner {
         }
     }
 
+    static func hasJSONByteField(
+        _ field: [UInt8],
+        from bytes: UnsafeBufferPointer<UInt8>,
+        in range: Range<Int>,
+        atDepth targetDepth: Int) -> Bool
+    {
+        self.extractJSONByteField(field, from: bytes, in: range, atDepth: targetDepth) { _ in true } ?? false
+    }
+
     private static func extractJSONByteField<T>(
         _ field: [UInt8],
         from bytes: UnsafeBufferPointer<UInt8>,
@@ -168,7 +177,9 @@ extension CostUsageScanner {
             value = added.partialValue
             index += 1
         }
-        return sawDigit ? (sign == -1 ? -value : value) : nil
+        guard sawDigit, index == limit || [UInt8(0x2C), 0x7D, 0x20, 0x09, 0x0A, 0x0D].contains(bytes[index])
+        else { return nil }
+        return sign == -1 ? -value : value
     }
 
     private static func skipJSONByteWhitespace(

@@ -220,7 +220,22 @@ struct OverviewSpendSummaryCardView: View {
 
 extension StatusItemController {
     func overviewSpendSummary(providers: [UsageProvider]) -> OverviewSpendSummary? {
-        let snapshots = providers.compactMap { self.store.tokenSnapshot(for: $0) }
+        let snapshots = providers.compactMap { provider -> CostUsageTokenSnapshot? in
+            guard let snapshot = self.store.displayTokenSnapshot(for: provider) else { return nil }
+            guard self.store.usesSyncedUsage(for: provider),
+                  let range = MidasSpendPeriod.rolling30Days.range(timeZone: MidasSpendPeriod.utc)
+            else { return snapshot }
+            let daily = snapshot.daily.filter { range.contains($0.date) }
+            let costs = daily.compactMap(\.costUSD)
+            let counts = daily.compactMap(\.totalTokens)
+            return CostUsageTokenSnapshot(
+                sessionTokens: snapshot.sessionTokens,
+                sessionCostUSD: snapshot.sessionCostUSD,
+                last30DaysTokens: counts.isEmpty ? nil : counts.reduce(0, +),
+                last30DaysCostUSD: costs.isEmpty ? nil : costs.reduce(0, +),
+                daily: daily,
+                updatedAt: snapshot.updatedAt)
+        }
         let costs = snapshots.compactMap { snapshot -> (currencyCode: String, amount: Double)? in
             guard let amount = snapshot.last30DaysCostUSD else { return nil }
             return (snapshot.currencyCode, amount)
@@ -228,11 +243,12 @@ extension StatusItemController {
         guard !costs.isEmpty else { return nil }
         let tokens = snapshots.compactMap(\.last30DaysTokens)
         let prior = self.store.priorSpendCosts(providers: providers)
+        let usesSharedHistory = providers.contains { self.store.usesSyncedUsage(for: $0) }
         return OverviewSpendSummary.build(
             costs: costs,
             tokens: tokens,
             providerCount: providers.count,
-            priorCosts: prior.costs,
-            priorPricedProviderCount: prior.fullWindowCount)
+            priorCosts: usesSharedHistory ? [] : prior.costs,
+            priorPricedProviderCount: usesSharedHistory ? 0 : prior.fullWindowCount)
     }
 }

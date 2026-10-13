@@ -23,16 +23,17 @@ public struct MetaTokenUsage: Sendable, Equatable {
     }
 
     public var totalTokens: Int {
-        self.inputTokens + self.outputTokens + self.reasoningTokens
+        CostUsageScanner.boundedAdd(
+            CostUsageScanner.boundedAdd(self.inputTokens, self.outputTokens), self.reasoningTokens)
     }
 
     public static func + (lhs: Self, rhs: Self) -> Self {
         Self(
-            inputTokens: lhs.inputTokens + rhs.inputTokens,
-            outputTokens: lhs.outputTokens + rhs.outputTokens,
-            reasoningTokens: lhs.reasoningTokens + rhs.reasoningTokens,
-            cachedTokens: lhs.cachedTokens + rhs.cachedTokens,
-            requests: lhs.requests + rhs.requests)
+            inputTokens: CostUsageScanner.boundedAdd(lhs.inputTokens, rhs.inputTokens),
+            outputTokens: CostUsageScanner.boundedAdd(lhs.outputTokens, rhs.outputTokens),
+            reasoningTokens: CostUsageScanner.boundedAdd(lhs.reasoningTokens, rhs.reasoningTokens),
+            cachedTokens: CostUsageScanner.boundedAdd(lhs.cachedTokens, rhs.cachedTokens),
+            requests: CostUsageScanner.boundedAdd(lhs.requests, rhs.requests))
     }
 
     public static func += (lhs: inout Self, rhs: Self) {
@@ -46,11 +47,22 @@ public struct MetaCompletedResponse: Sendable, Equatable {
     public let at: Date
     public let model: String?
     public let usage: MetaTokenUsage
+    /// Stable record identity, retained locally and salted before publication.
+    public let sourceIDComponents: [String]?
+    public let hasRecordedTimestamp: Bool
 
-    public init(at: Date, model: String?, usage: MetaTokenUsage) {
+    public init(
+        at: Date,
+        model: String?,
+        usage: MetaTokenUsage,
+        sourceIDComponents: [String]? = nil,
+        hasRecordedTimestamp: Bool = true)
+    {
         self.at = at
         self.model = model
         self.usage = usage
+        self.sourceIDComponents = sourceIDComponents
+        self.hasRecordedTimestamp = hasRecordedTimestamp
     }
 }
 

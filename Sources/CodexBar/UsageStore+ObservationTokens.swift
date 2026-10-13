@@ -3,6 +3,9 @@ import Foundation
 @MainActor
 extension UsageStore {
     var menuObservationToken: Int {
+        _ = self.midasUsageSync.snapshots
+        _ = self.midasUsageSync.isEnabled
+        _ = self.midasUsageSync.includesSyncedUsage
         _ = self.snapshots
         _ = self.errors
         _ = self.lastSourceLabels
@@ -34,6 +37,9 @@ extension UsageStore {
     }
 
     var iconObservationToken: Int {
+        _ = self.midasUsageSync.snapshots
+        _ = self.midasUsageSync.isEnabled
+        _ = self.midasUsageSync.includesSyncedUsage
         _ = self.tokenSnapshots
         _ = self.tokenErrors
         _ = self.tokenRefreshInFlight

@@ -1,5 +1,16 @@
 # Changelog
 
+## Midas 0.43.0 — release candidate
+
+- Combine recorded usage across Macs using an opt-in private folder, including iCloud Drive.
+- Merge Codex and Claude local events, Muse Code response logs, and verified Cursor account history without counting copies twice.
+- Keep credentials, transcripts, and raw account/session identities on their original Mac.
+- Use the combined scope in monthly charts, spend history, menu-bar totals, and widgets, with UTC reporting on every Mac.
+- Preserve offline history and pending publications; pause on account or workspace changes and validate imported files.
+- Clearly disclose that Meta AI / the Muse consumer app has no verified numeric usage source.
+
+Build 118. Synthetic verification and source changes do not establish public release or real MacBook delivery.
+
 ## Midas 0.42.0 — October 12, 2026
 
 - Compare recorded calendar-month cost and token subtotals in **Spend history**, by provider, with 6- and 12-month charts.

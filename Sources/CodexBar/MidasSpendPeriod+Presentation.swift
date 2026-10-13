@@ -13,8 +13,12 @@ extension MidasSpendPeriod {
     }
 
     var label: String {
+        self.label(reportingTimeZone: .current)
+    }
+
+    func label(reportingTimeZone: TimeZone, now: Date = Date()) -> String {
         guard self != .rolling30Days else { return "Last 30 days" }
-        guard let range = self.range() else { return "Month unavailable" }
+        guard let range = self.range(now: now, timeZone: reportingTimeZone) else { return "Month unavailable" }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -28,13 +32,16 @@ extension MidasSpendPeriod {
 
 extension StatusItemController {
     func midasPeriodPresentation(
-        _ presentation: MidasProviderPresentation, token: CostUsageTokenSnapshot?) -> MidasProviderPresentation
+        _ presentation: MidasProviderPresentation,
+        token: CostUsageTokenSnapshot?) -> MidasProviderPresentation
     {
         var result = presentation
         let period = MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
         guard let token, let original = result.spend, original.isDisplayable else {
             result.spend = nil
-            if presentation.provider == .codex, self.settings.midasCloudUsageEnabled {
+            if self.store.usesSyncedUsage(for: presentation.provider) {
+                result.spendUnavailableReason = "Shared history pending"
+            } else if presentation.provider == .codex, self.settings.midasCloudUsageEnabled {
                 result.spendUnavailableReason = self.settings.midasCodexEstimateMode == .tokensOnly
                     ? "Tokens only" : (self.store.midasCodexEstimate == nil ? "Estimate pending" : "History pending")
             } else {
@@ -43,7 +50,9 @@ extension StatusItemController {
             return result
         }
         // OpenAI cloud history and Anthropic cost reports key days in UTC; local transcript scans use local days.
-        let reportsUTCDays = (result.provider == .codex && self.settings.midasCloudUsageEnabled) || original.isBilled
+        let reportsUTCDays = self.store.usesSyncedUsage(for: result.provider)
+            || result.provider == .cursor
+            || (result.provider == .codex && self.settings.midasCloudUsageEnabled) || original.isBilled
         let timeZone = reportsUTCDays ? MidasSpendPeriod.utc : .current
         guard let estimate = period.amount(snapshot: token, timeZone: timeZone), let amount = estimate.dollars else {
             result.spend = nil
@@ -51,8 +60,12 @@ extension StatusItemController {
             return result
         }
         let scope = "\(estimate.range.start)–\(estimate.range.end)"
-        let calendarNote = if result.provider == .codex, self.settings.midasCloudUsageEnabled {
+        let calendarNote = if self.store.usesSyncedUsage(for: result.provider) {
+            "Shared usage days use UTC on every Mac."
+        } else if result.provider == .codex, self.settings.midasCloudUsageEnabled {
             "OpenAI daily dates use UTC."
+        } else if result.provider == .cursor {
+            "Cursor account history uses UTC days."
         } else if original.isBilled {
             "Cost report days use UTC; the latest hours can still be settling."
         } else {
@@ -62,7 +75,7 @@ extension StatusItemController {
         result.spend = MidasSpendPresentation(
             title: original.isBilled ? "Billed API spend" : "Estimated inference spend",
             value: amount.formatted(.currency(code: original.currency)),
-            period: period.label,
+            period: period.label(reportingTimeZone: timeZone),
             detail: original.detail + "\n\(scope). \(calendarNote) \(coverage)",
             updatedAt: original.updatedAt,
             amount: amount,

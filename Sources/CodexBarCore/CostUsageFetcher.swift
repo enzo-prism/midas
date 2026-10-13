@@ -483,7 +483,7 @@ public struct CostUsageFetcher: Sendable {
             updatedAt: snapshot.updatedAt)
     }
 
-    /// Snap a Cursor window start to the local day boundary so the dashboard query keeps full days.
+    /// Snap a Cursor window start to its reporting day boundary so the dashboard query keeps full days.
     /// `since` arrives as the current instant N-1 days back, so a 1-day window would otherwise become
     /// an empty exact-instant range; snapping to 00:00 keeps all of today (and the first day's early
     /// hours for wider windows).
@@ -494,10 +494,12 @@ public struct CostUsageFetcher: Sendable {
     /// Fetch Cursor's per-day token-cost plus its Cursor-metered total via the cookie-authenticated
     /// dashboard API, reusing the same session resolution as the Cursor status probe. Like Codex and
     /// Claude, the report covers the rolling `historyDays` window.
-    private static func loadCursorTokenSnapshot(
+    static func loadCursorTokenSnapshot(
         cursorSettings: ProviderSettingsSnapshot.CursorProviderSettings?,
         now: Date,
-        historyDays: Int) async throws -> CostUsageTokenSnapshot
+        historyDays: Int,
+        fetchReport: (@Sendable (Date?, Date?, Calendar, String?) async throws -> CursorCostReport)? = nil)
+        async throws -> CostUsageTokenSnapshot
     {
         guard cursorSettings?.cookieSource != .off else {
             throw CostUsageError.sourceDisabled(.cursor)
@@ -507,16 +509,27 @@ public struct CostUsageFetcher: Sendable {
         } else {
             nil
         }
-        #if os(macOS)
-        // `since` arrives as the current instant N-1 days back; snap it to the local day boundary so
-        // the dashboard query keeps the full first day (and all of today for a 1-day window) instead
-        // of filtering out earlier events at the same time-of-day.
-        let since = Calendar.current.date(byAdding: .day, value: -(historyDays - 1), to: now) ?? now
-        let probe = CursorStatusProbe(browserDetection: BrowserDetection())
-        let report = try await probe.fetchCostReport(
-            since: Self.cursorWindowStart(since),
-            until: now,
-            cookieHeaderOverride: manual)
+        // Provider-account history must use identical day keys on every Mac before it can be deduplicated.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let since = calendar.date(byAdding: .day, value: -(historyDays - 1), to: now) ?? now
+        let start = Self.cursorWindowStart(since, calendar: calendar)
+        let report: CursorCostReport
+        if let fetchReport {
+            report = try await fetchReport(start, now, calendar, manual)
+        } else {
+            #if os(macOS)
+            let probe = CursorStatusProbe(browserDetection: BrowserDetection())
+            report = try await probe.fetchCostReport(
+                since: start,
+                until: now,
+                calendar: calendar,
+                cookieHeaderOverride: manual)
+            #else
+            // Cursor's cookie-authenticated dashboard is macOS-only; the probe cannot run here.
+            throw CursorStatusProbeError.notSupported
+            #endif
+        }
         return Self.tokenSnapshot(
             from: report.daily,
             now: now,
@@ -526,11 +539,6 @@ public struct CostUsageFetcher: Sendable {
                 meteredCostUSD: report.meteredCostUSD,
                 daily: report.daily.data),
             accountEmail: report.accountEmail)
-        #else
-        // Cursor's cookie-authenticated dashboard is macOS-only; the probe cannot run here.
-        _ = (manual, now, historyDays)
-        throw CursorStatusProbeError.notSupported
-        #endif
     }
 
     static func cursorCostProvenance(

@@ -55,12 +55,15 @@ extension UsageMenuCardView.Model {
         }
         guard enabled else { return nil }
         guard let snapshot else { return nil }
+        let isSharedHistory = snapshot.historyLabel == "Across devices · 12 months"
 
         let sessionCost = snapshot.sessionCostUSD.map {
             UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode)
         } ?? "—"
         let sessionTokens = snapshot.sessionTokens.map { UsageFormatter.tokenCountString($0) }
-        let sessionLabel = if provider == .bedrock || provider == .mistral {
+        let sessionLabel = if isSharedHistory {
+            L("Today (UTC)")
+        } else if provider == .bedrock || provider == .mistral {
             Self.latestBillingDayLabel(from: snapshot)
         } else if provider == .cursor {
             L("Billing cycle")
@@ -94,11 +97,16 @@ extension UsageMenuCardView.Model {
             return String(format: L("Cursor-metered: %@ (%@)"), amount, windowLabel.lowercased())
         }
         let err = (error?.isEmpty ?? true) ? nil : error
+        let hint = isSharedHistory
+            ? (provider == .cursor
+                ? "Shared Cursor history, counted once per account and UTC day. An API-rate estimate, not a bill."
+                : "Combined recorded session history across Macs, counted once. An API-rate estimate, not a bill.")
+            : Self.tokenUsageHint(provider: provider)
         return TokenUsageSection(
             sessionLine: sessionLine,
             monthLine: monthLine,
             meteredLine: meteredLine,
-            hintLine: Self.tokenUsageHint(provider: provider),
+            hintLine: hint,
             errorLine: err,
             errorCopyText: (error?.isEmpty ?? true) ? nil : error)
     }

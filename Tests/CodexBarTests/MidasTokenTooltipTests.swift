@@ -104,4 +104,33 @@ struct MidasTokenTooltipTests {
             calendar: self.calendar)
         #expect(text.hasSuffix("All providers: Unavailable"))
     }
+
+    @Test func sharedHistoryUsesThirtyUTCDaysRegardlessOfTheMacTimeZone() throws {
+        let boundary = try #require(ISO8601DateFormatter().date(from: "2026-10-01T01:00:00Z"))
+        func row(_ date: String, _ tokens: Int?) -> CostUsageDailyReport.Entry {
+            .init(
+                date: date,
+                inputTokens: nil,
+                outputTokens: nil,
+                totalTokens: tokens,
+                costUSD: nil,
+                modelsUsed: nil,
+                modelBreakdowns: nil)
+        }
+        let shared = self.snapshot(9999, days: 365, label: "Across devices · 12 months", daily: [
+            row("2026-09-01", 1000), row("2026-09-02", 10), row("2026-10-01", 20), row("2026-10-02", 1000),
+        ])
+        for zone in ["America/Los_Angeles", "Asia/Tokyo"] {
+            var calendar = self.calendar
+            calendar.timeZone = try #require(TimeZone(identifier: zone))
+            #expect(MidasTokenTooltip.count(shared, now: boundary, calendar: calendar) == 30)
+            let text = MidasTokenTooltip.text(
+                favorite: .codex,
+                providers: [.codex],
+                snapshots: [.codex: shared],
+                now: boundary,
+                calendar: calendar)
+            #expect(text == "Past 30 days\nCodex: 30 tokens\nAll providers: 30 tokens")
+        }
+    }
 }

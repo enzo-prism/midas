@@ -7,16 +7,15 @@ struct MidasSpendPeriodControl: View {
     @State private var isExpanded = false
 
     private var months: [String] {
-        let providers = self.store.enabledProvidersForDisplay()
+        let providers = self.store.midasProvidersForUsageDisplay()
         let dates = providers.flatMap { provider -> [String] in
-            let projected = self.store.tokenSnapshot(
-                fromProviderSnapshot: self.store.snapshot(for: provider), provider: provider)
-            let token = projected ?? (UsageStore.tokenCostRequiresProviderSnapshot(provider)
-                ? nil : self.store.tokenSnapshot(for: provider))
+            let token = self.store.displayTokenSnapshot(for: provider)
             return token?.daily.map(\.date) ?? []
         }
         return MidasSpendPeriodChoices.recordedMonths(
-            dates: dates, selection: self.settings.midasSpendPeriodSelection)
+            dates: dates,
+            selection: self.settings.midasSpendPeriodSelection,
+            timeZone: self.store.midasDisplayTimeZone)
     }
 
     var body: some View {
@@ -24,7 +23,8 @@ struct MidasSpendPeriodControl: View {
             Button { self.isExpanded.toggle() } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "calendar").foregroundStyle(MidasTheme.secondaryText)
-                    Text(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label)
+                    Text(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+                        .label(reportingTimeZone: self.store.midasDisplayTimeZone))
                         .lineLimit(1)
                     Image(systemName: self.isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
@@ -33,7 +33,8 @@ struct MidasSpendPeriodControl: View {
             }
             .buttonStyle(MidasPeriodButtonStyle(selected: self.isExpanded))
             .accessibilityLabel("Spend period")
-            .accessibilityValue(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label)
+            .accessibilityValue(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+                .label(reportingTimeZone: self.store.midasDisplayTimeZone))
             .help("Choose the date range for estimated spend")
             if self.isExpanded {
                 VStack(alignment: .leading, spacing: 4) {
@@ -70,7 +71,9 @@ struct MidasSpendPeriodControl: View {
                 Image(systemName: icon).frame(width: 16).foregroundStyle(MidasTheme.secondaryText)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.system(size: 13, weight: selected ? .semibold : .medium))
-                    Text(MidasSpendPeriodChoices.dateLabel(selection: selection))
+                    Text(MidasSpendPeriodChoices.dateLabel(
+                        selection: selection,
+                        timeZone: self.store.midasDisplayTimeZone))
                         .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
                 }
                 Spacer(minLength: 6)
@@ -122,9 +125,14 @@ private struct MidasPeriodButtonStyle: ButtonStyle {
 
 /// Dates are validated before becoming choices; malformed history must never look like the current month.
 enum MidasSpendPeriodChoices {
-    static func recordedMonths(dates: [String], selection: String = "currentMonth", now: Date = Date()) -> [String] {
+    static func recordedMonths(
+        dates: [String],
+        selection: String = "currentMonth",
+        now: Date = Date(),
+        timeZone: TimeZone = .current) -> [String]
+    {
         let formatter = self.formatter
-        let current = String(MidasSpendPeriod.currentMonth.range(now: now)?.start.prefix(7) ?? "")
+        let current = String(MidasSpendPeriod.currentMonth.range(now: now, timeZone: timeZone)?.start.prefix(7) ?? "")
         let candidates = dates + (selection.count == 7 ? [selection + "-01"] : [])
         return Set(candidates.compactMap { day -> String? in
             guard day.count == 10, let date = formatter.date(from: day), formatter.string(from: date) == day else {
@@ -135,8 +143,8 @@ enum MidasSpendPeriodChoices {
         }).sorted(by: >)
     }
 
-    static func dateLabel(selection: String, now: Date = Date()) -> String {
-        guard let range = MidasSpendPeriod(selection: selection).range(now: now),
+    static func dateLabel(selection: String, now: Date = Date(), timeZone: TimeZone = .current) -> String {
+        guard let range = MidasSpendPeriod(selection: selection).range(now: now, timeZone: timeZone),
               let start = self.formatter.date(from: range.start), let end = self.formatter.date(from: range.end)
         else { return "Dates unavailable" }
         let format = DateIntervalFormatter()

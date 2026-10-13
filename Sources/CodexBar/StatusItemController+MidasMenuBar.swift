@@ -13,9 +13,7 @@ extension StatusItemController {
 
     func midasProviderPresentation(for provider: UsageProvider) -> MidasProviderPresentation {
         let snapshot = self.store.snapshot(for: provider)
-        let projected = self.store.tokenSnapshot(fromProviderSnapshot: snapshot, provider: provider)
-        let token = projected ?? (UsageStore.tokenCostRequiresProviderSnapshot(provider)
-            ? nil : self.store.tokenSnapshot(for: provider))
+        let token = self.store.displayTokenSnapshot(for: provider)
         var result = MidasProviderPresentation.make(
             provider: provider,
             card: self.menuCardModel(for: provider),
@@ -24,7 +22,11 @@ extension StatusItemController {
             isRefreshing: self.store.shouldShowRefreshingMenuCardIndicator(for: provider),
             isStale: self.store.isStale(provider: provider)
                 || (self.settings.midasMenuBarMode != .orbit && self.store.tokenErrors[provider] != nil))
-        if provider == .codex, self.settings.midasCloudUsageEnabled {
+        if self.store.usesSyncedUsage(for: provider) {
+            result.spend?.detail = provider == .cursor
+                ? "Shared Cursor history, counted once per account and UTC day. An API-rate estimate, not a bill."
+                : "Combined recorded session history across Macs, counted once. An API-rate estimate, not a bill."
+        } else if provider == .codex, self.settings.midasCloudUsageEnabled {
             // Cloud coverage follows all connected accounts independently of the quota layout.
             let rows = self.settings.codexVisibleAccountProjection.visibleAccounts.map { account in
                 MidasCloudUsagePresentation.Account(
@@ -68,13 +70,13 @@ extension StatusItemController {
               let button = self.statusItem.button else { return }
         self.menuBarCountdownRefreshTask?.cancel()
         self.menuBarCountdownRefreshTask = nil
-        let providers = self.store.enabledProvidersForDisplay()
+        let providers = self.store.midasProvidersForUsageDisplay()
         let presentations = providers.map { self.midasProviderPresentation(for: $0) }
         let inFlight = self.store.refreshingProviders.union(self.store.tokenRefreshInFlight)
         // Background work preserves the cached display. Only real initial/manual work moves.
         let visibleActivity = Set(inFlight.filter { provider in
             self.menuCardRefreshMonitor.isManualRefreshInFlight
-                || (self.store.snapshot(for: provider) == nil && self.store.tokenSnapshot(for: provider) == nil)
+                || (self.store.snapshot(for: provider) == nil && self.store.displayTokenSnapshot(for: provider) == nil)
         })
         let incidents = Dictionary(uniqueKeysWithValues: providers.compactMap { provider -> (UsageProvider, String)? in
             guard let status = self.store.statuses[provider],
@@ -114,10 +116,7 @@ extension StatusItemController {
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         if self.settings.midasMenuBarMode == .orbit {
             let tokens = Dictionary(uniqueKeysWithValues: providers.compactMap { provider in
-                let snapshot = self.store.tokenSnapshot(
-                    fromProviderSnapshot: self.store.snapshot(for: provider), provider: provider)
-                    ?? (UsageStore.tokenCostRequiresProviderSnapshot(provider)
-                        ? nil : self.store.tokenSnapshot(for: provider))
+                let snapshot = self.store.displayTokenSnapshot(for: provider)
                 return snapshot.map { (provider, $0) }
             })
             button.toolTip = MidasTokenTooltip.text(

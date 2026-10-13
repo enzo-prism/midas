@@ -15,7 +15,7 @@ struct MidasUsageWindowView: View {
     @State private var comparisonProvider: UsageProvider = .codex
 
     private var providers: [UsageProvider] {
-        self.store.enabledProvidersForDisplay()
+        self.store.midasProvidersForUsageDisplay()
     }
 
     var body: some View {
@@ -121,9 +121,11 @@ struct MidasUsageWindowView: View {
                     .help("Refresh usage")
                     .accessibilityLabel("Refresh usage")
             }
+            MidasSyncStatusView(coordinator: self.store.midasUsageSync)
             MidasTotalSpendView(
                 presentations: self.providers.map(self.presentation),
-                periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection).label,
+                periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+                    .label(reportingTimeZone: self.store.midasDisplayTimeZone),
                 periodControl: AnyView(MidasSpendPeriodControl(settings: self.settings, store: self.store)))
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -240,9 +242,12 @@ struct MidasUsageWindowView: View {
                 showsCosts: self.showsCosts,
                 isRefreshing: self.store.isTokenRefreshInFlight(for: provider))
             if self.costSnapshot(provider) == nil {
-                Text(self.settings.costUsageEnabled
-                    ? "History appears when this provider supplies supported usage records."
-                    : "Local cost history is off. You can enable it in Settings.")
+                let explanation = self.store.usesSyncedUsage(for: provider)
+                    ? "Shared history appears after a connected Mac supplies supported usage records."
+                    : (self.settings.costUsageEnabled
+                        ? "History appears when this provider supplies supported usage records."
+                        : "Local cost history is off. You can enable it in Settings.")
+                Text(explanation)
                     .font(.callout)
                     .foregroundStyle(MidasTheme.secondaryText)
                 Button("Open Settings", action: self.actions.settings)
@@ -251,29 +256,19 @@ struct MidasUsageWindowView: View {
     }
 
     private func costSnapshot(_ provider: UsageProvider) -> CostUsageTokenSnapshot? {
-        let derived = self.store.tokenSnapshot(
-            fromProviderSnapshot: self.store.snapshot(for: provider),
-            provider: provider)
-        if UsageStore.tokenCostRequiresProviderSnapshot(provider) { return derived }
-        return derived ?? self.store.tokenSnapshot(for: provider)
+        self.store.displayTokenSnapshot(for: provider)
     }
 
     private func dailyHistory(_ provider: UsageProvider) -> MidasCostPresentation {
         let snapshot = self.costSnapshot(provider)
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = MidasMonthlySpend.reportingTimeZone(
-            provider: provider,
-            codexCloudEnabled: self.settings.midasCloudUsageEnabled,
-            provenance: snapshot?.costProvenance ?? .unknown)
+        calendar.timeZone = self.store.spendReportingTimeZone(for: provider, snapshot: snapshot)
         return MidasCostPresentation(snapshot: snapshot, period: self.period, reportingCalendar: calendar)
     }
 
     private func monthlyComparison(_ provider: UsageProvider) -> some View {
         let snapshot = self.costSnapshot(provider)
-        let timeZone = MidasMonthlySpend.reportingTimeZone(
-            provider: provider,
-            codexCloudEnabled: self.settings.midasCloudUsageEnabled,
-            provenance: snapshot?.costProvenance ?? .unknown)
+        let timeZone = self.store.spendReportingTimeZone(for: provider, snapshot: snapshot)
         let utcDays = timeZone == MidasSpendPeriod.utc
         return VStack(alignment: .leading, spacing: 16) {
             MidasMonthlySpendView(
@@ -284,7 +279,10 @@ struct MidasUsageWindowView: View {
                 showsCosts: self.$monthlyShowsCosts,
                 monthCount: self.$monthCount)
                 .id(provider)
-            if provider == .codex, self.settings.midasCloudUsageEnabled {
+            if self.store.usesSyncedUsage(for: provider) {
+                Text("Shared history uses UTC days and retains up to 12 months. Only recorded usage is included.")
+                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            } else if provider == .codex, self.settings.midasCloudUsageEnabled {
                 Text("Codex cloud currently supplies 30 days. Older months remain unavailable.")
                     .font(.caption).foregroundStyle(MidasTheme.secondaryText)
             } else if provider == .mistral {
@@ -305,7 +303,9 @@ struct MidasUsageWindowView: View {
                     .disabled(self.store.isRefreshing)
                 }
             }
-            if !self.settings.costUsageEnabled, !UsageStore.tokenCostRequiresProviderSnapshot(provider) {
+            if !self.settings.costUsageEnabled, !UsageStore.tokenCostRequiresProviderSnapshot(provider),
+               !self.store.usesSyncedUsage(for: provider)
+            {
                 HStack {
                     Text("Local cost history is off. Enable it in Settings to load available local records.")
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)

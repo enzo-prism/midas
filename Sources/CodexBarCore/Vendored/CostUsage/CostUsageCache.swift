@@ -183,6 +183,9 @@ struct CostUsageFileUsage: Codable {
     var codexStandardTokens: [String: [String: Int]]?
     var codexPriorityTokens: [String: [String: Int]]?
     var codexTurnIDs: [String]?
+    /// Numeric event rows retained only after cross-device sync is enabled.
+    var codexSyncRows: [CostUsageScanner.CodexUsageRow]?
+    var syncExcludedRecords: Int?
     var codexRows: [CostUsageScanner.CodexUsageRow]?
     var claudeRows: [CostUsageScanner.ClaudeUsageRow]?
 }

@@ -5,6 +5,7 @@ import SwiftUI
 enum PreferencesTab: String, CaseIterable, Hashable {
     case general
     case providers
+    case sync
     case display
     case advanced
     case about
@@ -18,6 +19,7 @@ enum PreferencesTab: String, CaseIterable, Hashable {
         switch self {
         case .general: L("tab_general")
         case .providers: L("tab_providers")
+        case .sync: "Sync"
         case .display: L("tab_display")
         case .advanced: L("tab_advanced")
         case .about: L("tab_about")
@@ -29,6 +31,7 @@ enum PreferencesTab: String, CaseIterable, Hashable {
         switch self {
         case .general: "gearshape"
         case .providers: "square.grid.2x2"
+        case .sync: "icloud"
         case .display: "paintpalette"
         case .advanced: "slider.horizontal.3"
         case .about: "sparkles"
@@ -227,6 +230,8 @@ struct PreferencesView: View {
                 managedCodexAccountCoordinator: self.managedCodexAccountCoordinator,
                 codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
                 runProviderLoginFlow: self.runProviderLoginFlow)
+        case .sync:
+            PreferencesSyncPane(coordinator: self.store.midasUsageSync)
         case .display:
             DisplayPane(settings: self.settings, store: self.store)
         case .advanced:

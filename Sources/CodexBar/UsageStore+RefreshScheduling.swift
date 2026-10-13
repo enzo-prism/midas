@@ -68,6 +68,7 @@ extension UsageStore {
         // comparison is ready without extra timers; each provider refetches at
         // most twice a day behind its own TTL.
         await self.refreshPriorSpendSequence(providers: providers, force: force)
+        self.midasUsageSync.scheduleSync()
         self.scheduleMemoryPressureRelief()
     }
 

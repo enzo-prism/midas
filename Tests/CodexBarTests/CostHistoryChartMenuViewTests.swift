@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import CodexBar
 @testable import CodexBarCore
@@ -41,5 +42,21 @@ struct CostHistoryChartMenuViewTests {
     func `short model breakdown does not scroll or reserve extra rows`() {
         #expect(CostHistoryChartMenuView.detailViewportRowCount(itemCount: 3) == 3)
         #expect(CostHistoryChartMenuView.detailRowsNeedScrolling(itemCount: 3) == false)
+    }
+
+    @Test
+    @MainActor
+    func `shared chart dates use the supplied UTC calendar across local time zones`() throws {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        var pacific = utc
+        pacific.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        let day = "2026-10-01"
+        let shared = try #require(CostHistoryChartMenuView.dateFromDayKey(day, calendar: utc))
+        let local = try #require(CostHistoryChartMenuView.dateFromDayKey(day, calendar: pacific))
+        #expect(shared == ISO8601DateFormatter().date(from: "2026-10-01T12:00:00Z"))
+        #expect(local == ISO8601DateFormatter().date(from: "2026-10-01T19:00:00Z"))
+        #expect(utc.component(.day, from: shared) == 1)
+        #expect(pacific.component(.day, from: local) == 1)
     }
 }

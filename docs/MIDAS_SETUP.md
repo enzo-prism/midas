@@ -10,7 +10,7 @@ the bundle is **Midas.app**.
 1. **Services:** choose Codex, Claude, Cursor, and/or Meta. You do not need a Codex account to use Midas.
 2. **Accounts:** connect the accounts you use. Codex supports multiple separate OpenAI sign-ins.
    Claude supports separate verified account sign-ins and independent usage rows.
-   Cursor opens its existing browser sign-in flow. Meta reads Muse activity on this Mac.
+   Cursor opens its existing browser sign-in flow. Meta reads Muse Code activity on this Mac.
 3. **Overview:** preview estimates for the selected period, then choose **Open Midas**.
 
 Fresh installations open setup automatically. Existing users can choose **Set up Midas** in
@@ -39,7 +39,7 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   approximation of inference value at API rates, not an OpenAI bill or a precise cloud model
   breakdown. Without a usable sample, the dollar amount stays unavailable. A custom rate or
   tokens-only display is available under **Codex estimate options**.
-- **Optional iCloud sharing:** Macs on the same iCloud Drive account can share derived pricing
+- **Optional pricing-sample sharing:** Macs on the same iCloud Drive account can share derived pricing
   samples when enabled in Midas on each Mac. Records contain a rate, token counts, timestamps,
   a device identifier, and a hashed account-set identifier. They do not contain prompts,
   emails, or login credentials. Midas selects a valid matching sample; it does not add samples
@@ -68,12 +68,40 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
 - **Anthropic API:** add an organization Admin API key (`sk-ant-admin…`) under
   **Settings → Providers → Anthropic** to see billed API spend and token usage. Billed spend is
   labeled **Billed API spend** and is not added to the estimated total. See [Anthropic](anthropic.md).
-- **Meta:** Muse history is local to this Mac. Other computers' Meta activity is not included,
-  and Midas does not invent a remaining quota when the provider does not report one.
+- **Meta:** Midas reads Muse Code terminal logs. They describe this Mac unless usage Sync is enabled.
+  Meta AI / the Muse consumer app currently has no verified numeric usage source; its usage stays
+  unavailable. Midas does not invent a remaining quota when the provider does not report one.
 
 The period selector offers calendar periods and a rolling 30-day view. The total includes only
 available estimates for the selected period. Missing data is excluded and disclosed as partial;
 it is never treated as zero. Different currencies are not silently converted.
+
+## Combine usage across Macs
+
+1. Create a private folder such as **iCloud Drive/Midas Usage**. On Macs signed into the same Apple
+   Account, iCloud Drive can deliver that folder to both Macs.
+2. Open **Settings → Sync** on each Mac and choose the same folder. Give each Mac a distinct name.
+3. Keep **Sync usage from this Mac** and **Show combined usage** enabled. Connect the providers
+   normally on each Mac and keep Midas running to share new measurements.
+4. Click **Sync now** on both Macs after iCloud delivers the files. Check that both list the other
+   device and display the same recorded totals for the same UTC period.
+
+Codex, Claude Code, and Muse Code session events are combined without counting copied sessions
+twice. Cursor account history is counted once per verified account/day. Combined spend replaces
+the normal local/cloud source; Codex cloud totals are not added to local session events. Switching
+**Show combined usage** off restores this Mac's normal source while sharing continues. Account
+sign-ins, quota percentages, and reset times remain local.
+
+Shared history uses UTC days and retains up to 365 days of available records, including the last
+received history during a folder outage. Missing source history stays unavailable. **Saved from
+this Mac** confirms a local write; **Received on this Mac** confirms a peer publication was read.
+Neither confirms the other Mac is online. iCloud delivery can take time.
+
+Only numeric usage, costs, public model names, opaque event/account IDs, and device labels enter
+the chosen folder. Credentials, prompts, transcripts, raw emails, and source paths stay local.
+The shared JSON is readable to anyone with folder access, so keep the folder private. Disconnecting
+stops sharing and keeps existing shared files. See [usage sync](MIDAS_USAGE_SYNC.md) for coverage,
+deduplication, privacy, recovery, and verification details.
 
 ## Multiple Claude accounts
 
@@ -96,7 +124,8 @@ verified sign-in available for retry. If embedded authentication is unavailable,
 or OAuth-token field remains available. Do not share the credential file or commit it to source control.
 
 These connections do not change the active Claude Code login. Claude Code dollar estimates cover
-local activity on this Mac and appear once per provider, rather than as an account-by-account bill.
+recorded activity, combined across Macs when Sync is enabled, and appear once per provider rather
+than as an account-by-account bill.
 
 ## If data is missing
 
@@ -112,9 +141,11 @@ Finishing setup does not wait for every provider request; background refresh con
 ## Choosing a spend period
 
 Click the calendar control below the total to expand **This month**, **Last 30 days**, and any
-recorded months **inline in the panel**. Options preview their date range in this Mac’s time zone; gold marks the
+recorded months **inline in the panel**. Options preview their date range in this Mac’s time zone,
+or UTC when combined Sync usage is selected; gold marks the
 selected period. Each provider’s days are counted in its source calendar: local days for history
-scanned on this Mac, UTC for OpenAI cloud history and Anthropic cost reports. Choosing an option updates the estimate total and collapses the list.
+scanned on this Mac, UTC for shared history, Cursor account history, OpenAI cloud history, and
+Anthropic cost reports. Choosing an option updates the estimate total and collapses the list.
 **Partial total** / **Estimate details** also expand inline. The Air panel is already an
 `NSPopover`, so those lists must not open a nested SwiftUI popover or take AppKit
 first-responder focus — that combination aborts on macOS 27 (`swift_abortRetainUnowned` in
@@ -142,8 +173,8 @@ records can be compared, but they do not establish complete account or month cov
 Estimates, provider metering, and billed API costs retain their source labels. Each provider is
 shown separately in its original currency. Local records describe activity captured on this Mac;
 they do not establish a complete account bill. Source date keys keep their reporting calendar:
-UTC for OpenAI API, Anthropic API, Mistral, Codex cloud and billed cost reports;
-local calendar dates for transcript history.
+UTC for shared usage, Cursor, OpenAI API, Anthropic API, Mistral, Codex cloud, and billed cost reports;
+local calendar dates for this Mac's transcript history.
 
 History defaults to 30 days. **Load up to 12 months** sets the existing history window to 365
 days and requests a refresh. Local transcript providers require local cost history to be enabled;

@@ -6,14 +6,14 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.42.0**, build **117**. 0.37.0 (build 109) was the first build with
+The candidate selected in `version.env` is **0.43.0**, build **118**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The preceding **signed, notarized, Sparkle-published** binary is **0.41.2**, build **116**, tagged
-`v0.41.2-midas.1`. Check GitHub releases for the current published binary; source and installed local
+The current **signed, notarized, Sparkle-published** binary is **0.42.0**, build **117**, tagged
+`v0.42.0-midas.1`. Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
@@ -31,6 +31,12 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.43.0 candidate: usage sync
+
+Private shared-folder usage sync is under development. See [usage sync](MIDAS_USAGE_SYNC.md).
+Source changes and synthetic two-device tests do not establish MacBook installation or real
+iCloud delivery. A new release must pass the normal signed/notarized release gates.
 
 ## 0.42.0 changes
 

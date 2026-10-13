@@ -48,7 +48,8 @@ extension StatusItemController {
             dashboard = nil
             dashboardError = codexProjection.userFacingErrors.dashboard
             if surface == .liveCard {
-                tokenSnapshot = projectedTokenSnapshot ?? storedTokenSnapshot
+                tokenSnapshot = self.store.usesSyncedUsage(for: target)
+                    ? self.store.displayTokenSnapshot(for: target) : projectedTokenSnapshot ?? storedTokenSnapshot
                 tokenError = self.store.tokenError(for: target)
             } else {
                 tokenSnapshot = projectedTokenSnapshot
@@ -61,7 +62,8 @@ extension StatusItemController {
             creditsError = nil
             dashboard = nil
             dashboardError = nil
-            tokenSnapshot = projectedTokenSnapshot ?? storedTokenSnapshot
+            tokenSnapshot = self.store.usesSyncedUsage(for: target)
+                ? self.store.displayTokenSnapshot(for: target) : projectedTokenSnapshot ?? storedTokenSnapshot
             tokenError = self.store.tokenError(for: target)
         } else {
             credits = nil
@@ -110,7 +112,8 @@ extension StatusItemController {
             lastError: lastError,
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
-            tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),
+            tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target)
+                || (surface == .liveCard && self.store.usesSyncedUsage(for: target)),
             showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,
             sourceLabel: sourceLabel,
             kiloAutoMode: kiloAutoMode,

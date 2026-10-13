@@ -32,6 +32,17 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Upcoming: usage across Macs
+
+Connect the same private iCloud Drive folder in Settings → Sync on each Mac. Midas merges
+recorded Codex and Claude sessions and Muse Code token logs, and counts each Cursor account
+day once. Spend history, monthly comparisons, the menu bar, and widgets use the selected
+local or combined usage scope. Credentials and transcripts stay on their original Mac.
+
+Meta AI / the Muse consumer app currently has no verified numeric usage source in Midas.
+Its usage remains unavailable; Muse Code coverage is a separate integration.
+See [cross-device usage](docs/MIDAS_USAGE_SYNC.md) for setup, privacy, and verification limits.
+
 ## Midas 0.42.0
 
 Open **Spend history** to compare each provider's recorded cost or token totals month by month.

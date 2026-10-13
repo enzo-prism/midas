@@ -41,6 +41,7 @@ struct CostHistoryChartMenuView: View {
     private let currencyCode: String
     private let historyDays: Int
     private let windowLabel: String?
+    private let reportingCalendar: Calendar
     private let width: CGFloat
     @State private var selectedDateKey: String?
 
@@ -51,6 +52,7 @@ struct CostHistoryChartMenuView: View {
         currencyCode: String = "USD",
         historyDays: Int = 30,
         windowLabel: String? = nil,
+        reportingCalendar: Calendar = .current,
         width: CGFloat)
     {
         self.provider = provider
@@ -59,11 +61,12 @@ struct CostHistoryChartMenuView: View {
         self.currencyCode = currencyCode
         self.historyDays = max(1, min(365, historyDays))
         self.windowLabel = windowLabel
+        self.reportingCalendar = reportingCalendar
         self.width = width
     }
 
     var body: some View {
-        let model = Self.makeModel(provider: self.provider, daily: self.daily)
+        let model = Self.makeModel(provider: self.provider, daily: self.daily, calendar: self.reportingCalendar)
         VStack(alignment: .leading, spacing: 10) {
             if model.points.isEmpty {
                 Text(L("No cost history data."))
@@ -92,12 +95,14 @@ struct CostHistoryChartMenuView: View {
                     AxisMarks(values: model.axisDates) { _ in
                         AxisGridLine().foregroundStyle(Color.clear)
                         AxisTick().foregroundStyle(Color.clear)
-                        AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                        AxisValueLabel(format: self.dayFormat)
                             .font(.caption2)
                             .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
                     }
                 }
                 .chartLegend(.hidden)
+                .environment(\.calendar, self.reportingCalendar)
+                .environment(\.timeZone, self.reportingCalendar.timeZone)
                 .frame(height: 130)
                 .accessibilityLabel(L("Cost history chart"))
                 .accessibilityValue(
@@ -263,7 +268,7 @@ struct CostHistoryChartMenuView: View {
         maxValue * 0.05
     }
 
-    private static func makeModel(provider: UsageProvider, daily: [DailyEntry]) -> Model {
+    private static func makeModel(provider: UsageProvider, daily: [DailyEntry], calendar: Calendar) -> Model {
         let sorted = daily.sorted { lhs, rhs in lhs.date < rhs.date }
         var points: [Point] = []
         points.reserveCapacity(sorted.count)
@@ -283,7 +288,7 @@ struct CostHistoryChartMenuView: View {
         var detailRowMetrics: [(count: Int, height: CGFloat)] = []
         for entry in sorted {
             guard let costUSD = entry.costUSD, costUSD >= 0 else { continue }
-            guard let date = self.dateFromDayKey(entry.date) else { continue }
+            guard let date = self.dateFromDayKey(entry.date, calendar: calendar) else { continue }
             let point = Point(
                 date: date,
                 costUSD: costUSD,
@@ -306,7 +311,7 @@ struct CostHistoryChartMenuView: View {
 
         let axisDates: [Date] = {
             guard let first = dateKeys.first?.date, let last = dateKeys.last?.date else { return [] }
-            if Calendar.current.isDate(first, inSameDayAs: last) { return [first] }
+            if calendar.isDate(first, inSameDayAs: last) { return [first] }
             return [first, last]
         }()
 
@@ -334,7 +339,7 @@ struct CostHistoryChartMenuView: View {
         return Color(red: color.red, green: color.green, blue: color.blue)
     }
 
-    private static func dateFromDayKey(_ key: String) -> Date? {
+    static func dateFromDayKey(_ key: String, calendar: Calendar) -> Date? {
         let parts = key.split(separator: "-")
         guard parts.count == 3,
               let year = Int(parts[0]),
@@ -342,8 +347,8 @@ struct CostHistoryChartMenuView: View {
               let day = Int(parts[2]) else { return nil }
 
         var comps = DateComponents()
-        comps.calendar = Calendar.current
-        comps.timeZone = TimeZone.current
+        comps.calendar = calendar
+        comps.timeZone = calendar.timeZone
         comps.year = year
         comps.month = month
         comps.day = day
@@ -465,12 +470,12 @@ struct CostHistoryChartMenuView: View {
     private func detailContent(model: Model) -> DetailContent {
         guard let key = self.selectedDateKey,
               let point = model.pointsByDateKey[key],
-              let date = Self.dateFromDayKey(key)
+              let date = Self.dateFromDayKey(key, calendar: self.reportingCalendar)
         else {
             return DetailContent(primary: L("Hover a bar for details"), rows: [])
         }
 
-        let dayLabel = date.formatted(.dateTime.month(.abbreviated).day())
+        let dayLabel = date.formatted(self.dayFormat)
         let cost = self.costString(point.costUSD)
         var parts = [cost]
         if let tokens = point.totalTokens {
@@ -553,6 +558,13 @@ struct CostHistoryChartMenuView: View {
 
     private func costString(_ value: Double) -> String {
         UsageFormatter.currencyString(value, currencyCode: self.currencyCode)
+    }
+
+    private var dayFormat: Date.FormatStyle {
+        var format = Date.FormatStyle().month(.abbreviated).day()
+        format.calendar = self.reportingCalendar
+        format.timeZone = self.reportingCalendar.timeZone
+        return format
     }
 
     private static func breakdownAccentOpacity(for index: Int) -> Double {

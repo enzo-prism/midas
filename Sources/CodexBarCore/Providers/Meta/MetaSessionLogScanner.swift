@@ -69,27 +69,64 @@ public enum MuseSessionLogScanner: Sendable {
         self.summarize(responses: responses, since: since, until: until, now: now)
     }
 
+    struct ParsedResponses {
+        var responses: [MetaCompletedResponse] = []
+        var excludedRecords = 0
+    }
+
     static func parseResponses(fromLine line: String) -> [MetaCompletedResponse] {
-        guard !line.isEmpty, line.count <= self.maxLineBytes else { return [] }
+        self.parseResponsesForSync(fromLine: line).responses
+    }
+
+    static func parseResponsesForSync(fromLine line: String) -> ParsedResponses {
+        guard !line.isEmpty, line.count <= self.maxLineBytes else { return ParsedResponses() }
         guard let data = line.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return []
-        }
-        if json["retained_frame"] != nil,
-           let children = json["children"] as? [[String: Any]]
-        {
-            var out: [MetaCompletedResponse] = []
+        else { return ParsedResponses() }
+        if json["retained_frame"] != nil, let children = json["children"] as? [[String: Any]] {
+            var out = ParsedResponses()
             for child in children {
                 guard let recordJSON = child["record_json"] as? String else { continue }
-                out.append(contentsOf: self.parseResponses(fromLine: recordJSON))
+                let parsed = self.parseResponsesForSync(fromLine: recordJSON)
+                out.responses.append(contentsOf: parsed.responses)
+                out.excludedRecords = CostUsageScanner.boundedAdd(out.excludedRecords, parsed.excludedRecords)
             }
             return out
         }
-        if let response = self.parseRecord(json) {
-            return [response]
+        if (json["payload_type"] as? String) == "runtime.session",
+           let payload = json["payload"] as? [String: Any],
+           let event = payload["event"] as? [String: Any],
+           (event["kind"] as? String) == "model_completed",
+           let usage = event["usage"] as? [String: Any], self.parseUsage(usage) == nil
+        {
+            return ParsedResponses(excludedRecords: 1)
         }
-        return []
+        return ParsedResponses(responses: self.parseRecord(json).map { [$0] } ?? [])
+    }
+
+    private static func parseUsage(_ values: [String: Any]) -> MetaTokenUsage? {
+        let keys = [
+            "input_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+            "cached_tokens",
+            "cache_read_tokens",
+            "cacheReadTokens",
+        ]
+        var counts: [String: Int] = [:]
+        for key in keys {
+            guard let count = CostUsageScanner.sourceCount(values[key]) else { return nil }
+            counts[key] = count
+        }
+        return MetaTokenUsage(
+            inputTokens: counts["input_tokens"] ?? 0,
+            outputTokens: counts["output_tokens"] ?? 0,
+            reasoningTokens: counts["reasoning_tokens"] ?? 0,
+            cachedTokens: max(
+                counts["cached_tokens"] ?? 0,
+                counts["cache_read_tokens"] ?? 0,
+                counts["cacheReadTokens"] ?? 0),
+            requests: 1)
     }
 
     static func parseRecord(_ json: [String: Any]) -> MetaCompletedResponse? {
@@ -101,25 +138,28 @@ public enum MuseSessionLogScanner: Sendable {
         else {
             return nil
         }
-        // `muse` 1.0.x writes cache hits as `cache_read_tokens` (with
-        // `cached_tokens` often 0), so take the max of the known keys.
-        let cachedTokens = max(
-            self.intValue(usageDict["cached_tokens"]),
-            self.intValue(usageDict["cache_read_tokens"]),
-            self.intValue(usageDict["cacheReadTokens"]))
-        let usage = MetaTokenUsage(
-            inputTokens: self.intValue(usageDict["input_tokens"]),
-            outputTokens: self.intValue(usageDict["output_tokens"]),
-            reasoningTokens: self.intValue(usageDict["reasoning_tokens"]),
-            cachedTokens: cachedTokens,
-            requests: 1)
+        // Validate source integers before summing or converting floating-point JSON numbers.
+        guard let usage = self.parseUsage(usageDict) else { return nil }
         guard usage.totalTokens > 0 else { return nil }
         let model = (event["model"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let at = self.dateValue(json["recorded_at"]) ?? Date()
+        let recordedAt = self.dateValue(json["recorded_at"])
+        let at = recordedAt ?? Date()
+        let recordID = json["id"] as? String
+        let streamID = (json["stream"] as? [String: Any])?["id"] as? String
+        let sequence = json["sequence"] as? NSNumber
+        let identity: [String]? = if let recordID, !recordID.isEmpty, let streamID, !streamID.isEmpty,
+                                     let sequence, sequence.int64Value >= 0
+        {
+            [recordID, streamID, sequence.stringValue]
+        } else {
+            nil
+        }
         return MetaCompletedResponse(
             at: at,
             model: model?.isEmpty == true ? nil : model,
-            usage: usage)
+            usage: usage,
+            sourceIDComponents: identity,
+            hasRecordedTimestamp: recordedAt != nil)
     }
 
     // MARK: - Aggregation
@@ -233,14 +273,6 @@ public enum MuseSessionLogScanner: Sendable {
     }
 
     // MARK: - Helpers
-
-    static func intValue(_ raw: Any?) -> Int {
-        if let value = raw as? Int { return max(0, value) }
-        if let value = raw as? Int64 { return max(0, Int(value)) }
-        if let value = raw as? Double, value.isFinite { return max(0, Int(value)) }
-        if let value = raw as? NSNumber { return max(0, value.intValue) }
-        return 0
-    }
 
     /// `recorded_at` is microseconds since epoch in current `muse` logs.
     static func dateValue(_ raw: Any?) -> Date? {

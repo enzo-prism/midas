@@ -7,11 +7,13 @@ import Foundation
 /// Codex and Claude there is no local log to rescan. The cached value keeps its original
 /// `updatedAt`, so freshness indicators still report its real age.
 public enum CursorSpendSnapshotCache {
-    public static let fileName = "cursor-spend-v1.json"
-    private static let version = 1
+    // Local-day v1 aggregates cannot be converted to UTC after their event timestamps have been discarded.
+    public static let fileName = "cursor-spend-utc-v2.json"
+    private static let version = 2
 
     private struct Payload: Codable {
         let version: Int
+        let reportingTimeZone: String
         /// Normalized Cursor account email when known; a different account never reuses this value.
         let accountKey: String?
         let snapshot: StoredSnapshot
@@ -58,6 +60,7 @@ public enum CursorSpendSnapshotCache {
         guard let accountKey = self.normalizedAccountKey(accountEmail) else { return false }
         let payload = Payload(
             version: self.version,
+            reportingTimeZone: "UTC",
             accountKey: accountKey,
             snapshot: StoredSnapshot(
                 sessionTokens: snapshot.sessionTokens,
@@ -102,6 +105,7 @@ public enum CursorSpendSnapshotCache {
         decoder.dateDecodingStrategy = .secondsSince1970
         guard let payload = try? decoder.decode(Payload.self, from: data),
               payload.version == self.version,
+              payload.reportingTimeZone == "UTC",
               payload.snapshot.historyDays == historyDays
         else { return nil }
         let current = self.normalizedAccountKey(accountEmail)
@@ -131,7 +135,10 @@ public enum CursorSpendSnapshotCache {
         guard let data = try? Data(contentsOf: self.fileURL(cacheRoot: cacheRoot)) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
-        return (try? decoder.decode(Payload.self, from: data))?.accountKey
+        guard let payload = try? decoder.decode(Payload.self, from: data),
+              payload.version == self.version, payload.reportingTimeZone == "UTC"
+        else { return nil }
+        return payload.accountKey
     }
 
     public static func remove(cacheRoot: URL? = nil) {
