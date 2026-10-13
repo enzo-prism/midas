@@ -12,6 +12,7 @@ extension UsageStore {
     private static let priorSpendHistoryDays = 60
 
     func refreshPriorSpendSequence(providers: [UsageProvider], force: Bool = false) async {
+        guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
         for provider in providers {
             if Task.isCancelled { break }
             await self.refreshPriorSpend(provider, force: force)

@@ -6,14 +6,14 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.41.2**, build **116**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.42.0**, build **117**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The preceding **signed, notarized, Sparkle-published** binary is **0.41.1**, build **115**, tagged
-`v0.41.1-midas.1`. Check GitHub releases for the current published binary; source and installed local
+The preceding **signed, notarized, Sparkle-published** binary is **0.41.2**, build **116**, tagged
+`v0.41.2-midas.1`. Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
@@ -31,6 +31,25 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.42.0 changes
+
+Version 0.42.0, build 117, adds calendar-month comparisons to Spend history:
+
+- `MidasMonthlySpend` groups validated daily records into 6 or 12 contiguous calendar months.
+  It retains missing versus zero values, rejects conflicting daily duplicates, and compares only
+  compatible recorded days. Current-month comparisons stop both periods at the same ordinal day.
+- `MidasMonthlySpendView` uses native Swift Charts with hover selection, month navigation,
+  costs/tokens controls, and accessible monthly records. Both Overview and provider pages use the
+  full provider snapshot, independent of the daily-history filter.
+- A user-initiated longer-history action sets the existing 365-day setting and refreshes supported
+  sources. It does not enable logging, change accounts, or switch Codex sources.
+- API/cloud day keys use UTC; local transcript history uses the Mac's reporting calendar.
+  Codex cloud's 30-day and Mistral's current-month limits remain explicit.
+
+See [monthly spend](MIDAS_MONTHLY_SPEND.md) for data boundaries, comparison semantics, and
+synthetic native preview verification. Provider costs retain their source meaning; the chart does
+not turn a subscription usage estimate into a bill or persist a new historical ledger.
 
 ## 0.41.2 changes
 
@@ -191,6 +210,11 @@ pricing and optional iCloud calibration sharing, and resumable three-step onboar
 ## Release procedure
 
 1. Run `make check` and the relevant native/menu regression tests. Inspect light/dark native fixtures.
+   For Swift Testing, set `SWIFT_TESTING=1` (also accepted by usage-store startup detection);
+   `SWIFT_TESTING_ENABLED=1` can additionally be set for compatibility with older harnesses.
+   Test stores skip automatic provider detection, token-source scans, automatic background
+   refreshes, and implicit prior-spend scans. Manual fixture callbacks remain available.
+   Do not replace fixture checks with live provider probes.
 2. Set the next build number in `version.env` and commit the reviewed source. Build from that exact
    commit so `CodexGitCommit` identifies the release. Push `main` only after the source and release
    actions have been approved; do not force-push or replace published tags/assets.

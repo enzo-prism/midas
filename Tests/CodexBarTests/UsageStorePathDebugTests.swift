@@ -19,17 +19,42 @@ struct UsageStorePathDebugTests {
             fetcher: UsageFetcher(),
             browserDetection: BrowserDetection(cacheTTL: 0),
             settings: settings,
-            startupBehavior: .full)
+            startupBehavior: .testing,
+            environmentBase: [:])
+        let snapshot = PathDebugSnapshot(
+            codexBinary: "/fixture/bin/codex",
+            claudeBinary: nil,
+            effectivePATH: "/fixture/bin",
+            loginShellPATH: nil)
+        store._test_pathDebugSnapshotOverride = { snapshot }
 
-        // The startup placeholder can already differ from `.empty` (cached login-shell PATH) while its
-        // effective PATH is still blank, so wait for the background refresh itself.
-        let deadline = Date().addingTimeInterval(10)
-        while store.pathDebugInfo.effectivePATH.isEmpty, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 50_000_000)
-        }
+        await store.refreshPathDebugInfo()
 
-        #expect(store.pathDebugInfo != .empty)
-        #expect(store.pathDebugInfo.effectivePATH.isEmpty == false)
+        #expect(store.pathDebugInfo == snapshot)
+        #expect(store.timerTask == nil)
+        #expect(store.tokenTimerTask == nil)
+    }
+
+    @Test
+    func `automatic startup skips background work in tests`() throws {
+        let suite = "UsageStorePathDebugTests-automatic-startup"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: testConfigStore(suiteName: suite),
+            zaiTokenStore: NoopZaiTokenStore())
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            environmentBase: [:])
+
+        #expect(!store.startupBehavior.automaticallyStartsBackgroundWork)
+        #expect(store.timerTask == nil)
+        #expect(store.tokenTimerTask == nil)
+        #expect(!settings.providerDetectionCompleted)
+        #expect(!settings.costUsageEnabled)
     }
 
     @Test

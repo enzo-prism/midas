@@ -10,6 +10,9 @@ struct MidasUsageWindowView: View {
     let actions: MidasActions
     @State private var showsCosts = false
     @State private var period: MidasCostPresentation.Period = .month
+    @State private var monthlyShowsCosts = true
+    @State private var monthCount = 6
+    @State private var comparisonProvider: UsageProvider = .codex
 
     private var providers: [UsageProvider] {
         self.store.enabledProvidersForDisplay()
@@ -134,6 +137,24 @@ struct MidasUsageWindowView: View {
                     Button("Set up providers", action: self.actions.settings)
                 }
             } else {
+                if let provider = self.providers.first(where: { $0 == self.comparisonProvider })
+                    ?? self.providers.first
+                {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Picker("Compare provider", selection: Binding(
+                            get: { provider },
+                            set: { self.comparisonProvider = $0 }))
+                        {
+                            ForEach(self.providers, id: \.self) { provider in
+                                Text(self.presentation(provider).name).tag(provider)
+                            }
+                        }
+                        .fixedSize()
+                        self.monthlyComparison(provider)
+                    }
+                    .padding(24)
+                    .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 16))
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 245), spacing: 20)], alignment: .leading, spacing: 20) {
                     ForEach(self.providers, id: \.self) { provider in
                         self.overviewCard(self.presentation(provider))
@@ -199,9 +220,11 @@ struct MidasUsageWindowView: View {
                     presentation: self.presentation(provider), actions: self.actions, showsOpenUsage: false)
                 Divider()
             }
+            self.monthlyComparison(provider)
+            Divider()
             HStack {
                 Text(self.showsCosts
-                    ? MidasCostPresentation(snapshot: self.costSnapshot(provider), period: self.period).costLabel
+                    ? self.dailyHistory(provider).costLabel
                     : "Activity history")
                     .font(.system(size: 20, weight: .semibold))
                 Spacer()
@@ -213,7 +236,7 @@ struct MidasUsageWindowView: View {
                 .fixedSize()
             }
             MidasUsageHistoryView(
-                model: MidasCostPresentation(snapshot: self.costSnapshot(provider), period: self.period),
+                model: self.dailyHistory(provider),
                 showsCosts: self.showsCosts,
                 isRefreshing: self.store.isTokenRefreshInFlight(for: provider))
             if self.costSnapshot(provider) == nil {
@@ -233,5 +256,73 @@ struct MidasUsageWindowView: View {
             provider: provider)
         if UsageStore.tokenCostRequiresProviderSnapshot(provider) { return derived }
         return derived ?? self.store.tokenSnapshot(for: provider)
+    }
+
+    private func dailyHistory(_ provider: UsageProvider) -> MidasCostPresentation {
+        let snapshot = self.costSnapshot(provider)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = MidasMonthlySpend.reportingTimeZone(
+            provider: provider,
+            codexCloudEnabled: self.settings.midasCloudUsageEnabled,
+            provenance: snapshot?.costProvenance ?? .unknown)
+        return MidasCostPresentation(snapshot: snapshot, period: self.period, reportingCalendar: calendar)
+    }
+
+    private func monthlyComparison(_ provider: UsageProvider) -> some View {
+        let snapshot = self.costSnapshot(provider)
+        let timeZone = MidasMonthlySpend.reportingTimeZone(
+            provider: provider,
+            codexCloudEnabled: self.settings.midasCloudUsageEnabled,
+            provenance: snapshot?.costProvenance ?? .unknown)
+        let utcDays = timeZone == MidasSpendPeriod.utc
+        return VStack(alignment: .leading, spacing: 16) {
+            MidasMonthlySpendView(
+                model: MidasMonthlySpend(
+                    snapshot: snapshot,
+                    monthCount: self.monthCount,
+                    reportingTimeZone: timeZone),
+                showsCosts: self.$monthlyShowsCosts,
+                monthCount: self.$monthCount)
+                .id(provider)
+            if provider == .codex, self.settings.midasCloudUsageEnabled {
+                Text("Codex cloud currently supplies 30 days. Older months remain unavailable.")
+                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            } else if provider == .mistral {
+                Text("Mistral currently supplies the current UTC month. Older months remain unavailable.")
+                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            } else if self.settings.costUsageHistoryDays < 365,
+                      self.settings.costUsageEnabled || UsageStore.tokenCostRequiresProviderSnapshot(provider)
+            {
+                HStack {
+                    Text("History is set to \(self.settings.costUsageHistoryDays) days. "
+                        + "Load a longer window to compare more months where the source supports it.")
+                        .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                    Spacer(minLength: 8)
+                    Button("Load up to 12 months") {
+                        self.settings.costUsageHistoryDays = 365
+                        self.actions.refresh()
+                    }
+                    .disabled(self.store.isRefreshing)
+                }
+            }
+            if !self.settings.costUsageEnabled, !UsageStore.tokenCostRequiresProviderSnapshot(provider) {
+                HStack {
+                    Text("Local cost history is off. Enable it in Settings to load available local records.")
+                        .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                    Spacer(minLength: 8)
+                    Button("Open Settings", action: self.actions.settings)
+                }
+            }
+            Text(utcDays ? "Source dates use UTC." : "Source dates use this Mac’s time zone.")
+                .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            if let updated = snapshot?.updatedAt {
+                Text("Source updated \(updated.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            }
+            if self.store.isTokenRefreshInFlight(for: provider) {
+                Label("Refreshing · showing saved records", systemImage: "arrow.clockwise")
+                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            }
+        }
     }
 }

@@ -123,3 +123,32 @@ first-responder focus — that combination aborts on macOS 27 (`swift_abortRetai
 Recorded months come from valid daily history for displayed providers. A selected historical
 month remains selectable if its cached history disappears. Recorded history can be incomplete,
 and changing the spend period does not change provider quota reset schedules.
+
+## Comparing months
+
+Open **Spend history** from the Midas panel. **Month by month** appears in Overview with a
+provider selector, and on each provider page. Choose **Costs** or **Tokens**, then **6 months**
+or **12 months**. Hover over a bar, use the previous/next month buttons, or select an entry in
+**Monthly records** to inspect that month. The daily-history period filter does not limit this chart.
+
+Bars show recorded calendar-month subtotals. The current month is marked **month to date** and
+uses a lighter bar. Gaps mean unavailable data; a recorded zero remains zero. A comparison uses
+the immediately preceding month only. For the current month, both periods stop at the same day
+number, capped at the previous month's length. Percentage change is omitted when the previous
+value is zero. Comparisons are withheld when record coverage differs, values are missing or
+invalid, costs include unpriced activity, or duplicate daily records conflict. Sparse matching
+records can be compared, but they do not establish complete account or month coverage.
+
+Estimates, provider metering, and billed API costs retain their source labels. Each provider is
+shown separately in its original currency. Local records describe activity captured on this Mac;
+they do not establish a complete account bill. Source date keys keep their reporting calendar:
+UTC for OpenAI API, Anthropic API, Mistral, Codex cloud and billed cost reports;
+local calendar dates for transcript history.
+
+History defaults to 30 days. **Load up to 12 months** sets the existing history window to 365
+days and requests a refresh. Local transcript providers require local cost history to be enabled;
+connected OpenAI and Anthropic API reports can load longer history independently. Provider retention and source
+availability still apply, and the first month may be partial. Codex cloud currently supplies only
+30 days, and Mistral currently supplies only its current UTC month, so the chart leaves older
+months unavailable for these sources. This control does not enable local cost
+history when it is off or switch Codex between cloud and local sources.

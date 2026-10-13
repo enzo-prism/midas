@@ -39,7 +39,8 @@ The implementation notes below also preserve older Midas presentation decisions.
   When Cursor does not return Grok Bot usage, the row keeps the last known value until its weekly reset,
   or shows **Unavailable** with no bar; it never becomes the headline or a low-quota warning. Other providers show one headline limit plus any tighter window.
 - **Usage window:** resizable provider navigation, Usage and Costs views, period controls,
-  history, model breakdowns where available, and source-aware cost labels. Metered consumption,
+  daily history, provider-specific **Month by month** cost/token charts with 6/12-month controls,
+  accessible monthly records, model breakdowns where available, and source-aware cost labels. Metered consumption,
   provider-reported costs, and API-equivalent estimates are distinct meanings.
 - **Settings:** a stable sidebar preserving General, Providers, Display, Advanced, About,
   and the optional Debug pane. Its height is constrained for smaller screens. The window is owned
@@ -188,6 +189,9 @@ in this inherited README are not Midas releases.
 - `CodexAccountUsageSnapshotStore.swift`: last-known Codex quota hydration; match on non-conflicting identity, and treat managed `providerAccountID` as the visible workspace when `workspaceAccountID` is absent.
 - `MidasAppcast.swift`, `MidasSignedReleaseUpdater.swift`: public-feed ZIP download when Sparkle cannot run.
 - `MidasUsageWindowView.swift`, `MidasUsageHistoryView.swift`, `MidasCostPresentation.swift`: history and costs.
+- `MidasMonthlySpend.swift`, `MidasMonthlySpendView.swift`: validated calendar-month subtotals,
+  compatible month-to-date comparisons, native chart selection, and monthly records. See
+  [monthly spend](MIDAS_MONTHLY_SPEND.md).
 - `MidasDesignSystem.swift`, `MidasProviderLogo.swift`: adaptive visual tokens and provider identity.
 - `PreferencesView.swift`, `PreferencesAboutPane.swift`: sidebar settings and product identity.
 
@@ -199,8 +203,9 @@ explicitly authorized; follow the repository's AGENTS.md testing guidance.
 ## Updates
 
 **Developer ID Applications installs** use Sparkle: Check for Updates → Download → Install & Restart
-against `Midas-appcast-arm64.xml`. Settings → About can enable automatic checks. Older releases
-need a one-time manual upgrade to 0.33.3 or later.
+against `Midas-appcast-arm64-v2.xml` for the Midas identity (0.37.0+). Settings → About can enable
+automatic checks. Releases from 0.33.3 through 0.36.0 read the informational legacy feed and need
+one manual download of 0.37.0 or later because the bundle identifier changed.
 
 **Development, Apple Development, ad-hoc, and Intel packages** cannot run Sparkle (the updater
 requires a Developer ID signature and the exact Midas feed/public key). Check for Updates still

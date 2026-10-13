@@ -130,7 +130,10 @@ struct SettingsStoreAdditionalTests {
         try Data("{}".utf8).write(to: jsonl)
         defer { try? fm.removeItem(at: root) }
 
-        let env = ["CODEX_HOME": root.path]
+        let env = [
+            "CODEX_HOME": root.path,
+            "CLAUDE_CONFIG_DIR": root.appendingPathComponent("claude", isDirectory: true).path,
+        ]
 
         #expect(SettingsStore.hasAnyTokenCostUsageSources(env: env, fileManager: fm))
     }

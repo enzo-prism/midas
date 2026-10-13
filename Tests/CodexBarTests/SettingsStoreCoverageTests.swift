@@ -318,7 +318,10 @@ struct SettingsStoreCoverageTests {
         fileManager.createFile(atPath: codexFile.path, contents: Data("{}".utf8))
 
         #expect(SettingsStore.hasAnyTokenCostUsageSources(
-            env: ["CODEX_HOME": root.path],
+            env: [
+                "CODEX_HOME": root.path,
+                "CLAUDE_CONFIG_DIR": root.appendingPathComponent("claude", isDirectory: true).path,
+            ],
             fileManager: fileManager))
 
         let claudeRoot = fileManager.temporaryDirectory.appendingPathComponent(
@@ -330,7 +333,10 @@ struct SettingsStoreCoverageTests {
         fileManager.createFile(atPath: claudeFile.path, contents: Data("{}".utf8))
 
         #expect(SettingsStore.hasAnyTokenCostUsageSources(
-            env: ["CLAUDE_CONFIG_DIR": claudeRoot.path],
+            env: [
+                "CLAUDE_CONFIG_DIR": claudeRoot.path,
+                "CODEX_HOME": claudeRoot.appendingPathComponent("codex", isDirectory: true).path,
+            ],
             fileManager: fileManager))
     }
 

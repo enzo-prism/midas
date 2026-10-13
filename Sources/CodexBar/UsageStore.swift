@@ -185,6 +185,9 @@ final class UsageStore {
     @ObservationIgnored var _test_startupConnectivityRetryScheduled: (@MainActor (Int, TimeInterval) -> Void)?
     @ObservationIgnored var _test_startupConnectivityRetrySleepOverride: (@MainActor (
         TimeInterval) async throws -> Void)?
+    #if DEBUG
+    @ObservationIgnored var _test_pathDebugSnapshotOverride: (@Sendable () async -> PathDebugSnapshot)?
+    #endif
     @ObservationIgnored var widgetSnapshotPersistTask: Task<Void, Never>?
     @ObservationIgnored var lastScheduledWidgetSnapshot: WidgetSnapshot?
     @ObservationIgnored var pendingForcedRefreshAfterCurrentRefresh = false
@@ -373,7 +376,7 @@ final class UsageStore {
         let environment = ProcessInfo.processInfo.environment
         if environment["XCTestConfigurationFilePath"] != nil { return true }
         if environment["XCTestSessionIdentifier"] != nil { return true }
-        if environment["SWIFT_TESTING_ENABLED"] != nil { return true }
+        if environment["SWIFT_TESTING_ENABLED"] != nil || environment["SWIFT_TESTING"] != nil { return true }
         return CommandLine.arguments.contains { argument in
             argument.contains("xctest") || argument.contains("swift-testing")
         }
@@ -1484,7 +1487,13 @@ extension UsageStore {
         }
     }
 
-    private func refreshPathDebugInfo() async {
+    func refreshPathDebugInfo() async {
+        #if DEBUG
+        if let override = self._test_pathDebugSnapshotOverride {
+            await self.runBackgroundSnapshot(override)
+            return
+        }
+        #endif
         await self.runBackgroundSnapshot {
             await PathBuilder.debugSnapshotAsync(purposes: [.rpc, .tty, .nodeTooling])
         }

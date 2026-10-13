@@ -268,9 +268,13 @@ final class SettingsStore {
         userDefaults.removeObject(forKey: "showCodexUsage")
         userDefaults.removeObject(forKey: "showClaudeUsage")
         LaunchAtLoginManager.setEnabled(self.launchAtLogin)
-        self.runInitialProviderDetectionIfNeeded()
+        if !Self.isRunningTests {
+            self.runInitialProviderDetectionIfNeeded()
+        }
         self.ensureAlibabaProviderAutoEnabledIfNeeded()
-        self.applyTokenCostDefaultIfNeeded()
+        if !Self.isRunningTests {
+            self.applyTokenCostDefaultIfNeeded()
+        }
         if self.claudeUsageDataSource != .cli {
             if Self.isRunningTests {
                 self.claudeWebExtrasEnabled = false

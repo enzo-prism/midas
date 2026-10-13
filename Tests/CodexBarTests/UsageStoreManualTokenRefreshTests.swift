@@ -148,6 +148,7 @@ struct UsageStoreManualTokenRefreshTests {
         #expect(await gate.hasFinished())
         #expect(await gate.calls.map(\.provider) == [.codex])
         #expect(await gate.calls.map(\.force) == [true])
+        #expect(store.lastPriorSpendFetchAt.isEmpty)
     }
 
     @Test
@@ -266,6 +267,7 @@ struct UsageStoreManualTokenRefreshTests {
             configStore: testConfigStore(suiteName: suite),
             zaiTokenStore: NoopZaiTokenStore(),
             syntheticTokenStore: NoopSyntheticTokenStore())
+        settings._test_codexReconciliationEnvironment = [:]
         settings.refreshFrequency = .manual
         settings.statusChecksEnabled = false
         settings.costUsageEnabled = true

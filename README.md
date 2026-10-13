@@ -32,6 +32,16 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.42.0
+
+Open **Spend history** to compare each provider's recorded cost or token totals month by month.
+Choose 6 or 12 months, inspect a bar or the monthly records, and compare month-to-date activity
+with the same days of the previous month. Missing history stays unavailable. Supported sources
+can load a longer history window; Codex cloud currently supplies 30 days and Mistral its current month.
+
+See [comparing months](docs/MIDAS_SETUP.md#comparing-months) for controls and coverage,
+and [monthly spend architecture](docs/MIDAS_MONTHLY_SPEND.md) for calculation rules.
+
 ## Midas 0.41.2
 
 Connect separate Claude accounts under **Settings → Providers → Claude → Add Claude account**.
@@ -99,7 +109,12 @@ dollar estimates, optional iCloud pricing-sample sharing, and a three-step onboa
 Midas uses native SwiftUI surfaces with prominent estimated dollars, remaining usage, and reset
 times. Details and advanced settings stay out of the main overview. Orbit pairs the total with a
 favorite provider's capacity ring. The period selector supports calendar periods and the last
-30 days. **Spend history** opens the resizable usage window.
+30 days. **Spend history** opens the resizable usage window. Its **Month by month** chart compares
+calendar months for each provider, with costs or tokens, 6- and 12-month views, hover details,
+and accessible monthly records. Current-month comparisons use the same elapsed days in the
+previous month; incomplete or conflicting records suppress comparisons. Missing months stay
+unavailable. **Load up to 12 months** expands the supported history window without changing
+the default automatically; Codex cloud currently supplies only 30 days.
 
 Open Settings to run **Set up Midas**, or **Continue setup** if you paused. Signed Apple Silicon
 builds use Midas's own Sparkle update feed; **Check for Updates** is available from the panel's

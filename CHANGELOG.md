@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.42.0 — October 12, 2026
+
+- Compare recorded calendar-month cost and token subtotals in **Spend history**, by provider, with 6- and 12-month charts.
+- Inspect months by hovering, using the previous/next buttons, or selecting accessible monthly records.
+- Compare the current month with the same elapsed days of the previous month. Missing or conflicting records remain unavailable; incomplete price coverage suppresses cost comparisons.
+- Load up to 365 days where the existing source supports it, without enabling local history or changing the Codex source automatically. Codex cloud remains limited to 30 days; Mistral to the current UTC month.
+- Keep local calendar dates and UTC API dates consistent between daily and monthly charts, and preserve each provider's estimate or billed-spend meaning.
+
+Build 117. See GitHub Releases for signed binary availability.
+
 ## Midas 0.41.2 — October 4, 2026
 
 - Add separate Claude account sign-in with verified email and Personal/Business nicknames.
