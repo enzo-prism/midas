@@ -12,8 +12,9 @@ Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` w
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.44.0**, build **119**, tagged
-`v0.44.0-midas.1`. Check GitHub releases for the current published binary; source and installed local
+The current **signed, notarized, Sparkle-published** binary is **0.45.0**, build **120**, tagged
+`v0.45.0-midas.1` (superseding 0.44.0, build **119**, tagged
+`v0.44.0-midas.1`). Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
@@ -50,8 +51,14 @@ Version 0.45.0, build 120, makes Meta bars show how much usage is left:
   both show-left and show-used modes. The anti-fabrication contracts in
   `MidasMetaPresentationTests` (no quota hero/metrics, no % in the summary) still pass.
 
-Publication status for 120 is recorded below once signing, notarization, and public
-download verification finish; until then the published binary remains 0.44.0.
+Build 120 passed the focused Meta suites, `make check`, Developer ID signing,
+notarization (submission `091654fe-ebf5-443a-aa94-bd0078c0b4f1`, Accepted), stapling,
+Sparkle archive/feed signature checks, and downloaded draft and public asset
+verification (SHA-256 `80eb1b80b4ae62f1517e1cc2001708d27f008ac9cb26154fb75473602bb8d3ba`).
+The binary identifies source commit `7d635d55b`. Full-suite runs showed only timing
+flakes (login-runner, Antigravity HTTPS, PathBuilder) that pass in isolation, the same
+pattern recorded for 0.44.0. The marketing site was updated to 0.45.0 and its production
+download was verified against the same checksum.
 
 ## 0.44.0 changes: Meta activity bars
 
