@@ -32,7 +32,7 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
-## Upcoming: usage across Macs
+## Midas 0.43.0: usage across Macs
 
 Connect the same private iCloud Drive folder in Settings → Sync on each Mac. Midas merges
 recorded Codex and Claude sessions and Muse Code token logs, and counts each Cursor account

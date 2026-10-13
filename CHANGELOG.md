@@ -1,6 +1,6 @@
 # Changelog
 
-## Midas 0.43.0 — release candidate
+## Midas 0.43.0 — October 12, 2026
 
 - Combine recorded usage across Macs using an opt-in private folder, including iCloud Drive.
 - Merge Codex and Claude local events, Muse Code response logs, and verified Cursor account history without counting copies twice.
@@ -9,7 +9,7 @@
 - Preserve offline history and pending publications; pause on account or workspace changes and validate imported files.
 - Clearly disclose that Meta AI / the Muse consumer app has no verified numeric usage source.
 
-Build 118. Synthetic verification and source changes do not establish public release or real MacBook delivery.
+Build 118. The signed, notarized archive is published as `v0.43.0-midas.1`. Real iCloud delivery must be verified after connecting both Macs.
 
 ## Midas 0.42.0 — October 12, 2026
 
