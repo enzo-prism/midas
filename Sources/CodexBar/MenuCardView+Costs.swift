@@ -270,8 +270,10 @@ extension UsageMenuCardView.Model {
         min(100, max(0, value))
     }
 
-    /// Claude-style recorded-activity rows for Meta. Percent is share of the busiest
-    /// comparable recorded window, labeled as activity — never as usage remaining.
+    /// Claude-style usage rows for Meta. Meta reports no plan limit, so percent
+    /// left is measured against the busiest comparable recorded window and the
+    /// copy names that baseline. Follows the global show-used preference like
+    /// every other provider's bars.
     static func metaActivityMetrics(input: Input) -> [Metric] {
         let activity: MetaActivitySnapshot? = if let tokenSnapshot = input.tokenSnapshot,
                                                  !tokenSnapshot.daily.isEmpty
@@ -285,17 +287,17 @@ extension UsageMenuCardView.Model {
             nil
         }
         guard let activity else { return [] }
+        let showUsed = input.usageBarsShowUsed
         return activity.windows.enumerated().map { index, window in
             Metric(
                 id: window.id,
                 title: L(window.title),
-                percent: Self.clamped(window.sharePercent),
-                percentStyle: .left,
+                percent: Self.clamped(showUsed ? window.sharePercent : window.remainingPercent),
+                percentStyle: showUsed ? .used : .left,
                 valueText: "\(UsageFormatter.tokenCountString(window.tokens)) \(L("tokens"))",
-                resetText: String(
-                    format: L("%.0f%% of %@"), window.sharePercent, L(window.comparisonLabel)),
+                resetText: Self.metaRemainingText(window: window, showUsed: showUsed),
                 detailText: index == activity.windows.count - 1
-                    ? L("No provider limit reported by Meta") : nil,
+                    ? L("Left estimated vs busiest recorded day/week · Meta reports no plan limit") : nil,
                 detailLeftText: window.requests > 0
                     ? "\(UsageFormatter.tokenCountString(window.requests)) \(L("requests"))" : nil,
                 detailRightText: nil,
@@ -303,5 +305,20 @@ extension UsageMenuCardView.Model {
                 paceOnTop: true,
                 warningMarkerPercents: [])
         }
+    }
+
+    private static func metaRemainingText(window: MetaActivityWindow, showUsed: Bool) -> String {
+        guard window.hasBaseline else { return L("No recorded baseline yet") }
+        if showUsed {
+            return String(
+                format: L("%.0f%% used · %@ left"),
+                window.sharePercent,
+                "\(UsageFormatter.tokenCountString(window.remainingTokens)) \(L("tokens"))")
+        }
+        return String(
+            format: L("%.0f%% left · %@ left of %@"),
+            window.remainingPercent,
+            "\(UsageFormatter.tokenCountString(window.remainingTokens)) \(L("tokens"))",
+            L(window.comparisonLabel))
     }
 }

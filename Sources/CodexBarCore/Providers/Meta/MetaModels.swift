@@ -108,10 +108,11 @@ public struct MetaDailyUsage: Sendable, Equatable {
     }
 }
 
-/// One Claude-style activity bar for Meta: recorded Muse tokens in a window,
+/// One Claude-style usage bar for Meta: recorded Muse tokens in a window,
 /// scaled against the busiest comparable recorded window. Meta reports no quota,
-/// limit, or reset, so `sharePercent` is a share of recorded activity — never a
-/// remaining-quota reading — and no window carries a reset date.
+/// limit, or reset, so that busiest window is the only honest baseline: bars show
+/// how much of it is left (`remainingPercent`), never a provider quota reading,
+/// and no window carries a reset date.
 public struct MetaActivityWindow: Sendable, Equatable {
     public let id: String
     public let title: String
@@ -138,10 +139,29 @@ public struct MetaActivityWindow: Sendable, Equatable {
         self.comparisonLabel = comparisonLabel
     }
 
-    /// Bar fill, 0...100. Zero activity and missing history both stay at zero.
+    /// Share of the baseline already used, 0...100. Zero activity and missing
+    /// history both stay at zero.
     public var sharePercent: Double {
         guard self.comparisonTokens > 0, self.tokens > 0 else { return 0 }
         return min(100, max(0, Double(self.tokens) / Double(self.comparisonTokens) * 100))
+    }
+
+    /// True when a recorded baseline exists to measure remaining headroom against.
+    public var hasBaseline: Bool {
+        self.comparisonTokens > 0
+    }
+
+    /// Bar fill for remaining-style display, 0...100: how much of the busiest
+    /// comparable recorded window is still left. Without a baseline there is no
+    /// headroom to claim, so it stays at zero instead of reading as full.
+    public var remainingPercent: Double {
+        guard self.hasBaseline else { return 0 }
+        return min(100, max(0, 100 - self.sharePercent))
+    }
+
+    /// Tokens left before this window reaches its busiest comparable window.
+    public var remainingTokens: Int {
+        max(0, self.comparisonTokens - self.tokens)
     }
 }
 

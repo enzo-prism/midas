@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.44.0**, build **119**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.45.0**, build **120**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -31,6 +31,27 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.45.0 changes: Meta usage left
+
+Version 0.45.0, build 120, makes Meta bars show how much usage is left:
+
+- `MetaActivityWindow` gains `remainingPercent` (100 minus the used share),
+  `remainingTokens`, and `hasBaseline`. Air (`MidasActivityBar`, detail hero) renders
+  remaining with the shared `MidasRemainingBar` warning when headroom is low; the
+  legacy menu card shows percent left (or used, following `usageBarsShowUsed`) with
+  tokens left in the trailing label.
+- Copy always names the baseline ("vs busiest day/week", "Left estimated vs busiest
+  recorded day/week · Meta reports no plan limit") because Meta publishes no quota,
+  limit, or reset. No baseline keeps the bar empty instead of reading as full.
+  Menu-bar rings and Orbit are unchanged: Meta keeps its neutral ring.
+- Focused coverage in `MetaActivityBarsTests` covers draining (idle 100% left,
+  busiest 0% left, no-baseline), Air "% left" presentation, and the legacy card in
+  both show-left and show-used modes. The anti-fabrication contracts in
+  `MidasMetaPresentationTests` (no quota hero/metrics, no % in the summary) still pass.
+
+Publication status for 120 is recorded below once signing, notarization, and public
+download verification finish; until then the published binary remains 0.44.0.
 
 ## 0.44.0 changes: Meta activity bars
 

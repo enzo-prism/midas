@@ -69,7 +69,7 @@ struct UsageMenuCardView: View {
             let title: String
             let percent: Double
             let percentStyle: PercentStyle
-            /// Replaces the percent label for non-quota bars (Meta recorded activity).
+            /// Replaces the percent label for token-valued bars (Meta usage left).
             let valueText: String?
             let statusText: String?
             let resetText: String?
@@ -1262,8 +1262,8 @@ extension UsageMenuCardView.Model {
                 metrics.append(resetsMetric)
             }
         } else if input.provider == .meta {
-            // Meta has no quota to show as % left. Its bars mirror Claude's rows
-            // with recorded Muse activity scaled to the busiest comparable window.
+            // Meta reports no plan limit. Its bars mirror Claude's rows, showing
+            // percent left against the busiest comparable recorded window.
             metrics.append(contentsOf: Self.metaActivityMetrics(input: input))
         } else if let primary = snapshot.primary {
             metrics.append(Self.primaryMetric(

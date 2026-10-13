@@ -87,11 +87,12 @@ Codex keeps weekly remaining separate from session constraints, and its single m
 never substitutes session data when weekly data is missing. Cursor model spend shares are not
 quota; actual request counts and independent usage pools remain separate. Meta can show local
 history when cost collection is disabled, without fabricating remaining capacity. Meta's
-overview and detail show Claude-style activity bars instead: Today and Last 7 days of
-recorded Muse tokens, scaled to the busiest recorded day and busiest rolling week and
-labeled as a share of those windows, with a "No provider limit reported by Meta" caption
-and no reset line. The legacy menu card shows the same rows. Activity bars never become
-percent left and never drive Orbit or other quota rings.
+overview and detail show Claude-style usage bars instead: Today and Last 7 days of
+recorded Muse tokens, shown as percent left against the busiest recorded day and
+busiest rolling week, with tokens used/left, the baseline named in every caption, and
+no reset line. The legacy menu card shows the same rows and follows the show-used
+preference. These estimated-left bars never drive Orbit or other quota rings, which
+still require a provider-reported limit.
 
 The menu bar defaults to **Orbit**: total token spend (API rates), followed by a ring around one
 favorite provider’s logo. Use the provider dropdown in the panel footer, or **Settings → Display → Orbit provider**. The total includes all

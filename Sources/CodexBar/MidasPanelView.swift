@@ -157,7 +157,7 @@ struct MidasOverviewMetrics: View {
                 ForEach(self.item.activityMetrics) { metric in
                     MidasActivityBar(metric: metric)
                 }
-                Text("No provider limit reported by Meta")
+                Text("Left estimated vs busiest recorded day/week · Meta reports no plan limit")
                     .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 if self.item.isStale || self.item.error != nil {
                     Text("Stale").font(.caption).foregroundStyle(MidasTheme.warning)

@@ -187,10 +187,12 @@ struct MidasProviderDetailView: View {
                             .foregroundStyle(MidasTheme.text)
                             .minimumScaleFactor(0.65).lineLimit(1)
                     }
-                    MidasRemainingBar(percent: metric.sharePercent, warningWhenLow: false)
+                    MidasRemainingBar(percent: metric.remainingPercent)
                     Text(metric.detailText)
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
-                    Text("Recorded Muse activity. Meta reports no usage limit or reset.")
+                    Text(
+                        "Left is estimated against your busiest recorded day/week. "
+                            + "Meta reports no plan limit or reset.")
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                 }
                 .accessibilityElement(children: .combine)

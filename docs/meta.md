@@ -34,23 +34,28 @@ usage comes from the local session logs `muse` already writes on-device.
      the local log remains the usage source of truth until a quota endpoint is
      available.
 
-## Activity bars
+## Usage bars
 
-Meta publishes no quota, limit, budget, or reset for Muse Code, so Midas cannot
-show Meta as percent remaining. Instead, the Air panel (overview and provider detail)
-and the legacy menu card show Claude-style bars for recorded activity:
+Meta publishes no quota, limit, budget, or reset for Muse Code, so there is no
+provider-reported percent remaining to show. Instead, the Air panel (overview and
+provider detail) and the legacy menu card show Claude-style bars that read as usage
+left against the only honest baseline — your own recorded history:
 
-- **Today** — today's recorded Muse tokens and requests, bar scaled to the busiest
+- **Today** — today's recorded Muse tokens and requests, measured against the busiest
   recorded day.
-- **Last 7 days** — the last 7 local-calendar days, bar scaled to the busiest rolling
+- **Last 7 days** — the last 7 local-calendar days, measured against the busiest rolling
   7-day window. This window is the detail-view hero.
 
-Bar fill is `window tokens / busiest comparable window tokens`, labeled
-"N% of busiest day/week". Zero or missing history keeps the bar at zero. No reset line
-is shown, and activity bars never feed menu-bar quota rings, Orbit, or percent-left
-text. `MetaActivitySnapshot` (on `UsageSnapshot.metaActivity`) carries the windows and
-busiest-day/week totals; when only token history is available it is derived from that
-history, which follows the selected local/combined usage scope.
+Bar fill is `100 - (window tokens / busiest comparable window tokens * 100)`, labeled
+"N% left" with tokens used, tokens left, and the baseline named ("vs busiest day/week"),
+so it drains as usage grows and warns when headroom runs low, like every other
+provider's bar. The legacy menu card follows the global show-used preference
+(percent used, with tokens left still shown). With no recorded baseline the bar stays
+empty and says so instead of reading as full. No reset line is shown, and these bars
+never feed menu-bar quota rings or Orbit, which still mean provider-reported remaining
+capacity only. `MetaActivitySnapshot` (on `UsageSnapshot.metaActivity`) carries the
+windows and busiest-day/week totals; when only token history is available it is derived
+from that history, which follows the selected local/combined usage scope.
 
 ## Cost estimates
 

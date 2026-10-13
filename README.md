@@ -32,6 +32,16 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.45.0: Meta usage left
+
+Meta bars now read like every other provider's: **% left**, draining as you use Muse.
+Meta publishes no plan limit, so "left" is measured against your busiest comparable
+recorded window (busiest day for **Today**, busiest rolling week for **Last 7 days**) and
+every bar names that baseline, with tokens used, tokens left, and request counts. Bars warn
+when headroom runs low, the legacy menu card follows the show-used preference, and menu-bar
+rings still mean remaining capacity only for providers that report one (Meta keeps its
+neutral ring). See [Meta usage bars](docs/meta.md#usage-bars).
+
 ## Midas 0.44.0: Meta activity bars
 
 Meta now shows Claude-style bars in Midas Air and the legacy menu card: **Today** and
@@ -39,7 +49,7 @@ Meta now shows Claude-style bars in Midas Air and the legacy menu card: **Today*
 busiest comparable recorded window (busiest day / busiest rolling week) and labeled as a
 share of that window. Meta reports no quota, limit, or reset, so Meta never appears as
 percent left, and menu-bar rings still mean remaining capacity only for providers that
-report one. See [Meta activity bars](docs/meta.md#activity-bars).
+report one. See [Meta usage bars](docs/meta.md#usage-bars).
 
 ## Midas 0.43.0: usage across Macs
 

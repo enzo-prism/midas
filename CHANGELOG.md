@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.45.0 — October 12, 2026
+
+- Show Meta bars as usage left: Today and Last 7 days now read "% left" with tokens used, tokens left, and request counts, draining as Muse usage grows and warning when headroom runs low.
+- Measure "left" against the busiest comparable recorded window (busiest day / busiest rolling week) because Meta reports no plan limit or reset; every bar names that baseline, and with no recorded baseline the bar stays empty instead of reading as full.
+- Follow the global show-used preference in the legacy menu card, and keep Meta out of menu-bar quota rings and Orbit, which still mean provider-reported remaining capacity only.
+
+Build 120. See GitHub Releases for signed binary availability.
+
 ## Midas 0.44.0 — October 12, 2026
 
 - Show Meta with Claude-style bars in Midas Air and the legacy menu card: **Today** and **Last 7 days** recorded Muse tokens, each with a bar and request count.

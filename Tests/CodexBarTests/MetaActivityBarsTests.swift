@@ -15,8 +15,49 @@ struct MetaActivityBarsTests {
         #expect(windows.map(\.id) == ["meta-activity-today", "meta-activity-week"])
         #expect(windows[0].tokens == 1000)
         #expect(windows[0].sharePercent == 25)
+        #expect(windows[0].remainingPercent == 75)
+        #expect(windows[0].remainingTokens == 3000)
         #expect(windows[1].tokens == 10000)
         #expect(windows[1].sharePercent == 100)
+        #expect(windows[1].remainingPercent == 0)
+        #expect(windows[1].remainingTokens == 0)
+    }
+
+    @Test
+    func `bars show usage left and drain as usage grows`() {
+        let idle = MetaActivityWindow(
+            id: "t",
+            title: "Today",
+            tokens: 0,
+            requests: 0,
+            comparisonTokens: 4000,
+            comparisonLabel: "busiest day")
+        #expect(idle.hasBaseline)
+        #expect(idle.remainingPercent == 100)
+        #expect(idle.remainingTokens == 4000)
+        let busiest = MetaActivityWindow(
+            id: "t",
+            title: "Today",
+            tokens: 4000,
+            requests: 9,
+            comparisonTokens: 4000,
+            comparisonLabel: "busiest day")
+        #expect(busiest.remainingPercent == 0)
+        #expect(busiest.remainingTokens == 0)
+    }
+
+    @Test
+    func `no baseline never reads as full capacity left`() {
+        let window = MetaActivityWindow(
+            id: "t",
+            title: "Today",
+            tokens: 0,
+            requests: 0,
+            comparisonTokens: 0,
+            comparisonLabel: "busiest day")
+        #expect(!window.hasBaseline)
+        #expect(window.remainingPercent == 0)
+        #expect(window.remainingTokens == 0)
     }
 
     @Test
@@ -37,6 +78,8 @@ struct MetaActivityBarsTests {
         // Sep 1 alone (5000) beats the Sep 10-12 cluster (3000); gaps count as zero.
         #expect(activity.busiestWeekTokens == 5000)
         #expect(activity.windows[1].sharePercent == 60)
+        #expect(activity.windows[1].remainingPercent == 40)
+        #expect(activity.windows[1].remainingTokens == 2000)
     }
 
     @Test
@@ -44,6 +87,7 @@ struct MetaActivityBarsTests {
         let activity = MetaActivitySnapshot(summary: MetaUsageSummary(updatedAt: self.now))
         #expect(!activity.hasActivity)
         #expect(activity.windows.allSatisfy { $0.sharePercent == 0 })
+        #expect(activity.windows.allSatisfy { !$0.hasBaseline && $0.remainingPercent == 0 })
     }
 
     @Test
@@ -78,14 +122,18 @@ struct MetaActivityBarsTests {
     }
 
     @Test
-    func `air presentation shows activity bars and no quota`() {
+    func `air presentation shows usage left bars and no quota hero`() {
         let result = self.presentation()
         #expect(result.hero == nil)
         #expect(result.metrics.isEmpty)
         #expect(result.activityMetrics.map(\.id) == ["meta-activity-today", "meta-activity-week"])
-        #expect(result.activityMetrics[0].valueText.hasSuffix("tokens"))
+        #expect(result.activityMetrics[0].valueText == "75% left")
         #expect(result.activityMetrics[0].sharePercent == 25)
-        #expect(!result.activityMetrics[0].detailText.contains("left"))
+        #expect(result.activityMetrics[0].remainingPercent == 75)
+        #expect(result.activityMetrics[0].remainingTokens == 3000)
+        #expect(result.activityMetrics[0].detailText.contains("left"))
+        #expect(result.activityMetrics[0].detailText.contains("busiest day"))
+        #expect(result.activityMetrics[1].valueText == "0% left")
         #expect(!result.summary.contains("%"))
     }
 
@@ -113,11 +161,42 @@ struct MetaActivityBarsTests {
             hidePersonalInfo: false,
             now: self.now))
         #expect(model.metrics.map(\.id) == ["meta-activity-today", "meta-activity-week"])
-        #expect(model.metrics[0].percent == 25)
+        #expect(model.metrics[0].percent == 75)
+        #expect(model.metrics[0].percentStyle == .left)
         #expect(model.metrics[0].percentLabel.hasSuffix("tokens"))
-        #expect(!model.metrics[0].percentLabel.contains("left"))
+        #expect(model.metrics[0].resetText?.contains("75% left") == true)
         #expect(model.metrics[0].resetText?.contains("busiest day") == true)
-        #expect(model.metrics[1].detailText?.contains("No provider limit") == true)
+        #expect(model.metrics[1].percent == 0)
+        #expect(model.metrics[1].detailText?.contains("no plan limit") == true)
+    }
+
+    @Test
+    func `legacy menu card honors show used preference`() throws {
+        let snapshot = MetaUsageSnapshot(summary: self.summary()).toUsageSnapshot()
+        let metadata = try #require(ProviderDefaults.metadata[.meta])
+        let model = UsageMenuCardView.Model.make(.init(
+            provider: .meta,
+            metadata: metadata,
+            snapshot: snapshot,
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: nil,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: true,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: false,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            now: self.now))
+        #expect(model.metrics[0].percent == 25)
+        #expect(model.metrics[0].percentStyle == .used)
+        #expect(model.metrics[0].resetText?.contains("used") == true)
+        #expect(model.metrics[0].resetText?.contains("left") == true)
     }
 
     private func summary() -> MetaUsageSummary {

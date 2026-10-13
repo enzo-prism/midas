@@ -79,23 +79,40 @@ struct MidasQuotaMetric: Identifiable {
     }
 }
 
-/// Claude-style activity bar for a provider with no reported quota (Meta).
-/// The value is recorded tokens; the fill is that window's share of the busiest
-/// comparable recorded window. It never reads as percent remaining or left.
+/// Claude-style usage bar for a provider with no reported quota (Meta).
+/// Meta publishes no plan limit, so the busiest comparable recorded window is
+/// the baseline: the fill is how much of it is left, draining as usage grows
+/// like every other provider's bar. Copy always names that baseline so the
+/// estimate is never mistaken for a provider-reported quota.
 struct MidasActivityMetric: Identifiable {
     let id: String
     let title: String
     let tokens: Int
     let requests: Int
     let sharePercent: Double
+    let remainingPercent: Double
+    let remainingTokens: Int
+    let comparisonTokens: Int
     let comparisonLabel: String
+    let hasBaseline: Bool
 
     var valueText: String {
-        "\(UsageFormatter.tokenCountString(self.tokens)) tokens"
+        guard self.hasBaseline else { return "\(UsageFormatter.tokenCountString(self.tokens)) tokens" }
+        return "\(Int(self.remainingPercent.rounded()))% left"
     }
 
     var detailText: String {
-        var text = "\(Int(self.sharePercent.rounded()))% of \(self.comparisonLabel)"
+        guard self.hasBaseline else {
+            var text = "No recorded baseline yet"
+            if self.requests > 0 {
+                text += " · \(UsageFormatter.tokenCountString(self.requests)) requests"
+            }
+            return text
+        }
+        var text = "\(UsageFormatter.tokenCountString(self.tokens)) of "
+            + "\(UsageFormatter.tokenCountString(self.comparisonTokens)) tokens used"
+            + " · \(UsageFormatter.tokenCountString(self.remainingTokens)) left"
+            + " · vs \(self.comparisonLabel)"
         if self.requests > 0 {
             text += " · \(UsageFormatter.tokenCountString(self.requests)) requests"
         }
@@ -109,7 +126,11 @@ struct MidasActivityMetric: Identifiable {
             tokens: window.tokens,
             requests: window.requests,
             sharePercent: window.sharePercent,
-            comparisonLabel: window.comparisonLabel)
+            remainingPercent: window.remainingPercent,
+            remainingTokens: window.remainingTokens,
+            comparisonTokens: window.comparisonTokens,
+            comparisonLabel: window.comparisonLabel,
+            hasBaseline: window.hasBaseline)
     }
 }
 
