@@ -1,10 +1,10 @@
 # Changelog
 
-## Midas 0.46.2 — Unreleased
+## Midas 0.46.2 — October 15, 2026
 
 - Fix the largest memory spike: the Meta (Muse) session-log scanner loaded whole log files (hundreds of MB each on heavy Muse machines) and fully parsed every line on each refresh. It now streams line by line with a byte-level prefilter, dropping the startup footprint peak on a 1.7 GB-log machine from ~3.6 GB to ~129 MB and steady footprint to ~50 MB.
 
-Build 123. Local repair candidate; not yet published.
+Build 123. See GitHub Releases for signed binary availability.
 
 ## Midas 0.46.1 — October 15, 2026
 

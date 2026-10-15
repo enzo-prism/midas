@@ -6,17 +6,15 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The local candidate selected in `version.env` is **0.46.1**, build **122**. It repairs false iCloud
-sync disconnects and automatic recovery; it is not yet published. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.46.2**, build **123**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.46.0**, build **121**, tagged
-`v0.46.0-midas.1` (superseding 0.45.0, build **120**, tagged
-`v0.45.0-midas.1` (superseding 0.44.0, build **119**, tagged
-`v0.44.0-midas.1`)). Check GitHub releases for the current published binary; source and installed local
+The current **signed, notarized, Sparkle-published** binary is **0.46.2**, build **123**, tagged
+`v0.46.2-midas.1` (superseding 0.46.1, build **122**, tagged `v0.46.1-midas.1`, and 0.46.0,
+build **121**, tagged `v0.46.0-midas.1`). Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
@@ -34,6 +32,46 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.46.2 changes: Meta scan streaming
+
+Version 0.46.2, build 123, removes the largest memory spike found in the October 15
+profile (see [memory footprint](MIDAS_MEMORY.md)): `MuseSessionLogScanner` loaded whole
+Muse `session.jsonl` files via `readToEnd()` and fully JSON-parsed every line on each
+Meta refresh. It now streams with `CostUsageJsonl.scan`, a `model_completed` byte
+prefilter, `Data`-level parsing, and per-line/per-file autoreleasepools. On the profile
+machine (1.7 GB of Muse logs) the startup footprint peak dropped from 3.59 GB to
+129 MB and steady footprint sits near 50 MB; Meta totals are unchanged.
+
+Build 123 passed the full suite except the known PathBuilder timing flake (also failing
+on the untouched base under full-suite load; passes in isolation), `make check`,
+Developer ID signing, notarization (submission `d42192b2-bb82-46ea-8b72-04781798512e`,
+Accepted), stapling, Sparkle archive/feed signature checks, and downloaded draft and
+public asset verification (SHA-256
+`de8684bebb8cc21979afacc8894e8f598cfb8e7933f0949ac3b592bb8196ebb8`). The binary
+identifies source commit `45b377da1`. The marketing site was updated to 0.46.2 and its
+production download was verified against the same checksum.
+
+## 0.46.1 changes: retained-window cost scans and sync recovery
+
+Version 0.46.1, build 122, cuts cost-scan work and keeps usage sync connected:
+
+- Claude/Codex/Pi scans only force a full reparse on backward window expansion; Claude
+  scans retain the union of requested and cached windows (bounded, never truncating the
+  request), skip cache rebuild/re-encode when nothing changed, and memoize built
+  reports by content fingerprint. Repeat scans over 4.4 GB of logs drop from ~26 s to
+  under a second. Claude cache artifact is now `claude-v6.json`.
+- Offscreen dashboard WebViews are capped at 2 idle entries; a memory-pressure monitor
+  evicts them and returns free malloc pages; usage-sync completion also relieves.
+- Sync compares archived iCloud identity tokens correctly and preserves the folder and
+  offline history through temporary identity outages.
+
+Build 122 passed the full suite except the known PathBuilder timing flake, `make check`,
+Developer ID signing, notarization (submission `d4e23901-eb95-4daa-b94c-265217388fc9`,
+Accepted), stapling, Sparkle archive/feed signature checks, and downloaded draft and
+public asset verification (SHA-256
+`6400a0516dead43f5cbeccc4b106ec115e4512a2c9be20a12a2e8b60513356ee`). The binary
+identifies source commit `78a82258f`. It was superseded by 0.46.2 the same day.
 
 ## 0.46.0 changes: Meta plan usage
 
