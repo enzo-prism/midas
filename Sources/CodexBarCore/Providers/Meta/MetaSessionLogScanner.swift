@@ -49,7 +49,9 @@ public enum MuseSessionLogScanner: Sendable {
         var responses: [MetaCompletedResponse] = []
         responses.reserveCapacity(1024)
         for fileURL in files {
-            self.appendResponses(from: fileURL, into: &responses)
+            autoreleasepool {
+                self.appendResponses(from: fileURL, into: &responses)
+            }
         }
         return self.summarize(responses: responses, since: since, until: until, now: now)
     }
@@ -79,8 +81,14 @@ public enum MuseSessionLogScanner: Sendable {
     }
 
     static func parseResponsesForSync(fromLine line: String) -> ParsedResponses {
-        guard !line.isEmpty, line.count <= self.maxLineBytes else { return ParsedResponses() }
-        guard let data = line.data(using: .utf8),
+        guard !line.isEmpty, line.count <= self.maxLineBytes,
+              let data = line.data(using: .utf8)
+        else { return ParsedResponses() }
+        return self.parseResponsesForSync(fromData: data)
+    }
+
+    static func parseResponsesForSync(fromData data: Data) -> ParsedResponses {
+        guard !data.isEmpty, data.count <= self.maxLineBytes,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return ParsedResponses() }
         if json["retained_frame"] != nil, let children = json["children"] as? [[String: Any]] {
@@ -250,26 +258,22 @@ public enum MuseSessionLogScanner: Sendable {
     }
 
     static func appendResponses(from fileURL: URL, into out: inout [MetaCompletedResponse]) {
-        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return }
-        defer { try? handle.close() }
-        guard let data = try? handle.readToEnd(), !data.isEmpty else { return }
-        // Split on newlines without copying the whole file into Strings twice.
-        var start = data.startIndex
-        while start < data.endIndex {
-            var end = start
-            while end < data.endIndex, data[end] != 0x0A {
-                data.formIndex(after: &end)
-            }
-            if end > start, end - start <= self.maxLineBytes,
-               let line = String(data: data[start..<end], encoding: .utf8)
-            {
-                out.append(contentsOf: self.parseResponses(fromLine: line))
-            }
-            if end < data.endIndex {
-                data.formIndex(after: &end)
-            }
-            start = end
-        }
+        // Stream the file line by line. Session logs reach hundreds of MB and most lines
+        // are not usage events, so whole-file reads plus full JSON parses of retained
+        // frames previously spiked the process footprint by gigabytes. The byte-level
+        // prefilter keeps JSON parsing to candidate lines only (the marker also appears
+        // inside stringified `record_json` children of retained frames).
+        _ = try? CostUsageJsonl.scan(
+            fileURL: fileURL,
+            maxLineBytes: self.maxLineBytes,
+            prefixBytes: self.maxLineBytes,
+            onLine: { line in
+                guard !line.bytes.isEmpty, !line.wasTruncated else { return }
+                guard line.bytes.containsAscii("model_completed") else { return }
+                autoreleasepool {
+                    out.append(contentsOf: self.parseResponsesForSync(fromData: line.bytes).responses)
+                }
+            })
     }
 
     // MARK: - Helpers

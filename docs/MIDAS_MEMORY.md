@@ -10,7 +10,7 @@ read_when:
 Why Midas could sit at 1.8 GB in Activity Monitor, what actually caused it, and the
 invariants that keep the menu bar process small. Profiled October 15, 2026 against a
 machine with 2.2 GB of Claude session logs (1,562 files), 2.2 GB of Codex rollout logs
-(321 files), and an 84 MB Codex trace database.
+(321 files), 1.7 GB of Muse session logs (1,122 files), and an 84 MB Codex trace DB.
 
 ## Symptoms vs. live memory
 
@@ -50,6 +50,13 @@ pool happened to drain. Reports were identical before and after (same day entrie
 
 Drivers, in order:
 
+0. **The Meta session-log scanner read whole files.** `MuseSessionLogScanner.loadSummary`
+   loaded each Muse `session.jsonl` with `readToEnd()` (up to 140 MB per file here,
+   1.7 GB total) and fully JSON-parsed every line, including multi-MB `retained_frame`
+   lines, on every Meta refresh — no streaming, prefilter, pools, or cache. After the
+   cost-scanner fixes shipped in 0.46.1, a fresh launch still ramped linearly to a
+   **3.59 GB** footprint peak in ~21 s inside `appendResponses`. This was the largest
+   single spike and much of the original residue.
 1. **Window slides forced full reparses.** `requestedWindowExpandsCache` treated the
    daily forward slide of the rolling window as an expansion and set
    `forceFullScan`, bypassing per-file mtime/size freshness and incremental offsets.
@@ -65,6 +72,15 @@ Drivers, in order:
 4. **Secondary retention.** One offscreen `WKWebView` per account data store with no
    count cap (each keeps a WebContent process), relief scheduled before the async
    usage-sync export scan ran, and no response to system memory-pressure warnings.
+
+## Fix shipped in 0.46.2
+
+- **Streaming Meta scanner.** `appendResponses` now streams via `CostUsageJsonl.scan`
+  with a `model_completed` byte prefilter (the marker also appears inside stringified
+  `record_json` children), parses from `Data` without String round-trips, and drains
+  an autoreleasepool per line and per file. Measured on this machine after the fix:
+  startup peak **129 MB** (was 3.59 GB), steady footprint **~50 MB**, RSS ~164 MB
+  (was ~2 GB). The sync exporter's Meta path already streamed and was left as-is.
 
 ## Fixes shipped in 0.46.1
 
@@ -99,13 +115,15 @@ Regression gates live in `Tests/CodexBarTests/CostUsageRetainedWindowTests.swift
   window, don't reparse. Only a backward expansion beyond the retained window, a
   parser/pricing change, or an explicit force may reparse unchanged files.
 - Any loop over session files drains an autoreleasepool per file.
+- Session logs are streamed (`CostUsageJsonl.scan`) with a byte-level prefilter before
+  any JSON parsing; never `readToEnd()` a session log — files reach hundreds of MB.
 - Cache reads/writes are whole-file JSON today; keep them rare (dirty-tracked) or
   replace with a mapped/binary format before adding new per-refresh cache passes.
 - New retained caches need a hard entry cap and an eviction path on memory pressure.
 - `malloc_zone_pressure_relief` is best-effort cosmetics, not a budget tool. If
   footprint matters, measure `phys_footprint` high-water during the work itself.
 
-## Known follow-ups (not in 0.46.1)
+## Known follow-ups
 
 - Codex warm refresh still takes ~8 s on this machine (priority-turn trace scan plus
   incrementally parsing active rollout files). It is CPU/energy, not retained memory.

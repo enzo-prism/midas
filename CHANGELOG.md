@@ -1,6 +1,12 @@
 # Changelog
 
-## Midas 0.46.1 — Unreleased
+## Midas 0.46.2 — Unreleased
+
+- Fix the largest memory spike: the Meta (Muse) session-log scanner loaded whole log files (hundreds of MB each on heavy Muse machines) and fully parsed every line on each refresh. It now streams line by line with a byte-level prefilter, dropping the startup footprint peak on a 1.7 GB-log machine from ~3.6 GB to ~129 MB and steady footprint to ~50 MB.
+
+Build 123. Local repair candidate; not yet published.
+
+## Midas 0.46.1 — October 15, 2026
 
 - Cut memory use sharply: local usage scans no longer reparse every Claude/Codex session log when the rolling window slides a day or the prior-period comparison widens it, unchanged scans skip cache rebuilds and repricing, and offscreen dashboard WebViews are capped. On a machine with 4.4 GB of local session logs, repeat scans drop from ~26 seconds to under a second and stop inflating the process footprint between refreshes. See [memory footprint](docs/MIDAS_MEMORY.md).
 - Keep sync connected when macOS announces an unchanged iCloud account.
@@ -8,7 +14,7 @@
 - Preserve the sync folder and offline history during temporary iCloud identity outages, and resume automatically when the same account returns.
 - Require one folder reconnection for older sync connections; confirmed account changes still disconnect before sharing usage.
 
-Build 122. Local repair candidate; not yet published.
+Build 122. See GitHub Releases for signed binary availability.
 
 ## Midas 0.46.0 — October 13, 2026
 
