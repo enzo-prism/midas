@@ -6,7 +6,8 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.46.0**, build **121**. 0.37.0 (build 109) was the first build with
+The local candidate selected in `version.env` is **0.46.1**, build **122**. It repairs false iCloud
+sync disconnects and automatic recovery; it is not yet published. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by

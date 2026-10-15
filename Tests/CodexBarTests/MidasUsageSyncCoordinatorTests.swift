@@ -276,6 +276,279 @@ struct MidasUsageSyncCoordinatorTests {
         #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("devices").path))
     }
 
+    @Test func unchangedAccountNotificationRetainsTheConnectionAndReceivedHistory() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        let coordinator = fixture.coordinator(identity: .init(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: "account-a"))
+        self.collect(on: coordinator, event: "mini", tokens: 100)
+        try await coordinator.connect(folder: folder)
+        await coordinator.syncNow()
+        let bookmark = try #require(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark"))
+        let cache = try Data(contentsOf: fixture.cache)
+
+        coordinator.accountChanged()
+
+        #expect(coordinator.isEnabled)
+        #expect(coordinator.folderURL == folder)
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
+        #expect(coordinator.issue == nil)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark") == bookmark)
+        #expect(try Data(contentsOf: fixture.cache) == cache)
+    }
+
+    @Test(arguments: ["identity-unavailable", "no-icloud-account"])
+    func unavailableIdentityPausesCollectionAndRecoversWithoutReconnecting(unavailableIdentity: String) async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        var identity = MidasUsageSyncEnvironmentIdentity(deviceBinding: "mini", cloudAccountFingerprint: "account-a")
+        let coordinator = MidasUsageSyncCoordinator(
+            defaults: fixture.defaults,
+            persistenceURL: fixture.cache,
+            automaticallySyncs: false,
+            environmentIdentity: { identity },
+            currentTime: { Self.now })
+        var collectionCount = 0
+        var event = "original"
+        var tokens = 100
+        coordinator.makeLocalUsage = { workspace, now in
+            collectionCount += 1
+            return Self.usage(workspace: workspace, now: now, event: event, tokens: tokens)
+        }
+        try await coordinator.connect(folder: folder)
+        await coordinator.syncNow()
+        let bookmark = try #require(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark"))
+        let ownID = try #require(coordinator.devices.first(where: \.isThisMac)?.id)
+        let ownFile = folder.appendingPathComponent("devices/" + ownID.uuidString + ".json")
+        let original = try Data(contentsOf: ownFile)
+        let originalCache = try Data(contentsOf: fixture.cache)
+
+        identity.cloudAccountFingerprint = unavailableIdentity
+        await coordinator.syncNow()
+
+        #expect(coordinator.isEnabled)
+        #expect(coordinator.folderURL == folder)
+        #expect(coordinator.snapshots.isEmpty)
+        #expect(coordinator.devices.isEmpty)
+        #expect(collectionCount == 1)
+        #expect(!coordinator.isSyncing)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark") == bookmark)
+        #expect(try Data(contentsOf: ownFile) == original)
+        #expect(try Data(contentsOf: fixture.cache) == originalCache)
+
+        identity.cloudAccountFingerprint = "account-a"
+        event = "after-recovery"
+        tokens = 200
+        await coordinator.syncNow()
+
+        #expect(coordinator.isEnabled)
+        #expect(coordinator.folderURL == folder)
+        #expect(collectionCount == 2)
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
+        #expect(coordinator.issue == nil)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark") == bookmark)
+    }
+
+    @Test func unavailableAccountNotificationCancelsAnExchangeBeforeItWritesAndPreservesTheOutbox() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        var identity = MidasUsageSyncEnvironmentIdentity(deviceBinding: "mini", cloudAccountFingerprint: "account-a")
+        let gate = Gate()
+        let coordinator = MidasUsageSyncCoordinator(
+            defaults: fixture.defaults,
+            persistenceURL: fixture.cache,
+            automaticallySyncs: false,
+            environmentIdentity: { identity },
+            exchangePublication: { folder, workspace, publication, now in
+                await gate.suspend()
+                try Task.checkCancellation()
+                return try await MidasUsageSyncFolder.exchange(
+                    at: folder, workspace: workspace, local: publication, now: now)
+            },
+            currentTime: { Self.now })
+        self.collect(on: coordinator, event: "waiting-request", tokens: 100)
+        try await coordinator.connect(folder: folder)
+        let bookmark = try #require(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark"))
+        let operation = Task { await coordinator.syncNow() }
+        await gate.waitUntilBlocked()
+
+        identity.cloudAccountFingerprint = "identity-unavailable"
+        coordinator.accountChanged()
+        await gate.release()
+        await operation.value
+
+        #expect(coordinator.isEnabled)
+        #expect(coordinator.folderURL == folder)
+        #expect(coordinator.snapshots.isEmpty)
+        #expect(coordinator.devices.isEmpty)
+        #expect(!coordinator.isSyncing)
+        #expect(coordinator.lastPublishedAt == nil)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark") == bookmark)
+        #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("devices").path))
+        let cache = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: fixture.cache)) as? [String: Any])
+        #expect(cache["pendingLocal"] is [String: Any])
+
+        let recovered = fixture.coordinator(restore: true, identity: .init(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: "account-a"))
+        self.collect(on: recovered, event: nil, tokens: 0)
+        await recovered.syncNow()
+
+        #expect(recovered.lastPublishedAt == Self.now)
+        #expect(recovered.snapshots[.codex]?.sessionTokens == 100)
+        #expect(recovered.issue == nil)
+    }
+
+    @Test func unavailableIdentityAtRestartKeepsTheBookmarkAndRestoresWhenTheSameAccountReturns() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        let original = fixture.coordinator(identity: .init(deviceBinding: "mini", cloudAccountFingerprint: "account-a"))
+        self.collect(on: original, event: "original", tokens: 100)
+        try await original.connect(folder: folder)
+        await original.syncNow()
+        let bookmark = try #require(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark"))
+        let originalCache = try Data(contentsOf: fixture.cache)
+        var identity = MidasUsageSyncEnvironmentIdentity(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: "identity-unavailable")
+        let restarted = MidasUsageSyncCoordinator(
+            defaults: fixture.defaults,
+            persistenceURL: fixture.cache,
+            automaticallySyncs: false,
+            environmentIdentity: { identity },
+            restoresConnection: true,
+            currentTime: { Self.now })
+        var collectionCount = 0
+        restarted.makeLocalUsage = { workspace, now in
+            collectionCount += 1
+            return Self.usage(workspace: workspace, now: now, event: "after-restart", tokens: 200)
+        }
+        await restarted.syncNow()
+
+        #expect(restarted.isEnabled)
+        #expect(restarted.folderURL == nil)
+        #expect(collectionCount == 0)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark") == bookmark)
+        #expect(try Data(contentsOf: fixture.cache) == originalCache)
+
+        identity.cloudAccountFingerprint = "account-a"
+        await restarted.syncNow()
+
+        #expect(restarted.isEnabled)
+        #expect(restarted.folderURL == folder)
+        #expect(collectionCount == 1)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 300)
+        #expect(restarted.issue == nil)
+        #expect(restarted.devices.count == 1)
+    }
+
+    @Test func confirmedAccountChangeNotificationClearsTheConnectionBeforeFurtherCollection() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        var identity = MidasUsageSyncEnvironmentIdentity(deviceBinding: "mini", cloudAccountFingerprint: "account-a")
+        let coordinator = MidasUsageSyncCoordinator(
+            defaults: fixture.defaults,
+            persistenceURL: fixture.cache,
+            automaticallySyncs: false,
+            environmentIdentity: { identity },
+            currentTime: { Self.now })
+        var collectionCount = 0
+        coordinator.makeLocalUsage = { workspace, now in
+            collectionCount += 1
+            return Self.usage(workspace: workspace, now: now, event: "mini", tokens: 100)
+        }
+        try await coordinator.connect(folder: folder)
+        await coordinator.syncNow()
+        let ownID = try #require(coordinator.devices.first(where: \.isThisMac)?.id)
+        let ownFile = folder.appendingPathComponent("devices/" + ownID.uuidString + ".json")
+        let original = try Data(contentsOf: ownFile)
+
+        identity.cloudAccountFingerprint = "account-b"
+        coordinator.accountChanged()
+        await coordinator.syncNow()
+
+        #expect(!coordinator.isEnabled)
+        #expect(coordinator.folderURL == nil)
+        #expect(coordinator.snapshots.isEmpty)
+        #expect(coordinator.devices.isEmpty)
+        #expect(coordinator.issue?.contains("iCloud account changed") == true)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark") == nil)
+        #expect(collectionCount == 1)
+        #expect(try Data(contentsOf: ownFile) == original)
+    }
+
+    @Test func equivalentIdentityTokensKeepOneFingerprintDespiteDifferentArchiveBytes() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let first = MidasUsageSyncSyntheticIdentityToken(account: "account-a", archiveRevision: "first-encoding")
+        let equivalent = MidasUsageSyncSyntheticIdentityToken(account: "account-a", archiveRevision: "other-encoding")
+        let firstArchive = try NSKeyedArchiver.archivedData(withRootObject: first, requiringSecureCoding: false)
+        let otherArchive = try NSKeyedArchiver.archivedData(withRootObject: equivalent, requiringSecureCoding: false)
+        #expect(first.isEqual(equivalent))
+        #expect(firstArchive != otherArchive)
+        let fingerprint = MidasUsageSyncEnvironmentIdentity.cloudAccountFingerprint(
+            token: first,
+            defaults: fixture.defaults)
+
+        #expect(MidasUsageSyncEnvironmentIdentity.cloudAccountFingerprint(
+            token: equivalent,
+            defaults: fixture.defaults) == fingerprint)
+        #expect(MidasUsageSyncEnvironmentIdentity.cloudAccountFingerprint(
+            token: nil,
+            defaults: fixture.defaults) == "identity-unavailable")
+        #expect(fixture.defaults.string(forKey: "midasUsageSyncIdentityFingerprint") == fingerprint)
+        #expect(MidasUsageSyncEnvironmentIdentity.cloudAccountFingerprint(
+            token: equivalent,
+            defaults: fixture.defaults) == fingerprint)
+
+        let different = MidasUsageSyncSyntheticIdentityToken(account: "account-b", archiveRevision: "first-encoding")
+        #expect(MidasUsageSyncEnvironmentIdentity.cloudAccountFingerprint(
+            token: different,
+            defaults: fixture.defaults) != fingerprint)
+    }
+
+    @Test func legacyAccountFingerprintWithoutAnArchivedTokenRequiresReconnection() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        let legacyFingerprint = String(repeating: "a", count: 64)
+        let original = fixture.coordinator(identity: .init(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: legacyFingerprint))
+        self.collect(on: original, event: "original", tokens: 100)
+        try await original.connect(folder: folder)
+        await original.syncNow()
+        let originalCache = try Data(contentsOf: fixture.cache)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncIdentityToken") == nil)
+        let currentFingerprint = MidasUsageSyncEnvironmentIdentity.cloudAccountFingerprint(
+            token: MidasUsageSyncSyntheticIdentityToken(account: "account-a", archiveRevision: "new-format"),
+            defaults: fixture.defaults)
+        let restarted = fixture.coordinator(restore: true, identity: .init(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: currentFingerprint))
+        var collectionCount = 0
+        restarted.makeLocalUsage = { workspace, now in
+            collectionCount += 1
+            return Self.usage(workspace: workspace, now: now, event: "new-request", tokens: 200)
+        }
+        await restarted.syncNow()
+
+        #expect(currentFingerprint != legacyFingerprint)
+        #expect(!restarted.isEnabled)
+        #expect(restarted.folderURL == nil)
+        #expect(restarted.snapshots.isEmpty)
+        #expect(restarted.issue?.contains("shared folder again") == true)
+        #expect(fixture.defaults.data(forKey: "midasUsageSyncFolderBookmark") == nil)
+        #expect(collectionCount == 0)
+        #expect(try Data(contentsOf: fixture.cache) == originalCache)
+    }
+
     @Test func latestConnectWinsWhenEarlierFolderLoadFinishesLast() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
@@ -513,5 +786,122 @@ struct MidasUsageSyncCoordinatorTests {
             self.releaseContinuation?.resume()
             self.releaseContinuation = nil
         }
+    }
+}
+
+extension MidasUsageSyncCoordinatorTests {
+    @Test func explicitLegacyReconnectionPreservesRolledOffHistoryAndRebindsTheCache() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        let original = fixture.coordinator(identity: .init(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: String(repeating: "a", count: 64)))
+        self.collect(on: original, event: "rolled-off-request", tokens: 100)
+        try await original.connect(folder: folder)
+        await original.syncNow()
+        let deviceID = try #require(original.devices.first(where: \.isThisMac)?.id)
+        let publicationFile = folder.appendingPathComponent("devices/" + deviceID.uuidString + ".json")
+        let identity = MidasUsageSyncEnvironmentIdentity(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: "icloud-account-v2:" + UUID().uuidString)
+        let updated = fixture.coordinator(restore: true, identity: identity)
+        #expect(!updated.isEnabled)
+        #expect(updated.snapshots.isEmpty)
+
+        self.collect(on: updated, event: nil, tokens: 0)
+        try await updated.connect(folder: folder)
+        #expect(updated.snapshots[.codex]?.sessionTokens == 100)
+        await updated.syncNow()
+
+        #expect(updated.snapshots[.codex]?.sessionTokens == 100)
+        let publication = try JSONDecoder().decode(
+            MidasUsageSyncPublication.self,
+            from: Data(contentsOf: publicationFile))
+        #expect(publication.events.map(\.values.tokens) == [100])
+        let cache = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: fixture.cache)) as? [String: Any])
+        #expect(cache["accountFingerprint"] as? String == identity.cloudAccountFingerprint)
+
+        let restarted = fixture.coordinator(restore: true, identity: identity)
+        #expect(restarted.isEnabled)
+        #expect(restarted.folderURL == folder)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 100)
+        self.collect(on: restarted, event: nil, tokens: 0)
+        await restarted.syncNow()
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 100)
+    }
+
+    @Test func explicitLegacyReconnectionDoesNotImportACacheFromADifferentWorkspaceSalt() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let originalFolder = try fixture.sharedFolder("original")
+        let foreignFolder = try fixture.sharedFolder("foreign")
+        let original = fixture.coordinator(identity: .init(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: String(repeating: "a", count: 64)))
+        self.collect(on: original, event: "original-request", tokens: 100)
+        try await original.connect(folder: originalFolder)
+        await original.syncNow()
+        let deviceID = try #require(original.devices.first(where: \.isThisMac)?.id)
+        let originalFile = originalFolder.appendingPathComponent("devices/" + deviceID.uuidString + ".json")
+        let originalData = try Data(contentsOf: originalFile)
+        let workspace = try JSONDecoder().decode(
+            MidasUsageSyncWorkspace.self,
+            from: Data(contentsOf: originalFolder.appendingPathComponent("workspace.json")))
+        let foreignWorkspace = MidasUsageSyncWorkspace(id: workspace.id, createdAt: workspace.createdAt)
+        #expect(foreignWorkspace != workspace)
+        try JSONEncoder().encode(foreignWorkspace).write(to: foreignFolder.appendingPathComponent("workspace.json"))
+        let updated = fixture.coordinator(restore: true, identity: .init(
+            deviceBinding: "mini",
+            cloudAccountFingerprint: "icloud-account-v2:" + UUID().uuidString))
+
+        self.collect(on: updated, event: nil, tokens: 0)
+        try await updated.connect(folder: foreignFolder)
+        await updated.syncNow()
+
+        #expect(updated.isEnabled)
+        #expect(updated.folderURL == foreignFolder)
+        #expect(updated.snapshots.isEmpty)
+        #expect(updated.devices.count == 1)
+        #expect(updated.devices.first?.eventCount == 0)
+        #expect(try Data(contentsOf: originalFile) == originalData)
+        let foreignFile = foreignFolder.appendingPathComponent("devices/" + deviceID.uuidString + ".json")
+        let foreignPublication = try JSONDecoder().decode(
+            MidasUsageSyncPublication.self,
+            from: Data(contentsOf: foreignFile))
+        #expect(foreignPublication.events.isEmpty)
+    }
+}
+
+@objc(MidasUsageSyncSyntheticIdentityToken)
+private final class MidasUsageSyncSyntheticIdentityToken: NSObject, NSCoding {
+    let account: String
+    let archiveRevision: String
+
+    init(account: String, archiveRevision: String) {
+        self.account = account
+        self.archiveRevision = archiveRevision
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        guard let account = coder.decodeObject(forKey: "account") as? String,
+              let archiveRevision = coder.decodeObject(forKey: "archiveRevision") as? String else { return nil }
+        self.account = account
+        self.archiveRevision = archiveRevision
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(self.account, forKey: "account")
+        coder.encode(self.archiveRevision, forKey: "archiveRevision")
+    }
+
+    override func isEqual(_ object: Any?) -> Bool {
+        (object as? MidasUsageSyncSyntheticIdentityToken)?.account == self.account
+    }
+
+    override var hash: Int {
+        self.account.hashValue
     }
 }

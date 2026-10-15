@@ -74,6 +74,11 @@ Midas's internal app-support/preferences storage. Hardware binding and iCloud-ac
 are local opaque values used to detect migrated preferences or an account change; neither is
 included in the shared publication.
 
+The account token is archived locally and compared with Apple's `isEqual` identity contract.
+Its serialized bytes are not treated as an account identifier. A stable local label binds the
+cache to the verified account. Connections saved by the earlier byte-hash implementation require
+choosing the folder once after updating; their shared files remain intact.
+
 ## Merge and recovery
 
 Each Mac writes only its own device file through coordinated atomic replacement. Workspace
@@ -92,8 +97,11 @@ history within this window. Disconnecting stops this Mac and clears its displaye
 it does not delete files from the shared folder.
 
 The outbox is saved locally before upload. A failed local save blocks publication. Shared-folder
-failure keeps the outbox and last received history for retry. iCloud-account changes or workspace
-identity changes pause/clear the connection and require choosing the folder again.
+failure keeps the outbox and last received history for retry. An unchanged iCloud notification
+does not disconnect sync. When iCloud identity is temporarily unavailable, publication stops and
+the shared view is hidden while the bookmark, offline outbox, and received cache remain intact.
+Midas automatically resumes when the same account returns, including after restarting. A confirmed
+different iCloud account or workspace identity clears the connection and requires choosing the folder again.
 
 Safety limits: 128 distinct devices, 512 directory entries, 32 MiB per publication, 128 MiB per
 exchange, 100,000 records per publication, and 250,000 records across the selected device union.

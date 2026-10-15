@@ -1,5 +1,14 @@
 # Changelog
 
+## Midas 0.46.1 — Unreleased
+
+- Keep sync connected when macOS announces an unchanged iCloud account.
+- Compare archived iCloud identity tokens correctly instead of hashing their serialized bytes.
+- Preserve the sync folder and offline history during temporary iCloud identity outages, and resume automatically when the same account returns.
+- Require one folder reconnection for older sync connections; confirmed account changes still disconnect before sharing usage.
+
+Build 122. Local repair candidate; not yet published.
+
 ## Midas 0.46.0 — October 13, 2026
 
 - Show Meta's real plan usage: **Current usage** and **Weekly limit** now read "% left" with each window's reset time, matching the Meta Model API usage page.

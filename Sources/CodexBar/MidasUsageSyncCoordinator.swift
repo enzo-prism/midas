@@ -45,14 +45,40 @@ struct MidasUsageSyncEnvironmentIdentity: Sendable, Equatable {
             }
         }
         guard let token = FileManager.default.ubiquityIdentityToken else {
-            return Self(deviceBinding: binding)
-        }
-        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: false) else {
             return Self(deviceBinding: binding, cloudAccountFingerprint: "identity-unavailable")
         }
         return Self(
             deviceBinding: binding,
-            cloudAccountFingerprint: self.fingerprint(Data("Midas local account v1:".utf8) + data))
+            cloudAccountFingerprint: self.cloudAccountFingerprint(token: token, defaults: .standard))
+    }
+
+    /// Apple defines account-token identity with isEqual, not the bytes of its archive.
+    /// Keep a local stable label so caches do not depend on serialization order.
+    static func cloudAccountFingerprint(
+        token: (any NSCoding & NSObjectProtocol)?,
+        defaults: UserDefaults) -> String
+    {
+        guard let token else { return "identity-unavailable" }
+        if let data = defaults.data(forKey: "midasUsageSyncIdentityToken"),
+           let decoder = try? NSKeyedUnarchiver(forReadingFrom: data)
+        {
+            decoder.requiresSecureCoding = false
+            decoder.decodingFailurePolicy = .setErrorAndReturn
+            let previous = decoder.decodeObject(forKey: NSKeyedArchiveRootObjectKey)
+            decoder.finishDecoding()
+            if let previous, token.isEqual(previous),
+               let fingerprint = defaults.string(forKey: "midasUsageSyncIdentityFingerprint")
+            {
+                return fingerprint
+            }
+        }
+        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: false) else {
+            return "identity-unavailable"
+        }
+        let fingerprint = "icloud-account-v2:" + UUID().uuidString
+        defaults.set(data, forKey: "midasUsageSyncIdentityToken")
+        defaults.set(fingerprint, forKey: "midasUsageSyncIdentityFingerprint")
+        return fingerprint
     }
 
     private static func fingerprint(_ data: Data) -> String {
@@ -164,9 +190,7 @@ final class MidasUsageSyncCoordinator {
         defaults.set(self.deviceID.uuidString, forKey: "midasUsageSyncDeviceID")
         if let binding = identity.deviceBinding { defaults.set(binding, forKey: "midasUsageSyncDeviceBinding") }
         // Test fixtures never resolve a live bookmark or read an app-support cache by default.
-        if automaticallySyncs,
-           identity.deviceBinding == nil || identity.cloudAccountFingerprint == "identity-unavailable"
-        {
+        if automaticallySyncs, identity.deviceBinding == nil {
             self
                 .invalidateConnection(
                     message: "This Mac’s sync identity is unavailable. Choose the folder again to reconnect.")
@@ -239,14 +263,14 @@ final class MidasUsageSyncCoordinator {
         self.isEnabled = false
         self.pause()
         let generation = self.generation
-        let selected = try await self.workspaceLoader(folder)
-        try Task.checkCancellation()
-        guard self.generation == generation else { throw CancellationError() }
         let identity = self.environmentIdentity()
         guard identity.deviceBinding == self.deviceBinding,
               !self.automaticallySyncs || identity.deviceBinding != nil,
               identity.cloudAccountFingerprint != "identity-unavailable"
         else { throw MidasUsageSyncError.folderUnavailable }
+        let selected = try await self.workspaceLoader(folder)
+        try Task.checkCancellation()
+        guard self.generation == generation, self.environmentIdentity() == identity else { throw CancellationError() }
         let bookmark = try folder.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
         self.workspace = selected
         self.folderURL = folder
@@ -260,7 +284,7 @@ final class MidasUsageSyncCoordinator {
         self.devices = []
         self.lastPublishedAt = nil
         self.lastReceivedAt = nil
-        self.restoreCache(expected: selected)
+        self.restoreCache(expected: selected, acceptsExplicitReconnection: true)
         self.issue = nil
         self.isEnabled = true
         self.status = "Connected. Waiting for usage."
@@ -308,8 +332,9 @@ final class MidasUsageSyncCoordinator {
     private func performSync() async {
         guard self.isEnabled, !self.isSyncing, !Task.isCancelled else { return }
         guard self.identityStillMatches() else { return }
+        if self.folderURL == nil { self.restoreConnection() }
         guard let folder = self.folderURL, let workspace = self.workspace else {
-            self.status = "Choose a shared folder to connect this Mac."
+            if self.issue == nil { self.status = "Choose a shared folder to connect this Mac." }
             return
         }
         guard let makeLocalUsage = self.makeLocalUsage else { return }
@@ -408,8 +433,10 @@ final class MidasUsageSyncCoordinator {
         self.status = "Sync is paused."
     }
 
-    private func accountChanged() {
-        self.invalidateConnection(message: "Your iCloud account changed. Choose the shared folder again to reconnect.")
+    func accountChanged() {
+        guard self.isEnabled, self.identityStillMatches() else { return }
+        if self.folderURL == nil { self.restoreConnection() }
+        self.scheduleSync()
     }
 
     private func invalidateConnection(message: String) {
@@ -426,11 +453,23 @@ final class MidasUsageSyncCoordinator {
                     message: "This Mac’s sync identity changed. Choose the folder again to reconnect.")
             return false
         }
-        guard let accountFingerprint = self.accountFingerprint,
-              accountFingerprint == current.cloudAccountFingerprint
-        else {
-            self.accountChanged()
+        let expected = self.accountFingerprint ?? self.defaults.string(forKey: "midasUsageSyncAccountFingerprint")
+        if current.cloudAccountFingerprint == "identity-unavailable" ||
+            (current.cloudAccountFingerprint == "no-icloud-account" && expected != "no-icloud-account")
+        {
+            self.identityUnavailable()
             return false
+        }
+        guard let expected, expected == current.cloudAccountFingerprint else {
+            let legacy = expected?.count == 64 && expected?.allSatisfy(\.isHexDigit) == true
+            self.invalidateConnection(message: legacy
+                ? "Choose your shared folder again to update this Mac’s sync connection."
+                : "Your iCloud account changed. Choose the shared folder again to reconnect.")
+            return false
+        }
+        if self.issue?.contains("identity is temporarily unavailable") == true, let workspace = self.workspace {
+            self.restoreCache(expected: workspace)
+            self.issue = nil
         }
         return true
     }
@@ -439,12 +478,8 @@ final class MidasUsageSyncCoordinator {
         guard self.isEnabled, let data = self.defaults.data(forKey: "midasUsageSyncFolderBookmark"),
               let expectedID = self.defaults.string(forKey: "midasUsageSyncWorkspaceID").flatMap(UUID.init(uuidString:))
         else { return }
-        guard let fingerprint = self.defaults.string(forKey: "midasUsageSyncAccountFingerprint"),
-              fingerprint == self.environmentIdentity().cloudAccountFingerprint
-        else {
-            self.accountChanged()
-            return
-        }
+        guard self.identityStillMatches(),
+              let fingerprint = self.defaults.string(forKey: "midasUsageSyncAccountFingerprint") else { return }
         self.accountFingerprint = fingerprint
         guard let cache = self.readCache(), cache.workspace.id == expectedID,
               cache.localDeviceID == self.deviceID, cache.deviceBinding == self.deviceBinding,
@@ -467,12 +502,22 @@ final class MidasUsageSyncCoordinator {
             return
         }
         self.folderURL = folder
+        self.issue = nil
     }
 
-    private func restoreCache(expected: MidasUsageSyncWorkspace) {
+    private func identityUnavailable() {
+        // Do not publish under an unverified account or discard the user's connection.
+        self.pause()
+        self.snapshots = [:]
+        self.devices = []
+        self.issue = "Your iCloud identity is temporarily unavailable. Midas will retry automatically."
+        self.status = "Waiting for iCloud. Your sync connection is preserved."
+    }
+
+    private func restoreCache(expected: MidasUsageSyncWorkspace, acceptsExplicitReconnection: Bool = false) {
         guard let cache = self.readCache(), cache.workspace == expected,
               cache.localDeviceID == self.deviceID, cache.deviceBinding == self.deviceBinding,
-              cache.accountFingerprint == self.accountFingerprint,
+              cache.accountFingerprint == self.accountFingerprint || acceptsExplicitReconnection,
               let ledger = try? MidasUsageSyncLedger(
                   publications: cache.publications,
                   workspaceID: expected.id,
