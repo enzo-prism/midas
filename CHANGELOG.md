@@ -2,6 +2,7 @@
 
 ## Midas 0.46.1 — Unreleased
 
+- Cut memory use sharply: local usage scans no longer reparse every Claude/Codex session log when the rolling window slides a day or the prior-period comparison widens it, unchanged scans skip cache rebuilds and repricing, and offscreen dashboard WebViews are capped. On a machine with 4.4 GB of local session logs, repeat scans drop from ~26 seconds to under a second and stop inflating the process footprint between refreshes. See [memory footprint](docs/MIDAS_MEMORY.md).
 - Keep sync connected when macOS announces an unchanged iCloud account.
 - Compare archived iCloud identity tokens correctly instead of hashing their serialized bytes.
 - Preserve the sync folder and offline history during temporary iCloud identity outages, and resume automatically when the same account returns.

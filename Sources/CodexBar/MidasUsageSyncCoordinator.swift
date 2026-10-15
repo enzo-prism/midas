@@ -327,6 +327,9 @@ final class MidasUsageSyncCoordinator {
             self.activeSync = nil
             self.activeSyncID = nil
         }
+        // The sync export re-scans the local session corpus; return its freed pages
+        // instead of waiting for the next token-refresh relief pass.
+        MemoryPressureRelief.releaseFreeMallocPages()
     }
 
     private func performSync() async {

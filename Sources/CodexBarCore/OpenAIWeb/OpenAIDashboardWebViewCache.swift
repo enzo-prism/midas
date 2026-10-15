@@ -108,6 +108,10 @@ final class OpenAIDashboardWebViewCache {
     }
 
     private var entries: [ObjectIdentifier: Entry] = [:]
+    /// Hard cap on simultaneously retained WebViews. Each offscreen ChatGPT page keeps a
+    /// WebContent process alive; multi-account refreshes must not accumulate one per
+    /// account between idle prunes. Busy entries are never evicted to satisfy the cap.
+    private static let maximumRetainedEntries = 2
     /// Keep the WebView alive only long enough for immediate retries/menu reopens.
     /// Long-lived hidden ChatGPT tabs still consume noticeable energy on some setups.
     private let idleTimeout: TimeInterval
@@ -537,6 +541,19 @@ final class OpenAIDashboardWebViewCache {
             entry.host.close()
             self.entries.removeValue(forKey: key)
             Self.log.debug("OpenAI webview pruned")
+        }
+
+        // Evict least-recently-used idle entries beyond the retention cap.
+        let idleByRecency = self.entries
+            .filter { !$0.value.isBusy }
+            .sorted { $0.value.lastUsedAt < $1.value.lastUsedAt }
+        let excess = idleByRecency.count - Self.maximumRetainedEntries
+        if excess > 0 {
+            for (key, entry) in idleByRecency.prefix(excess) {
+                entry.host.close()
+                self.entries.removeValue(forKey: key)
+                Self.log.debug("OpenAI webview evicted beyond retention cap")
+            }
         }
     }
 

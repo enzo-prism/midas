@@ -13,7 +13,9 @@ enum CostUsageCacheIO {
         case .codex:
             8
         case .claude, .vertexai:
-            5
+            // v6: retained-window union scanning; a clean scan may keep persisted day
+            // aggregates, so rebuild the cache once under the new bookkeeping.
+            6
         default:
             1
         }
@@ -60,9 +62,13 @@ enum CostUsageCacheIO {
         expectedProducerKey: String?,
         compatibleProducerKeys: Set<String>) -> CostUsageCache?
     {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        guard let decoded = try? JSONDecoder().decode(CostUsageCache.self, from: data)
-        else { return nil }
+        // The Claude cache can exceed 10 MB of JSON; keep the decode transients out of the
+        // caller's pool so they drain with this load instead of the surrounding scan.
+        let decoded = autoreleasepool { () -> CostUsageCache? in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(CostUsageCache.self, from: data)
+        }
+        guard let decoded else { return nil }
         guard decoded.version == 1 else { return nil }
         if let expectedProducerKey {
             guard decoded.producerKey == expectedProducerKey
@@ -88,7 +94,7 @@ enum CostUsageCacheIO {
         let tmp = dir.appendingPathComponent(".tmp-\(UUID().uuidString).json", isDirectory: false)
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let data = try JSONEncoder().encode(cache)
+            let data = try autoreleasepool { try JSONEncoder().encode(cache) }
             try data.write(to: tmp, options: [.atomic])
             if FileManager.default.fileExists(atPath: url.path) {
                 _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)

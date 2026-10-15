@@ -1033,6 +1033,217 @@ extension CostUsageScanner {
         return range.scanSinceKey < cachedSince || range.scanUntilKey > cachedUntil
     }
 
+    /// True only when the requested scan window starts earlier than the cached window.
+    ///
+    /// A pure forward slide (the rolling window advancing by a day) must not force a full
+    /// reparse: an unchanged file cannot gain rows for the new later days, and changed
+    /// files are picked up by the per-file mtime/size and incremental-offset paths. Only
+    /// backward expansion can require rows the cache never retained.
+    static func requestedWindowExpandsBackward(range: CostUsageDayRange, cache: CostUsageCache) -> Bool {
+        guard let cachedSince = cache.scanSinceKey else {
+            return cache.lastScanUnixMs != 0 || !cache.files.isEmpty || !cache.days.isEmpty
+        }
+        return range.scanSinceKey < cachedSince
+    }
+
+    static func dayKeyByAdding(days: Int, toDayKey dayKey: String) -> String? {
+        guard let date = parseDayKey(dayKey),
+              let shifted = Calendar.current.date(byAdding: .day, value: days, to: date)
+        else { return nil }
+        return CostUsageDayRange.dayKey(from: shifted)
+    }
+
+    /// Scan window that keeps the union of the requested and previously cached windows, so
+    /// alternating request widths (current 30 days vs the 60-day prior-period fetch) retain
+    /// one shared cache instead of evicting each other's rows and forcing full rescans.
+    /// Only the cached-side extension is clipped (to `maxScanDays` ending at the retained
+    /// scan-until day); the retained window always covers the full requested window, so a
+    /// legitimately wide request (up to 365 days) is never truncated.
+    static func retainedScanRange(
+        requested: CostUsageDayRange,
+        cache: CostUsageCache,
+        maxScanDays: Int = 92) -> CostUsageDayRange
+    {
+        var scanUntilKey = requested.scanUntilKey
+        if let cachedUntil = cache.scanUntilKey {
+            scanUntilKey = max(scanUntilKey, cachedUntil)
+        }
+        var retainedSinceKey = cache.scanSinceKey ?? requested.scanSinceKey
+        if maxScanDays > 0,
+           let clip = Self.dayKeyByAdding(days: -(maxScanDays - 1), toDayKey: scanUntilKey)
+        {
+            retainedSinceKey = max(retainedSinceKey, clip)
+        }
+        return CostUsageDayRange(
+            requested: requested,
+            scanSinceKey: min(requested.scanSinceKey, retainedSinceKey),
+            scanUntilKey: scanUntilKey)
+    }
+
+    // MARK: - Report memoization
+
+    private final class CostUsageReportMemoState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var reports: [String: CostUsageDailyReport] = [:]
+
+        func report(forKey key: String) -> CostUsageDailyReport? {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            return self.reports[key]
+        }
+
+        func store(_ report: CostUsageDailyReport, forKey key: String) {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            // Callers alternate between a couple of windows per provider; anything beyond
+            // a small working set is a different cache state, so reset instead of growing.
+            if self.reports.count >= 12, self.reports[key] == nil {
+                self.reports.removeAll()
+            }
+            self.reports[key] = report
+        }
+
+        func reset() {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            self.reports.removeAll()
+        }
+    }
+
+    private static let dailyReportMemo = CostUsageReportMemoState()
+
+    static func memoizedDailyReport(forKey key: String) -> CostUsageDailyReport? {
+        self.dailyReportMemo.report(forKey: key)
+    }
+
+    static func memoizeDailyReport(_ report: CostUsageDailyReport, forKey key: String) {
+        self.dailyReportMemo.store(report, forKey: key)
+    }
+
+    static func _test_resetDailyReportMemo() {
+        self.dailyReportMemo.reset()
+    }
+
+    private static func combineDays(_ days: [String: [String: [Int]]], into hasher: inout Hasher) {
+        for day in days.keys.sorted() {
+            hasher.combine(day)
+            guard let models = days[day] else { continue }
+            for model in models.keys.sorted() {
+                hasher.combine(model)
+                for value in models[model] ?? [] {
+                    hasher.combine(value)
+                }
+            }
+        }
+    }
+
+    private static func combineInt64Map(_ map: [String: [String: Int64]]?, into hasher: inout Hasher) {
+        guard let map else {
+            hasher.combine(-1)
+            return
+        }
+        for day in map.keys.sorted() {
+            hasher.combine(day)
+            guard let models = map[day] else { continue }
+            for model in models.keys.sorted() {
+                hasher.combine(model)
+                hasher.combine(models[model] ?? 0)
+            }
+        }
+    }
+
+    private static func combineIntMap(_ map: [String: [String: Int]]?, into hasher: inout Hasher) {
+        guard let map else {
+            hasher.combine(-1)
+            return
+        }
+        for day in map.keys.sorted() {
+            hasher.combine(day)
+            guard let models = map[day] else { continue }
+            for model in models.keys.sorted() {
+                hasher.combine(model)
+                hasher.combine(models[model] ?? 0)
+            }
+        }
+    }
+
+    /// Fingerprint of every input `buildClaudeReportFromCache` reads: the day aggregates and
+    /// the repricing-relevant row fields. Hashing is linear in the cached rows but avoids the
+    /// per-row pricing lookups and date math of a full rebuild when nothing changed.
+    static func claudeReportFingerprint(
+        cache: CostUsageCache,
+        range: CostUsageDayRange,
+        pricingStamp: String) -> String
+    {
+        var hasher = Hasher()
+        hasher.combine("claude")
+        hasher.combine(range.sinceKey)
+        hasher.combine(range.untilKey)
+        hasher.combine(pricingStamp)
+        Self.combineDays(cache.days, into: &hasher)
+        for path in cache.files.keys.sorted() {
+            guard let usage = cache.files[path] else { continue }
+            hasher.combine(path)
+            for row in usage.claudeRows ?? [] {
+                hasher.combine(row.dayKey)
+                hasher.combine(row.model)
+                hasher.combine(row.sessionId)
+                hasher.combine(row.messageId)
+                hasher.combine(row.requestId)
+                hasher.combine(row.timestampUnixMs)
+                hasher.combine(row.isSidechain)
+                hasher.combine(row.pathRole.rawValue)
+                hasher.combine(row.input)
+                hasher.combine(row.cacheRead)
+                hasher.combine(row.cacheCreate)
+                hasher.combine(row.cacheCreate1h)
+                hasher.combine(row.output)
+                hasher.combine(row.costNanos)
+                hasher.combine(row.costPriced)
+                hasher.combine(row.speed)
+                hasher.combine(row.inferenceGeo)
+                hasher.combine(row.webSearchRequests)
+            }
+        }
+        return "claude-report-\(hasher.finalize())"
+    }
+
+    /// Fingerprint of every input `buildCodexReportFromCache` reads.
+    static func codexReportFingerprint(
+        cache: CostUsageCache,
+        range: CostUsageDayRange,
+        pricingStamp: String) -> String
+    {
+        var hasher = Hasher()
+        hasher.combine("codex")
+        hasher.combine(range.sinceKey)
+        hasher.combine(range.untilKey)
+        hasher.combine(pricingStamp)
+        Self.combineDays(cache.days, into: &hasher)
+        for path in cache.files.keys.sorted() {
+            guard let usage = cache.files[path] else { continue }
+            hasher.combine(path)
+            Self.combineDays(usage.days, into: &hasher)
+            Self.combineInt64Map(usage.codexCostNanos, into: &hasher)
+            Self.combineInt64Map(usage.codexPrioritySurchargeNanos, into: &hasher)
+            Self.combineInt64Map(usage.codexStandardCostNanos, into: &hasher)
+            Self.combineInt64Map(usage.codexPriorityCostNanos, into: &hasher)
+            Self.combineIntMap(usage.codexStandardTokens, into: &hasher)
+            Self.combineIntMap(usage.codexPriorityTokens, into: &hasher)
+            for row in usage.codexSyncRows ?? usage.codexRows ?? [] {
+                hasher.combine(row.day)
+                hasher.combine(row.model)
+                hasher.combine(row.turnID)
+                hasher.combine(row.input)
+                hasher.combine(row.cached)
+                hasher.combine(row.output)
+                hasher.combine(row.timestamp)
+                hasher.combine(row.unsafeNumericSource)
+            }
+        }
+        return "codex-report-\(hasher.finalize())"
+    }
+
     static func addPacked(a: [Int], b: [Int], sign: Int) -> [Int] {
         let len = max(a.count, b.count)
         var out: [Int] = Array(repeating: 0, count: len)

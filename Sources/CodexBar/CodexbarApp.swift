@@ -465,6 +465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MemoryPressureMonitor.shared.start()
         AppNotifications.shared.requestAuthorizationOnStartup()
         self.ensureStatusController()
         Task.detached(priority: .userInitiated) {

@@ -241,6 +241,7 @@ enum CostUsageScanner {
         let rootsFingerprint: [String: Int64]
         let rootsChanged: Bool
         let windowExpanded: Bool
+        let windowExpandsBackward: Bool
         let needsCostCacheMigration: Bool
         let modelsDevCatalog: ModelsDevCatalog?
         let codexPricingKey: String
@@ -534,6 +535,17 @@ enum CostUsageScanner {
             self.untilKey = Self.dayKey(from: until)
             self.scanSinceKey = Self.dayKey(from: Calendar.current.date(byAdding: .day, value: -1, to: since) ?? since)
             self.scanUntilKey = Self.dayKey(from: Calendar.current.date(byAdding: .day, value: 1, to: until) ?? until)
+        }
+
+        /// Same report window as `requested`, wider scan window. Parsing filters on the scan
+        /// keys while report building filters on the report keys, so a scan can retain rows
+        /// for a wider cached window than the caller asked to display.
+        init(requested: CostUsageDayRange, scanSinceKey: String, scanUntilKey: String) {
+            self.untilDate = requested.untilDate
+            self.sinceKey = requested.sinceKey
+            self.untilKey = requested.untilKey
+            self.scanSinceKey = scanSinceKey
+            self.scanUntilKey = scanUntilKey
         }
 
         static func dayKey(from date: Date) -> String {
@@ -2292,6 +2304,7 @@ enum CostUsageScanner {
         let rootsFingerprint = Self.codexRootsFingerprint(roots)
         let rootsChanged = cache.roots != rootsFingerprint
         let windowExpanded = Self.requestedWindowExpandsCache(range: range, cache: cache)
+        let windowExpandsBackward = Self.requestedWindowExpandsBackward(range: range, cache: cache)
         let needsCostCacheMigration = cache.files.values.contains { Self.needsCodexCostCache($0, range: range) }
         let modelsDevLoad = ModelsDevCache.load(now: now, cacheRoot: options.cacheRoot)
         let modelsDevCatalog = modelsDevLoad.artifact?.catalog
@@ -2355,6 +2368,7 @@ enum CostUsageScanner {
             rootsFingerprint: rootsFingerprint,
             rootsChanged: rootsChanged,
             windowExpanded: windowExpanded,
+            windowExpandsBackward: windowExpandsBackward,
             needsCostCacheMigration: needsCostCacheMigration,
             modelsDevCatalog: modelsDevCatalog,
             codexPricingKey: codexPricingKey,
@@ -2452,22 +2466,28 @@ enum CostUsageScanner {
                 modelsDevCacheRoot: options.cacheRoot,
                 priorityTurns: plan.priorityTurns)
             for fileURL in files {
-                try Self.scanCodexFile(
-                    fileURL: fileURL,
-                    context: CodexFileScanContext(
-                        range: range,
-                        forceFullScan: options
-                            .forceRescan || plan.windowExpanded || plan.pricingChanged || plan.priorityMetadataChanged,
-                        dropDeferredCodexRows: options.forceRescan || plan.pricingChanged || plan
-                            .priorityMetadataChanged
-                            || plan.needsTurnIDCacheMigration,
-                        requiresTurnIDCache: plan.needsTurnIDCacheMigration,
-                        changedPriorityTurnIDs: plan.changedPriorityTurnIDs,
-                        resources: resources,
-                        checkCancellation: checkCancellation,
-                        retainSyncRows: options.retainSyncRows),
-                    cache: &cache,
-                    state: &scanState)
+                // Drain per file: JSON parsing produces autoreleased object graphs that
+                // would otherwise accumulate for the whole session-corpus walk.
+                try autoreleasepool {
+                    try Self.scanCodexFile(
+                        fileURL: fileURL,
+                        context: CodexFileScanContext(
+                            range: range,
+                            // A forward window slide alone must not reparse unchanged files:
+                            // they cannot contain rows for the new later days.
+                            forceFullScan: options.forceRescan || plan.windowExpandsBackward
+                                || plan.pricingChanged || plan.priorityMetadataChanged,
+                            dropDeferredCodexRows: options.forceRescan || plan.pricingChanged || plan
+                                .priorityMetadataChanged
+                                || plan.needsTurnIDCacheMigration,
+                            requiresTurnIDCache: plan.needsTurnIDCacheMigration,
+                            changedPriorityTurnIDs: plan.changedPriorityTurnIDs,
+                            resources: resources,
+                            checkCancellation: checkCancellation,
+                            retainSyncRows: options.retainSyncRows),
+                        cache: &cache,
+                        state: &scanState)
+                }
             }
             try checkCancellation?()
 
@@ -2533,12 +2553,31 @@ enum CostUsageScanner {
         }
 
         options.cacheSnapshot?(cache)
-        return Self.buildCodexReportFromCache(
+        var priorityHasher = Hasher()
+        for key in plan.priorityTurns.keys.sorted() {
+            priorityHasher.combine(key)
+            if let metadata = plan.priorityTurns[key] {
+                priorityHasher.combine(metadata.threadID)
+                priorityHasher.combine(metadata.turnID)
+                priorityHasher.combine(metadata.model)
+                priorityHasher.combine(metadata.timestamp)
+            }
+        }
+        let fingerprint = Self.codexReportFingerprint(
+            cache: cache,
+            range: range,
+            pricingStamp: "\(plan.codexPricingKey)|\(priorityHasher.finalize())")
+        if let memoized = Self.memoizedDailyReport(forKey: fingerprint) {
+            return memoized
+        }
+        let report = Self.buildCodexReportFromCache(
             cache: cache,
             range: range,
             modelsDevCatalog: plan.modelsDevCatalog,
             modelsDevCacheRoot: options.cacheRoot,
             priorityTurns: plan.priorityTurns)
+        Self.memoizeDailyReport(report, forKey: fingerprint)
+        return report
     }
 
     /// Persists the Codex cost cache, logging (without throwing) when the atomic write fails so a

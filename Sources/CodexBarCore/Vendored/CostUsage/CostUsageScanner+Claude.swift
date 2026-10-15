@@ -521,9 +521,34 @@ extension CostUsageScanner {
         return [rootPath]
     }
 
+    /// Last clean-scan time per cache file, kept in process because a clean scan skips the
+    /// cache rewrite that would persist `lastScanUnixMs`. Without it the refresh throttle
+    /// would compare against the last dirty save and re-walk the tree on every call.
+    private final class ClaudeCleanScanStamps: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stamps: [String: Int64] = [:]
+
+        func stamp(forPath path: String) -> Int64 {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            return self.stamps[path] ?? 0
+        }
+
+        func store(_ stampMs: Int64, forPath path: String) {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            self.stamps[path] = stampMs
+        }
+    }
+
+    private static let claudeCleanScanStamps = ClaudeCleanScanStamps()
+
     private final class ClaudeScanState {
         var cache: CostUsageCache
         var touched: Set<String>
+        /// Set when any file was (re)parsed or dropped, so an unchanged corpus can skip the
+        /// day rebuild and cache re-encode entirely.
+        var didMutateCache = false
         let range: CostUsageDayRange
         let providerFilter: ClaudeLogProviderFilter
         let forceFullScan: Bool
@@ -583,6 +608,7 @@ extension CostUsageScanner {
                     modelsDevCacheRoot: state.modelsDevCacheRoot,
                     checkCancellation: state.checkCancellation)
                 let mergedRows = Self.mergeClaudeRows(existing: cached.claudeRows ?? [], delta: delta.rows)
+                state.didMutateCache = true
                 state.cache.files[path] = Self.makeClaudeFileUsage(
                     mtimeMs: mtimeMs,
                     size: size,
@@ -606,6 +632,7 @@ extension CostUsageScanner {
             rows: parsed.rows,
             parsedBytes: parsed.parsedBytes,
             excludedSyncRecords: parsed.excludedSyncRecords)
+        state.didMutateCache = true
         state.cache.files[path] = usage
     }
 
@@ -627,6 +654,7 @@ extension CostUsageScanner {
             }
             for path in stale {
                 state.cache.files.removeValue(forKey: path)
+                state.didMutateCache = true
             }
             return
         }
@@ -660,11 +688,15 @@ extension CostUsageScanner {
 
             let mtime = values.contentModificationDate?.timeIntervalSince1970 ?? 0
             let mtimeMs = Int64(mtime * 1000)
-            try Self.processClaudeFile(
-                url: url,
-                size: size,
-                mtimeMs: mtimeMs,
-                state: state)
+            // Drain per file: JSON parsing produces autoreleased object graphs that would
+            // otherwise accumulate for the whole multi-thousand-file walk.
+            try autoreleasepool {
+                try Self.processClaudeFile(
+                    url: url,
+                    size: size,
+                    mtimeMs: mtimeMs,
+                    state: state)
+            }
         }
 
         // Root mtime caching removed — see comment above.
@@ -679,14 +711,27 @@ extension CostUsageScanner {
     {
         var cache = CostUsageCacheIO.load(provider: provider, cacheRoot: options.cacheRoot)
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+        let cachePath = CostUsageCacheIO.cacheFileURL(provider: provider, cacheRoot: options.cacheRoot).path
+        let effectiveLastScanMs = max(
+            cache.lastScanUnixMs,
+            Self.claudeCleanScanStamps.stamp(forPath: cachePath))
 
         let refreshMs = Int64(max(0, options.refreshMinIntervalSeconds) * 1000)
         let windowExpanded = Self.requestedWindowExpandsCache(range: range, cache: cache)
         let shouldRefresh = options.forceRescan
             || windowExpanded
             || refreshMs == 0
-            || cache.lastScanUnixMs == 0
-            || nowMs - cache.lastScanUnixMs > refreshMs
+            || effectiveLastScanMs == 0
+            || nowMs - effectiveLastScanMs > refreshMs
+
+        // Retain the union of the requested and cached scan windows (bounded), so callers
+        // alternating between a 30-day current window and a 60-day prior-period window share
+        // one cache. Only a backward expansion beyond the retained window needs a full
+        // reparse; a forward slide reuses per-file freshness and incremental offsets.
+        let retainedRange = options.forceRescan
+            ? range
+            : Self.retainedScanRange(requested: range, cache: cache)
+        let expandsBackward = Self.requestedWindowExpandsBackward(range: retainedRange, cache: cache)
 
         let roots = self.defaultClaudeProjectsRoots(options: options)
         let providerFilter = options.claudeLogProviderFilter
@@ -701,9 +746,9 @@ extension CostUsageScanner {
             let modelsDevCatalog = CostUsagePricing.modelsDevCatalog(now: now, cacheRoot: options.cacheRoot)
             let scanState = ClaudeScanState(
                 cache: cache,
-                range: range,
+                range: retainedRange,
                 providerFilter: providerFilter,
-                forceFullScan: options.forceRescan || windowExpanded,
+                forceFullScan: options.forceRescan || expandsBackward,
                 modelsDevCatalog: modelsDevCatalog,
                 modelsDevCacheRoot: options.cacheRoot,
                 checkCancellation: checkCancellation)
@@ -718,36 +763,90 @@ extension CostUsageScanner {
             cache = scanState.cache
             touched = scanState.touched
             cache.roots = nil
+            var didMutateCache = scanState.didMutateCache || options.forceRescan
 
             for key in cache.files.keys where !touched.contains(key) {
                 cache.files.removeValue(forKey: key)
+                didMutateCache = true
             }
 
-            Self.rebuildClaudeDays(cache: &cache)
-            Self.pruneDays(cache: &cache, sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey)
-            cache.scanSinceKey = range.scanSinceKey
-            cache.scanUntilKey = range.scanUntilKey
+            // Drop rows that aged out of the retained window so the cache stays bounded as
+            // the window slides, without waiting for each owning file to change.
+            for path in cache.files.keys {
+                guard var usage = cache.files[path], let rows = usage.claudeRows else { continue }
+                let kept = rows.filter {
+                    CostUsageDayRange.isInRange(
+                        dayKey: $0.dayKey,
+                        since: retainedRange.scanSinceKey,
+                        until: retainedRange.scanUntilKey)
+                }
+                if kept.count != rows.count {
+                    usage.claudeRows = kept
+                    cache.files[path] = usage
+                    didMutateCache = true
+                }
+            }
+
+            if cache.scanSinceKey != retainedRange.scanSinceKey
+                || cache.scanUntilKey != retainedRange.scanUntilKey
+            {
+                didMutateCache = true
+            }
+
+            cache.scanSinceKey = retainedRange.scanSinceKey
+            cache.scanUntilKey = retainedRange.scanUntilKey
             cache.lastScanUnixMs = nowMs
-            try checkCancellation?()
-            let saveResult = CostUsageCacheIO.save(provider: provider, cache: cache, cacheRoot: options.cacheRoot)
-            if !saveResult.didSave {
-                CostUsageScanner.log.warning(
-                    "Failed to persist Claude cost usage cache",
-                    metadata: [
-                        "provider": provider.rawValue,
-                        "path": saveResult.path,
-                        "error": saveResult.message ?? "unknown",
-                    ])
+
+            Self.claudeCleanScanStamps.store(nowMs, forPath: cachePath)
+
+            // An unchanged corpus leaves the persisted day aggregates valid; skip the
+            // rebuild and the whole-cache re-encode, which dominate warm-scan cost.
+            if didMutateCache {
+                Self.rebuildClaudeDays(cache: &cache)
+                Self.pruneDays(
+                    cache: &cache,
+                    sinceKey: retainedRange.scanSinceKey,
+                    untilKey: retainedRange.scanUntilKey)
+                try checkCancellation?()
+                let saveResult = CostUsageCacheIO.save(
+                    provider: provider,
+                    cache: cache,
+                    cacheRoot: options.cacheRoot)
+                if !saveResult.didSave {
+                    CostUsageScanner.log.warning(
+                        "Failed to persist Claude cost usage cache",
+                        metadata: [
+                            "provider": provider.rawValue,
+                            "path": saveResult.path,
+                            "error": saveResult.message ?? "unknown",
+                        ])
+                }
             }
         }
 
         options.cacheSnapshot?(cache)
-        let modelsDevCatalog = CostUsagePricing.modelsDevCatalog(now: now, cacheRoot: options.cacheRoot)
-        return Self.buildClaudeReportFromCache(
+        let modelsDevLoad = ModelsDevCache.load(now: now, cacheRoot: options.cacheRoot)
+        let modelsDevURL = ModelsDevCache.cacheFileURL(cacheRoot: options.cacheRoot)
+        let modelsDevAttributes = try? FileManager.default.attributesOfItem(atPath: modelsDevURL.path)
+        let modelsDevMtime = (modelsDevAttributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let modelsDevSize = (modelsDevAttributes?[.size] as? NSNumber)?.int64Value ?? 0
+        let pricingStamp = modelsDevLoad.artifact.map {
+            "modelsdev-\($0.version)-\(Int64($0.fetchedAt.timeIntervalSince1970))-\(modelsDevMtime)-\(modelsDevSize)"
+        } ?? "modelsdev-none"
+        let fingerprint = Self.claudeReportFingerprint(
             cache: cache,
             range: range,
-            modelsDevCatalog: modelsDevCatalog,
+            pricingStamp: "\(provider.rawValue)|\(options.cacheRoot?.path ?? "default")|\(pricingStamp)")
+        if let memoized = Self.memoizedDailyReport(forKey: fingerprint) {
+            return memoized
+        }
+        let report = Self.buildClaudeReportFromCache(
+            cache: cache,
+            range: range,
+            modelsDevCatalog: modelsDevLoad.artifact?.catalog,
             modelsDevCacheRoot: options.cacheRoot)
+        Self.memoizeDailyReport(report, forKey: fingerprint)
+        return report
     }
 
     private static func buildClaudeReportFromCache(
@@ -768,6 +867,10 @@ extension CostUsageScanner {
         var repricedCosts: [ClaudeDayModelKey: ClaudeRepricedCost] = [:]
 
         for row in Self.reconciledClaudeRows(cache: cache) {
+            // The cache can retain a wider window than requested; repricing rows outside the
+            // requested days cannot affect any emitted entry.
+            guard CostUsageDayRange.isInRange(dayKey: row.dayKey, since: range.sinceKey, until: range.untilKey)
+            else { continue }
             let key = ClaudeDayModelKey(day: row.dayKey, model: row.model)
             var aggregate = repricedCosts[key] ?? ClaudeRepricedCost()
             aggregate.sampleCount += 1

@@ -84,6 +84,7 @@ enum PiSessionCostScanner {
             catalog: CostUsagePricing.modelsDevCatalog(now: now, cacheRoot: options.cacheRoot),
             cacheRoot: options.cacheRoot)
         let windowExpanded = self.requestedWindowExpandsCache(range: range, cache: cache)
+        let windowExpandsBackward = self.requestedWindowExpandsBackward(range: range, cache: cache)
         let shouldRefresh = options.forceRescan
             || windowExpanded
             || refreshMs == 0
@@ -98,14 +99,18 @@ enum PiSessionCostScanner {
             let filePathsInScan = Set(files.map(\.path))
 
             for fileURL in files {
-                try self.scanPiSessionFile(
-                    fileURL: fileURL,
-                    cache: &cache,
-                    context: ScanContext(
-                        range: range,
-                        forceRescan: options.forceRescan || windowExpanded,
-                        pricingContext: pricingContext,
-                        checkCancellation: checkCancellation))
+                // Drain per file so JSON parse transients cannot accumulate for the walk.
+                // A forward window slide alone must not reparse unchanged files.
+                try autoreleasepool {
+                    try self.scanPiSessionFile(
+                        fileURL: fileURL,
+                        cache: &cache,
+                        context: ScanContext(
+                            range: range,
+                            forceRescan: options.forceRescan || windowExpandsBackward,
+                            pricingContext: pricingContext,
+                            checkCancellation: checkCancellation))
+                }
             }
             try checkCancellation?()
 
@@ -183,6 +188,14 @@ enum PiSessionCostScanner {
             return true
         }
         return false
+    }
+
+    private static func requestedWindowExpandsBackward(
+        range: CostUsageScanner.CostUsageDayRange,
+        cache: PiSessionCostCache) -> Bool
+    {
+        guard let cachedSince = cache.scanSinceKey else { return true }
+        return range.scanSinceKey < cachedSince
     }
 
     private static func defaultPiSessionsRoot(options: Options) -> URL {
