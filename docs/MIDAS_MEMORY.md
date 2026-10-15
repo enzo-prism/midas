@@ -72,9 +72,11 @@ Drivers, in order:
   `forceFullScan` for Claude, Codex, and Pi. A forward slide cannot add rows to an
   unchanged file, so freshness/incremental paths are sufficient.
 - **Retained-window union (Claude).** Scans parse against the union of the requested
-  and cached windows, clipped to 92 scan days (`retainedScanRange`). Current-30d and
-  prior-60d fetches share one cache; rows that age out of the union are pruned.
-  Claude cache artifact bumped to `claude-v6.json` for one clean rebuild.
+  and cached windows (`retainedScanRange`); only the cached-side extension is clipped
+  to 92 scan days, and the retained window always covers the full requested window
+  (requests up to 365 days are never truncated). Current-30d and prior-60d fetches
+  share one cache; rows that age out of the union are pruned. Claude cache artifact
+  bumped to `claude-v6.json` for one clean rebuild.
 - **Dirty-tracked persistence (Claude).** A scan that parsed nothing skips the day
   rebuild and the whole-cache re-encode/write.
 - **Report memoization.** Built reports are memoized under a content fingerprint of
