@@ -48,6 +48,8 @@ struct StatusMenuOverviewScrollTests {
             wheel2: 0,
             wheel3: 0)
         else { return nil }
+        // Synthetic wheel fixtures must not inherit the user's currently held modifiers.
+        cgEvent.flags = []
         return NSEvent(cgEvent: cgEvent)
     }
 
@@ -143,6 +145,9 @@ struct StatusMenuOverviewScrollTests {
         controller.overviewScrollNavigationHandlerForTesting = { steps.append($0) }
 
         let wheelNotch = try #require(self.makeScrollEvent(deltaY: -1, precise: false))
+        #expect(!wheelNotch.modifierFlags.contains(.shift))
+        #expect(wheelNotch.scrollingDeltaX == 0)
+        #expect(wheelNotch.scrollingDeltaY == -1)
         #expect(controller.handleOverviewScrollWheel(wheelNotch, menu: menu))
         #expect(steps == [.down])
     }

@@ -22,21 +22,10 @@ struct MidasProviderDetailView: View {
     }
 
     private var cloudProviderDetail: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 16) {
             self.identity
             self.spendHeadline
-            if self.accounts.count > 1 {
-                MidasAccountUsageView(accounts: self.accounts)
-            } else {
-                self.hero
-                ForEach(self.presentation.metrics) { metric in
-                    MidasAccountQuotaBar(metric: metric)
-                }
-                ForEach(self.activityRows) { metric in
-                    MidasActivityBar(metric: metric)
-                }
-                MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.presentation)
-            }
+            self.usageSection
             if let error = self.presentation.error {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Connection needs attention", systemImage: "exclamationmark.triangle")
@@ -48,6 +37,9 @@ struct MidasProviderDetailView: View {
                         .buttonStyle(.bordered)
                 }
                 .foregroundStyle(MidasTheme.warning)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 12))
             }
             if self.presentation.isStale {
                 Label("Usage may be outdated", systemImage: "clock.badge.exclamationmark")
@@ -66,22 +58,41 @@ struct MidasProviderDetailView: View {
                     self.actions.openUsage(self.presentation.provider)
                 } label: {
                     HStack {
-                        Text("Spend history").fontWeight(.medium)
+                        Label("Spend history", systemImage: "chart.bar.xaxis")
                         Spacer()
                         Image(systemName: "arrow.up.right")
                     }
-                    .padding(12)
-                    .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
             }
         }
         .foregroundStyle(MidasTheme.text)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var usageSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if self.accounts.count > 1 {
+                MidasAccountUsageView(accounts: self.accounts)
+            } else {
+                self.hero
+                ForEach(self.presentation.metrics) { metric in
+                    MidasAccountQuotaBar(metric: metric)
+                }
+                ForEach(self.activityRows) { metric in
+                    MidasActivityBar(metric: metric)
+                }
+                MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.presentation)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+    }
+
     private var estimateDetails: some View {
-        DisclosureGroup("Estimate details") {
+        DisclosureGroup(self.presentation.spend?.isBilled == true ? "Spend details" : "Estimate details") {
             VStack(alignment: .leading, spacing: 8) {
                 if let spend = self.presentation.spend {
                     Text(spend.title).fontWeight(.medium)
@@ -137,40 +148,56 @@ struct MidasProviderDetailView: View {
     }
 
     private var identity: some View {
-        HStack(alignment: .top, spacing: 12) {
-            MidasProviderLogo(provider: self.presentation.provider, size: 32)
+        HStack(spacing: 10) {
+            MidasProviderLogo(provider: self.presentation.provider, size: 24)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(self.presentation.name).font(.system(size: 20, weight: .semibold))
-            }
+            Text(self.presentation.name).font(.headline)
             Spacer(minLength: 0)
             Button { self.actions.accounts(self.presentation.provider) } label: {
-                Image(systemName: "person.crop.circle").font(.system(size: 17))
+                Image(systemName: "person.crop.circle")
+                    .frame(width: 28, height: 28)
             }
-            .buttonStyle(MidasQuietButtonStyle())
+            .buttonStyle(.borderless)
+            .controlSize(.small)
             .help("Manage accounts for \(self.presentation.name)")
             .accessibilityLabel("Manage accounts for \(self.presentation.name)")
         }
     }
 
     private var spendHeadline: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Estimated inference spend")
+        VStack(alignment: .leading, spacing: 8) {
+            Text(self.presentation.spend?.title ?? "Estimated inference spend")
                 .font(.callout).foregroundStyle(MidasTheme.secondaryText)
             Text(self.presentation.spend?.value ?? "—")
-                .font(.system(size: 46, weight: .semibold))
+                .font(.system(size: 34, weight: .semibold))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
                 .textSelection(.enabled)
             if let spend = self.presentation.spend {
-                Text(spend.period).font(.callout).foregroundStyle(MidasTheme.secondaryText)
-                    .help("Spend data updated \(spend.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                HStack(spacing: 8) {
+                    Text(spend.period)
+                    if spend.coverageNote != nil {
+                        Label("Partial", systemImage: "exclamationmark.circle")
+                            .foregroundStyle(MidasTheme.warning)
+                    }
+                }
+                .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                .help("Spend data updated \(spend.updatedAt.formatted(date: .abbreviated, time: .shortened))")
             } else {
-                Text("Estimate unavailable")
+                Text(self.presentation.spendUnavailableReason ?? "Estimate unavailable")
                     .font(.caption).foregroundStyle(MidasTheme.secondaryText)
             }
         }
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
+        .accessibilityLabel(self.presentation.spend?.title ?? "Estimated inference spend")
+        .accessibilityValue([
+            self.presentation.spend?.value ?? "Unavailable",
+            self.presentation.spend?.period ?? self.presentation.spendUnavailableReason ?? "Estimate unavailable",
+            self.presentation.spend?.coverageNote == nil ? "" : "Partial estimate",
+        ].filter { !$0.isEmpty }.joined(separator: ", "))
     }
 
     /// Activity windows shown as rows below the hero; the hero window itself is excluded.
@@ -189,16 +216,16 @@ struct MidasProviderDetailView: View {
     private var hero: some View {
         Group {
             if self.presentation.hero == nil, let metric = self.activityHero {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(metric.title).font(.callout).foregroundStyle(MidasTheme.secondaryText)
                         Spacer(minLength: 4)
                         Text(metric.valueText)
-                            .font(.system(size: 28, weight: .semibold)).monospacedDigit()
+                            .font(.title2.weight(.semibold)).monospacedDigit()
                             .foregroundStyle(MidasTheme.text)
                             .minimumScaleFactor(0.65).lineLimit(1)
                     }
-                    MidasRemainingBar(percent: metric.remainingPercent)
+                    MidasRemainingBar(percent: metric.remainingPercent, warningWhenLow: false)
                     Text(metric.detailText)
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
                     Text(
@@ -208,12 +235,12 @@ struct MidasProviderDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             } else if let metric = self.presentation.hero {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(metric.title).font(.callout).foregroundStyle(MidasTheme.secondaryText)
                         Spacer(minLength: 4)
                         Text(metric.valueText)
-                            .font(.system(size: 28, weight: .semibold)).monospacedDigit()
+                            .font(.title2.weight(.semibold)).monospacedDigit()
                             .foregroundStyle(metric.isExhausted ? MidasTheme.warning : MidasTheme.text)
                             .minimumScaleFactor(0.65).lineLimit(1)
                     }
@@ -235,8 +262,6 @@ struct MidasProviderDetailView: View {
                 }
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 14))
     }
 }

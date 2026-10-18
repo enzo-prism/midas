@@ -4,28 +4,34 @@ Midas Air replaces the main menu presentation with one native SwiftUI popover ho
 existing status-item controller. It keeps the provider engine, account coordinators, saved
 settings, and legacy menu-bar icon preferences intact. macOS 14 remains the minimum target.
 
+The compact native redesign is the **0.48.0, build 126 candidate**. Its publication is pending;
+the last verified public release is [0.47.1](https://github.com/enzo-prism/midas/releases/tag/v0.47.1-midas.2).
+
 ## Current onboarding and account coverage
 
-Version 0.35.0 introduces Services → Accounts → Overview. See [the setup guide](MIDAS_SETUP.md)
+Onboarding follows Services → Accounts → Overview. See [the setup guide](MIDAS_SETUP.md)
 for sign-in, cloud coverage, pricing, iCloud privacy, and missing-data behavior.
 `MidasOnboardingLaunch` decides first-run presentation before settings migration;
 `PreferencesSelection` persists deferred progress. `MidasSpendSetupView` uses the existing
 account coordinators and finishes without blocking on provider refreshes.
 
-The primary display is now **Estimated inference spend** for the selected period.
+The primary display is **Estimated AI token value** for the selected period, accompanied by
+recorded token totals. Both preserve the 0.47.x counting and coverage rules.
 `MidasSpendPeriod` selects actual daily history for calendar or rolling periods;
-`MidasSpendPeriodControl` and `MidasTotalSpendView` expand period choices and estimate
-coverage inline in the Air panel (never a nested `.popover` or `.focusable()` key-view loop
-inside the status-item `NSPopover`);
+`MidasSpendPeriodControl` uses a native `Menu` and `Picker` for date choices. Estimate coverage
+and usage-scope/sync details open as pages inside the same panel, with a Back action. Never add
+a nested `.popover` or `.focusable()` key-view loop inside the status-item `NSPopover`.
 `MidasAccountUsageView` keeps account capacity and reset times separate.
 `UsageStore+CloudUsage` combines available Codex account history, `MidasCodexEstimate` provides
 blended pricing, and `MidasCalibrationExchange` shares optional derived samples.
-The implementation notes below also preserve older Midas presentation decisions.
 
 ## Everyday surfaces
 
-- **Overview:** total token spend (API rates) across all enabled providers, ordered favorite provider rows, an All providers chooser, freshness and
-  connection states, refresh, settings, and Open Usage.
+- **Overview:** a 360-point panel with content-dependent height, capped at 540 points and the
+  available screen height. The total and actions stay fixed while provider rows scroll. Every
+  provider keeps its spend visible beside its name; a two-column quota grid retains independent
+  limits, percentages left, and reset times. The footer opens spend history and usage-scope/sync
+  details. Refresh, Settings, and More actions share one compact navigation capsule.
 - **Provider detail:** prominent token spend (API rates), recognizable logos, explicit periods and remaining capacity, reset
   information, and separate session constraints. Codex uses weekly remaining as its quota hero;
   missing weekly data does not turn into a session metric. Claude always pins its
@@ -38,28 +44,39 @@ The implementation notes below also preserve older Midas presentation decisions.
   the menu-bar ring. Grok Bot carries a small monochrome Grok mark (`MidasLogo-grok`, a template image).
   When Cursor does not return Grok Bot usage, the row keeps the last known value until its weekly reset,
   or shows **Unavailable** with no bar; it never becomes the headline or a low-quota warning. Other providers show one headline limit plus any tighter window.
-- **Usage window:** resizable provider navigation, Usage and Costs views, period controls,
+- **Usage window:** a native `NavigationSplitView` and selectable sidebar `List`, with Overview
+  represented by no selected provider. Provider cards precede comparison history in the overview.
+  Usage and Costs views retain period controls,
   daily history, provider-specific **Month by month** cost/token charts with 6/12-month controls,
   accessible monthly records, model breakdowns where available, and source-aware cost labels. Metered consumption,
   provider-reported costs, and API-equivalent estimates are distinct meanings.
-- **Settings:** a stable sidebar preserving General, Providers, Display, Advanced, About,
+- **Settings:** native split-view/sidebar navigation preserving General, Providers, Sync, Display, Advanced, About,
   and the optional Debug pane. Its height is constrained for smaller screens. The window is owned
   by `SettingsWindowController` on the app delegate; do not reintroduce a hidden SwiftUI
   keepalive window as the only listener for opening Settings.
-- **Branding:** a gold pixel crown beside the Midas wordmark, Midas display names and support links, and explicit
+- **Branding:** a decorative SF Symbols crown beside the Midas name in the panel and Usage sidebar,
+  Midas display names and support links, and explicit
   acknowledgment of CodexBar's MIT-licensed foundation.
 
-## Typography and crown
+## Native appearance and accessibility
 
-Midas uses native SF system typography with default letterforms, semibold headings, and
-monospaced digits for financial and quota readings. Amounts retain their one-line scaling for
-large values. The 18-point header crown uses a fixed grid of 2-point pixels. A comet-style
-highlight sweep (bright head, two-column warm trail, 90ms per column) repeats after a
-3.2-second rest while the panel is open, then a single crown tooth sparkles for 260ms;
-closing the panel cancels the task. Reduce Motion shows a static crown, as does the Usage
-window sidebar. Exact opacities live in `MidasPixelCrown.sweepOpacity` and are covered by
-`MidasPixelCrownTests`.
-The crown is decorative and hidden from accessibility.
+Midas uses the native SF Pro system font, semantic text styles, semibold headings, and
+monospaced digits for money and quota readings. Provider-detail spend uses a 34-point headline;
+large values scale on one line. System `NSColor` backgrounds, primary/secondary text, and the
+user's accent adapt to appearance and contrast settings. SF Symbols supply standard actions;
+bundled provider marks preserve service identity. The static crown is hidden from accessibility.
+
+On macOS 26 and later, `MidasNavigationGlass` applies regular Liquid Glass once to the panel's
+navigation capsule. Spend and quota content stays on solid system surfaces. Reduce Transparency
+and older macOS versions use a solid capsule with a separator border. Native sidebar, menu,
+picker, button, and toolbar components keep their system behavior; custom glass is limited to
+navigation. macOS 14 remains supported.
+
+Apple references: [Materials](https://developer.apple.com/design/human-interface-guidelines/materials),
+[custom Liquid Glass](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views),
+[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview),
+[Typography](https://developer.apple.com/design/human-interface-guidelines/typography), and
+[SF Symbols](https://developer.apple.com/design/human-interface-guidelines/sf-symbols).
 
 ## Original provider menu
 
@@ -71,10 +88,16 @@ runs preserve the original routing. Do not edit a signed app's plist to switch i
 
 ## Spend and provider semantics
 
+Local totals use all enabled providers, before Favorites filtering. Combined totals use the
+shared numeric source set through `midasProvidersForTotalDisplay()`, independent of each Mac's
+provider display preferences. `MidasRecordedTokenTotal` sums recorded tokens over the selected
+period, excludes billed organization history that can overlap coding logs, and preserves missing,
+partial, conflicting, and overflow states. Token totals are activity, not remaining quota.
+
 Claude contributes its local Claude Code transcript value at Anthropic API rates (`CostProvenance.listPriceEstimate`,
 see [Claude](claude.md#cost-usage-local-log-scan)); days with unpriced models mark the Claude row partial.
-`MidasTotalSpend` sums primary, finite, nonnegative estimates from all enabled providers, before
-Favorites filtering. It deduplicates providers, keeps currencies separate without conversion, and
+`MidasTotalSpend` sums primary, finite, nonnegative estimates from the selected source set.
+It deduplicates providers, keeps currencies separate without conversion, and
 reports coverage and reporting periods. A missing estimate is excluded rather than converted to
 zero; a genuine zero estimate remains valid. Secondary API equivalents, metered balances, and
 reset credits are not additional token spend (API rates). Provider valuation bases can differ, so this
@@ -82,6 +105,14 @@ total is a sum of usage-rate estimates, not billed charges. Billed organization 
 currently the Anthropic provider) is shown on its own row as *Billed API spend* and reported in coverage as
 "billed shown separately"; it never enters the estimate total, which also avoids double counting Claude Code
 sessions billed to an org API key.
+
+DGX Spark retains its own NVIDIA-branded card and a fixed rolling 30-day UTC window, independent
+of the spend selector. Prospective vLLM measurements show tokens and a named hosted API-equivalent
+value only when the model and token classes establish pricing. Unknown usage remains unpriced,
+pricing coverage stays explicit, and the value is neither billed spend nor measured savings.
+Private hub/folder sync, separate OpenAI account histories, stable record identities, offline
+retry, and bounded 0.47.1 history processing remain unchanged. See
+[hub setup](MIDAS_TAILSCALE_HUB.md) and [memory profiling](MIDAS_MEMORY.md).
 
 Codex keeps weekly remaining separate from session constraints, and its single menu-bar capsule
 never substitutes session data when weekly data is missing. Cursor model spend shares are not
@@ -95,8 +126,9 @@ windows. The legacy menu card shows the same rows and follows the show-used
 preference. Neither form drives Orbit or other quota rings.
 
 The menu bar defaults to **Orbit**: total token spend (API rates), followed by a ring around one
-favorite provider’s logo. Use the provider dropdown in the panel footer, or **Settings → Display → Orbit provider**. The total includes all
-enabled providers, regardless of this selection. Codex and Claude rings use total weekly remaining;
+favorite provider’s logo. Use **More actions → Menu-bar provider**, or
+**Settings → Display → Orbit provider**. The total follows the local/shared source set described
+above, regardless of the favorite selection. Codex and Claude rings use total weekly remaining;
 Claude never substitutes its 5-hour or model-only limits when weekly usage is unavailable. Cursor uses
 its real quota, and Meta uses a neutral dashed ring because it has no quota. A disabled or missing
 favorite retains its identity with unknown capacity; it never silently switches to another provider.
@@ -135,13 +167,35 @@ spend, provenance, and warning details remain in the overview and accessibility 
 
 ## Local rebuild
 
-From this repository:
+Use full Xcode 26 or later for the canonical build, full test suite, and package. This Mac has
+Xcode at `/Volumes/PortableSSD/Xcode/Xcode-27.0.0.app`; select it per command/session with
+`DEVELOPER_DIR`, without changing global `xcode-select`. Point `MIDAS_BUILD` at a verified scratch
+path to reuse dependencies. Example external paths require the PortableSSD checks in `AGENTS.md`;
+keep source and credentials internal.
 
 ```sh
+export DEVELOPER_DIR=/Volumes/PortableSSD/Xcode/Xcode-27.0.0.app/Contents/Developer
+MIDAS_BUILD=/Volumes/PortableSSD/Midas/2026-10-17-native-redesign/build
+MIDAS_PREVIEW_OUTPUT=/Volumes/PortableSSD/Midas/2026-10-17-native-redesign/previews
 make check
-swift test
-./Scripts/package_app.sh release
+swift build --scratch-path "$MIDAS_BUILD"
+swift test --scratch-path "$MIDAS_BUILD"
+swift test --scratch-path "$MIDAS_BUILD" \
+  --filter 'Midas(Presentation|TotalSpend|SpendPresentation|SpendPeriod|AccountQuotaLayout|ClaudeLimits|CursorPresentation|OrbitQuota|MenuBarPresentation)Tests'
+MIDAS_PREVIEW_OUTPUT="$MIDAS_PREVIEW_OUTPUT" \
+  swift test --scratch-path "$MIDAS_BUILD" \
+  --filter 'MidasPresentationTests/export'
 ```
+
+Initial design exploration used CLT-only SDK/macro workarounds and an isolated validation
+manifest that excluded XCTest-only files. Those historical results are not a full-suite pass.
+The release candidate uses full Xcode and the canonical `Package.swift`; final release
+validation, signing, and publication remain pending.
+
+Preview exports use synthetic accounts and isolated stores, with no provider or Keychain probes.
+Review light/dark, empty, stale, unavailable, exhausted, multi-account, and accessibility fixtures.
+Follow the repository's no-live-probe test policy. Packaging remains separate:
+`./Scripts/package_app.sh release`.
 
 The packaging script defaults to the Midas Developer ID identity (team `L49MKXGVM4`); pass
 `APP_TEAM_ID` and `APP_IDENTITY` only to build for a different signing identity. Use
@@ -187,18 +241,22 @@ in this inherited README are not Midas releases.
 - `MidasAirCoordinator.swift`: native presentation lifetime and existing action routing.
 - `MidasPresentation.swift`: provider presentation and navigation state.
 - `MidasTotalSpend.swift`, `MidasTotalSpendView.swift`: estimate aggregation and shared total
-  display. Coverage expands inline; do not restore a nested `.popover` inside Air.
+  display. Air opens coverage on an in-panel page with Back; do not restore a nested `.popover`.
 - `MidasMenuBarPresentation.swift`, `MidasMenuBarView.swift`: typed status readings and passive native rendering.
 - `StatusItemController+MidasMenuBar.swift`: status-item integration, activity filtering, and freshness updates.
-- `MidasPanelView.swift`, `MidasProviderDetailView.swift`: compact surfaces.
-- `MidasSpendPeriod.swift`, `MidasSpendPeriodPicker.swift`: period math in each source’s reporting time zone (local scans vs. UTC cloud/billed days) and the inline period list.
+- `MidasPanelView.swift`, `MidasProviderDetailView.swift`: fixed summary/actions, scrolling
+  compact provider rows, in-panel information pages, and provider details.
+- `MidasSpendPeriod.swift`, `MidasSpendPeriodPicker.swift`: period math in each source’s reporting
+  time zone (local scans vs. UTC cloud/billed days) and the native date menu.
 - `CodexAccountUsageSnapshotStore.swift`: last-known Codex quota hydration; match on non-conflicting identity, and treat managed `providerAccountID` as the visible workspace when `workspaceAccountID` is absent.
 - `MidasAppcast.swift`, `MidasSignedReleaseUpdater.swift`: public-feed ZIP download when Sparkle cannot run.
-- `MidasUsageWindowView.swift`, `MidasUsageHistoryView.swift`, `MidasCostPresentation.swift`: history and costs.
+- `MidasUsageWindowView.swift`, `MidasUsageHistoryView.swift`, `MidasCostPresentation.swift`: native
+  sidebar navigation, provider cards, history, and costs.
 - `MidasMonthlySpend.swift`, `MidasMonthlySpendView.swift`: validated calendar-month subtotals,
   compatible month-to-date comparisons, native chart selection, and monthly records. See
   [monthly spend](MIDAS_MONTHLY_SPEND.md).
-- `MidasDesignSystem.swift`, `MidasProviderLogo.swift`: adaptive visual tokens and provider identity.
+- `MidasDesignSystem.swift`, `MidasProviderLogo.swift`: system colors, panel dimensions,
+  accessibility-aware navigation glass, and provider identity.
 - `PreferencesView.swift`, `PreferencesAboutPane.swift`: sidebar settings and product identity.
 
 Focused model tests cover quota direction, unavailable/stale states, account boundaries, cost
@@ -236,6 +294,6 @@ limits separate. Claude's local dollar estimate appears once per provider.
 
 Settings → Display → Track all connected accounts refreshes every configured account independently of the legacy menu layout. In Codex details, connected accounts show separate weekly/session limits and errors. The selected account controls the menu-bar ring; quota percentages are never summed.
 
-When enabled, Codex cost history scans the ambient Codex home and every managed account home, including archived sessions, in one scanner pass. Existing session/file deduplication prevents copied history from multiplying the total. Root changes invalidate the cache; late results from a previous scope cannot replace current results. The combined provider estimate contributes once to the existing Codex + Cursor + Meta total.
+When enabled, Codex cost history scans the ambient Codex home and every managed account home, including archived sessions, in one scanner pass. Existing session/file deduplication prevents copied history from multiplying the total. Root changes invalidate the cache; late results from a previous scope cannot replace current results. The combined provider estimate contributes once to the total for the selected local/shared source set.
 
 This is local-history coverage, not an account-wide billing export. Older session logs do not establish an account-by-account cost split; activity on other devices is absent unless its logs are present here. Cursor uses its connected web-session history, and Meta uses local Muse history. Adding account credentials alone cannot manufacture missing token records.

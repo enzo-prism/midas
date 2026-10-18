@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.48.0 — Unreleased
+
+- Replace the large menu-bar panel with a compact, content-sized 360-point panel, capped at 540 points. Keep the total and actions fixed while provider rows scroll.
+- Keep each provider's dollar estimate beside its name and show independent usage limits in a compact grid, including percentages left, reset times, unavailable readings, and last-known warnings.
+- Use native SF Pro typography, SF Symbols, system colors, and the user's accent. Limit macOS 26 Liquid Glass to one navigation capsule, with a solid fallback for Reduce Transparency and older macOS versions.
+- Use native date-menu selection and in-panel Back navigation for estimate coverage and sync details. Give Usage and Settings native selectable sidebars, and show provider cards before comparison history.
+- Preserve recorded-token totals, separate account quotas, DGX Spark's explicit pricing coverage, private hub/folder sync, and the 0.47.1 memory improvements. Missing history remains unavailable; estimated value and billed API spend keep separate accounting.
+
+Build 126 candidate. Signing, notarization, GitHub publication, and Sparkle availability are pending.
+
 ## Midas 0.47.1 — October 17, 2026
 
 - Reduce large shared-history allocation: unchanged records skip canonical JSON, day/model totals accumulate without a second value corpus, and export reuses bounded event bookkeeping.

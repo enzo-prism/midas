@@ -5,6 +5,8 @@ struct MidasTotalSpendView: View {
     var tokenTotal: MidasRecordedTokenTotal?
     var periodLabel: String?
     var periodControl: AnyView?
+    var compact = false
+    var coverageAction: (() -> Void)?
     @State private var showsCoverage = false
 
     private var total: MidasTotalSpend {
@@ -13,17 +15,22 @@ struct MidasTotalSpendView: View {
 
     var body: some View {
         let total = self.total
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Estimated AI token value")
-                .font(.callout).foregroundStyle(MidasTheme.secondaryText)
+        VStack(alignment: .leading, spacing: self.compact ? 5 : 10) {
+            HStack {
+                Text("Estimated AI token value")
+                    .font(self.compact ? .system(size: 11, weight: .medium) : .callout)
+                    .foregroundStyle(MidasTheme.secondaryText)
+                Spacer(minLength: 4)
+                if self.compact, let periodControl { periodControl }
+            }
             if total.totals.isEmpty {
-                Text("—").font(.system(size: 44, weight: .semibold))
+                Text("—").font(.system(size: self.compact ? 34 : 44, weight: .semibold))
                     .accessibilityLabel("Estimated AI token value unavailable")
             } else {
                 ForEach(total.totals) { currency in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(MidasOverviewMoney.format(currency.amount, currency: currency.currency))
-                            .font(.system(size: 44, weight: .semibold))
+                            .font(.system(size: self.compact ? 34 : 44, weight: .semibold))
                             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
                             .textSelection(.enabled)
                         if total.totals.count > 1 {
@@ -34,7 +41,7 @@ struct MidasTotalSpendView: View {
             }
             if let tokenTotal {
                 Text(tokenTotal.label)
-                    .font(.system(.title3, design: .rounded).weight(.medium))
+                    .font(self.compact ? .system(size: 12, weight: .medium) : .title3.weight(.medium))
                     .monospacedDigit()
                     .textSelection(.enabled)
                     .accessibilityIdentifier("midas-recorded-token-total")
@@ -42,22 +49,37 @@ struct MidasTotalSpendView: View {
                         + "Missing records and provider quota percentages are excluded.")
             }
             HStack(alignment: .firstTextBaseline) {
-                if let periodControl {
+                if !self.compact, let periodControl {
                     periodControl
-                } else if !total.totals.isEmpty || self.periodLabel != nil {
+                } else if !self.compact || self.periodControl == nil {
                     Text(self.periodLabel ?? total.periodText)
+                } else {
+                    Text(total.includedProviderCount == total.providerCount
+                        ? "\(total.providerCount) \(total.providerCount == 1 ? "provider" : "providers")"
+                        : "\(total.includedProviderCount) of \(total.providerCount) providers")
                 }
                 Spacer(minLength: 8)
                 if !self.presentations.isEmpty {
-                    Button(self.coverageLabel) { self.showsCoverage.toggle() }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(self.isPartial ? MidasTheme.warning : MidasTheme.secondaryText)
-                        .accessibilityHint("Shows which providers contribute to the estimate")
+                    Button {
+                        if let coverageAction {
+                            coverageAction()
+                        } else {
+                            self.showsCoverage.toggle()
+                        }
+                    } label: {
+                        Label(
+                            self.coverageLabel,
+                            systemImage: self.isPartial ? "exclamationmark.circle" : "info.circle")
+                            .frame(minHeight: 20)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(self.isPartial ? MidasTheme.warning : MidasTheme.secondaryText)
+                    .accessibilityHint("Shows which providers contribute to the estimate")
                 }
             }
-            .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            .font(self.compact ? .system(size: 11) : .caption).foregroundStyle(MidasTheme.secondaryText)
             if self.showsCoverage {
-                self.coverage
+                MidasSpendCoverageView(presentations: self.presentations)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,11 +93,14 @@ struct MidasTotalSpendView: View {
     private var coverageLabel: String {
         self.total.totals.isEmpty ? "Estimate unavailable" : self.isPartial ? "Partial total" : "Estimate details"
     }
+}
 
-    private var coverage: some View {
+struct MidasSpendCoverageView: View {
+    let presentations: [MidasProviderPresentation]
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Estimate coverage").font(.callout.weight(.semibold))
-            Text(self.total.coverageText).font(.caption)
+            Text(MidasTotalSpend(presentations: self.presentations).coverageText).font(.caption)
             ForEach(self.presentations, id: \.provider) { item in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.name).font(.caption.weight(.semibold))

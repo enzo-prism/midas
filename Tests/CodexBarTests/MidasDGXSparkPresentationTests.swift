@@ -233,6 +233,94 @@ struct MidasDGXSparkPresentationTests {
         }
     }
 
+    @Test func compactSparkAccessibilityRetainsItsOwnLastReceivedStatus() {
+        let priced = DGXSparkPricing.project(
+            snapshot: self.snapshot([self.day("2026-10-18", input: 7, cached: 0, output: 1)]),
+            now: self.now)
+        let stale = MidasDGXSparkPresentation.make(snapshot: priced, now: self.now.addingTimeInterval(3600))
+        var item = MidasProviderPresentation.make(
+            provider: .localInference,
+            card: nil,
+            snapshot: nil,
+            tokenSnapshot: nil,
+            isRefreshing: false,
+            isStale: false)
+        item.dgxSpark = stale
+        let summary = MidasCompactAccessibility.summary(item)
+        #expect(stale.isStale)
+        #expect(!item.isStale)
+        for text in ["Last received", "8 recorded tokens", "8 of 8 tokens priced", "API-equivalent", "not a bill"] {
+            #expect(summary.contains(text))
+        }
+        #expect(!summary.contains("Limit unavailable"))
+        #expect(!summary.localizedCaseInsensitiveContains("quota"))
+        #expect(!summary.contains("%"))
+    }
+
+    @Test func compactSparkAccessibilityUsesFixedThirtyDayValueInsteadOfSelectedMonth() throws {
+        let priced = DGXSparkPricing.project(
+            snapshot: self.snapshot([
+                self.day("2026-09-18", input: 120_000_000, cached: 90_000_000, output: 4_000_000),
+                self.day("2026-10-18", input: 12_000_000, cached: 9_000_000, output: 400_000),
+            ]),
+            now: self.now)
+        let spark = MidasDGXSparkPresentation.make(snapshot: priced, now: self.now)
+        let selectedAmount = try #require(MidasSpendPeriod.month(year: 2026, month: 9)
+            .amount(snapshot: priced, timeZone: MidasSpendPeriod.utc, now: self.now)?.dollars)
+        #expect(selectedAmount == 12.50)
+        #expect(spark.amount == 1.25)
+        var item = MidasProviderPresentation.make(
+            provider: .localInference,
+            card: nil,
+            snapshot: nil,
+            tokenSnapshot: nil,
+            isRefreshing: false,
+            isStale: false)
+        item.dgxSpark = spark
+        item.spend = MidasSpendPresentation(
+            title: "API-equivalent value",
+            value: selectedAmount.formatted(.currency(code: "USD")),
+            period: "Sep 2026",
+            detail: "Selected-month aggregate remains separate from the Spark's rolling window.",
+            updatedAt: self.now,
+            amount: selectedAmount,
+            currency: "USD",
+            secondaryValue: nil,
+            secondaryLabel: nil,
+            isEstimate: true)
+        let summary = MidasCompactAccessibility.summary(item)
+        #expect(summary.contains(MidasOverviewMoney.format(1.25, currency: "USD")))
+        #expect(!summary.contains(MidasOverviewMoney.format(selectedAmount, currency: "USD")))
+        #expect(summary.localizedCaseInsensitiveContains("last 30 days UTC"))
+        #expect(summary.contains("API-equivalent"))
+        #expect(summary.contains("not a bill"))
+        #expect(!summary.contains("Limit unavailable"))
+    }
+
+    @Test func compactSparkAccessibilityKeepsMissingActivityDifferentFromKnownZero() {
+        var item = MidasProviderPresentation.make(
+            provider: .localInference,
+            card: nil,
+            snapshot: nil,
+            tokenSnapshot: nil,
+            isRefreshing: false,
+            isStale: false)
+        item.dgxSpark = MidasDGXSparkPresentation.make(snapshot: nil, now: self.now)
+        let missing = MidasCompactAccessibility.summary(item)
+        #expect(missing.contains("Unavailable"))
+        #expect(missing.contains("Waiting for recorded usage"))
+        #expect(!missing.contains("0 recorded tokens"))
+        item.dgxSpark = MidasDGXSparkPresentation.make(
+            snapshot: DGXSparkPricing.project(
+                snapshot: self.snapshot([self.day("2026-10-18", input: 0, cached: 0, output: 0)]),
+                now: self.now),
+            now: self.now)
+        let zero = MidasCompactAccessibility.summary(item)
+        #expect(zero.contains("0 recorded tokens"))
+        #expect(zero.contains(MidasOverviewMoney.format(0, currency: "USD")))
+        #expect(!zero.contains("Limit unavailable"))
+    }
+
     private func day(_ date: String, input: Int, cached: Int, output: Int) -> CostUsageDailyReport.Entry {
         .init(
             date: date,

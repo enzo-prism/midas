@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.47.1**, build **125**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.48.0**, build **126** (native redesign candidate). 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -32,6 +32,26 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.48.0 changes: native macOS redesign
+
+Version 0.48.0, build 126, adopts a compact native menu-bar panel, system typography,
+SF Symbols, semantic system colors, and macOS 26 Liquid Glass navigation controls.
+Reduce Transparency and older macOS versions use an opaque navigation surface.
+The panel is 360 points wide, with a dynamic height capped at 540 points. Exact dollar
+amounts, independent account allowances, reset times, and estimate coverage remain visible.
+Usage history and Settings use native split-view sidebars. Coverage and sync status open
+inside the panel; direct menus keep common actions short.
+
+This integrates on top of 0.47.1: shared usage, both-account history, DGX Spark pricing
+coverage and token totals, and memory improvements are preserved. Local API-equivalent
+value remains an estimate, not a bill; billed provider charges stay separate.
+
+Release verification is pending. Full Xcode is available at
+`/Volumes/PortableSSD/Xcode/Xcode-27.0.0.app/Contents/Developer`; set `DEVELOPER_DIR`
+per command rather than changing the machine's selected developer tools. Use the canonical
+package and full XCTest/Swift Testing suite for release validation, superseding the initial
+CLT-only preview workaround.
 
 ## 0.47.1 changes: shared-history performance
 

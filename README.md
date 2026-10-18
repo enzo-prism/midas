@@ -32,6 +32,26 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.48.0 candidate: a compact native Mac interface
+
+The native redesign is prepared for **0.48.0, build 126**; publication is pending.
+The menu-bar panel is narrower and sizes to its content, with the total fixed above scrolling
+provider rows. Each provider keeps its dollar estimate, independent usage limits, percentage
+left, and reset time visible. A native date menu selects the spend period; coverage and sync
+details open inside the panel with a Back button.
+
+SF Pro typography, SF Symbols, system colors, and the Mac's accent replace custom interface
+styling. On macOS 26 and later, one Liquid Glass capsule groups navigation actions, with a
+solid fallback for Reduce Transparency and older macOS versions. Usage and Settings use native
+sidebars. macOS 14 remains supported.
+
+Estimated AI token value remains an estimate, with recorded tokens shown separately. Missing
+data stays unavailable, partial totals stay labeled, and billed Anthropic spend stays outside
+the estimate sum. Separate account limits, DGX Spark pricing coverage, private usage sync, and
+the 0.47.1 history-performance improvements retain their existing rules. See
+[Midas Air](docs/MIDAS_AIR.md) for behavior and verification boundaries; use
+[GitHub Releases](https://github.com/enzo-prism/midas/releases/latest) for the published version.
+
 ## Midas 0.47.1: shared-history performance
 
 Large shared histories now decode and encode in bounded batches. Recurring sync

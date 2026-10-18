@@ -44,18 +44,21 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
         }
         controller.lastMenuProvider = self.navigation.provider ?? controller.lastMenuProvider
         let availableHeight = button.window?.screen?.visibleFrame.height ?? 800
-        let height = min(660, max(280, availableHeight - 80))
+        let height = MidasPanelLayout.height(
+            providerCount: controller.store.midasProvidersForUsageDisplay().count,
+            availableHeight: availableHeight,
+            showsDetail: self.navigation.provider != nil)
         let view = MidasPanelView(
             store: controller.store,
             settings: controller.settings,
             navigation: self.navigation,
             presentation: self.presentation,
             actions: self.actions)
-            .frame(width: 400, height: height)
+            .frame(width: MidasPanelLayout.width, height: height)
             .tint(MidasTheme.accent)
             .onExitCommand { [weak self] in self?.closePopover() }
         self.popover.contentViewController = NSHostingController(rootView: view)
-        self.popover.contentSize = NSSize(width: 400, height: height)
+        self.popover.contentSize = NSSize(width: MidasPanelLayout.width, height: height)
         self.popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         NSApp.activate(ignoringOtherApps: true)
         self.popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)

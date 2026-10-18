@@ -91,62 +91,27 @@ struct PreferencesView: View {
         min(PreferencesTab.windowHeight, max(420, (NSScreen.main?.visibleFrame.height ?? 800) - 80))
     }
 
+    private var tabSelection: Binding<PreferencesTab?> {
+        Binding(
+            get: { self.selection.tab },
+            set: { tab in
+                guard let tab, self.visibleTabs.contains(tab) else { return }
+                self.selection.tab = tab
+            })
+    }
+
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Midas")
-                        .font(.system(size: 26, weight: .semibold, design: .rounded))
-                    Text("Your workspace, your way.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
-
-                VStack(spacing: 6) {
-                    ForEach(self.visibleTabs, id: \.self) { tab in
-                        Button {
-                            self.selection.tab = tab
-                        } label: {
-                            Label(tab.title, systemImage: tab.symbol)
-                                .font(.system(size: 13, weight: self.selection.tab == tab ? .semibold : .regular))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 11)
-                                .contentShape(Rectangle())
-                                .background(
-                                    self.selection.tab == tab ? MidasTheme.accent.opacity(0.13) : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: 10))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(self.selection.tab == tab ? .isSelected : [])
-                    }
-                }
-                Button(self.selection.spendSetupPending ? "Continue setup" : "Set up Midas") {
-                    if !self.selection.spendSetupPending { self.selection.spendSetupStep = .services }
-                    self.showsSpendSetup = true
-                }
-                .buttonStyle(.borderedProminent)
-                Spacer()
-                Text("Made for a little more clarity.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-            }
-            .padding(16)
-            .frame(width: 196)
-            .background(MidasTheme.surface)
-
-            VStack(alignment: .leading, spacing: 24) {
-                Text(self.selection.tab.title)
-                    .font(.system(size: 27, weight: .semibold))
-                self.selectedPane
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            .padding(28)
-            .background(MidasTheme.background)
+        NavigationSplitView {
+            self.sidebar
+                .navigationSplitViewColumnWidth(min: 180, ideal: 196, max: 260)
+        } detail: {
+            self.selectedPane
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(24)
+                .background(MidasTheme.background)
+                .navigationTitle(self.selection.tab.title)
         }
+        .navigationSplitViewStyle(.balanced)
         .foregroundStyle(MidasTheme.text)
         .tint(MidasTheme.accent)
         .id(self.settings.appLanguage)
@@ -185,6 +150,34 @@ struct PreferencesView: View {
         }
         .onChange(of: self.settings.debugMenuEnabled) { _, _ in
             self.ensureValidTabSelection()
+        }
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "crown.fill")
+                    .foregroundStyle(MidasTheme.accent)
+                    .accessibilityHidden(true)
+                Text("Midas").font(.headline)
+            }
+            .padding(16)
+            List(selection: self.tabSelection) {
+                ForEach(self.visibleTabs, id: \.self) { tab in
+                    Label(tab.title, systemImage: tab.symbol)
+                        .tag(tab)
+                }
+            }
+            .listStyle(.sidebar)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button(self.selection.spendSetupPending ? "Continue setup" : "Set up Midas") {
+                    if !self.selection.spendSetupPending { self.selection.spendSetupStep = .services }
+                    self.showsSpendSetup = true
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+                .padding(16)
+            }
         }
     }
 

@@ -358,7 +358,7 @@ struct MidasActivityBar: View {
                 Text(self.metric.valueText).monospacedDigit()
             }
             .font(.callout)
-            MidasRemainingBar(percent: self.metric.remainingPercent)
+            MidasRemainingBar(percent: self.metric.remainingPercent, warningWhenLow: false)
             Text(self.metric.detailText)
                 .font(.caption).foregroundStyle(MidasTheme.secondaryText)
         }

@@ -1,16 +1,14 @@
 import CodexBarCore
 import SwiftUI
 
+/// A native menu keeps date selection out of the compact panel's content flow.
 struct MidasSpendPeriodControl: View {
     @Bindable var settings: SettingsStore
     let store: UsageStore
-    @State private var isExpanded = false
 
     private var months: [String] {
-        let providers = self.store.midasProvidersForUsageDisplay()
-        let dates = providers.flatMap { provider -> [String] in
-            let token = self.store.displayTokenSnapshot(for: provider)
-            return token?.daily.map(\.date) ?? []
+        let dates = self.store.midasProvidersForUsageDisplay().flatMap { provider in
+            self.store.displayTokenSnapshot(for: provider)?.daily.map(\.date) ?? []
         }
         return MidasSpendPeriodChoices.recordedMonths(
             dates: dates,
@@ -19,107 +17,35 @@ struct MidasSpendPeriodControl: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button { self.isExpanded.toggle() } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: "calendar").foregroundStyle(MidasTheme.secondaryText)
-                    Text(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
-                        .label(reportingTimeZone: self.store.midasDisplayTimeZone))
-                        .lineLimit(1)
-                    Image(systemName: self.isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                .font(.system(size: 12, weight: .medium))
-            }
-            .buttonStyle(MidasPeriodButtonStyle(selected: self.isExpanded))
-            .accessibilityLabel("Spend period")
-            .accessibilityValue(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
-                .label(reportingTimeZone: self.store.midasDisplayTimeZone))
-            .help("Choose the date range for estimated spend")
-            if self.isExpanded {
-                VStack(alignment: .leading, spacing: 4) {
-                    self.option("This month", selection: "currentMonth", icon: "calendar")
-                    self.option("Last 30 days", selection: "rolling30Days", icon: "clock.arrow.circlepath")
-                    if !self.months.isEmpty {
-                        Text("RECORDED MONTHS")
-                            .font(.system(size: 10, weight: .semibold)).tracking(0.7)
-                            .foregroundStyle(MidasTheme.secondaryText)
-                            .padding(.top, 6)
-                            .padding(.horizontal, 6)
+        Menu {
+            Picker("Spend period", selection: self.$settings.midasSpendPeriodSelection) {
+                Text("This month").tag("currentMonth")
+                Text("Last 30 days").tag("rolling30Days")
+                if !self.months.isEmpty {
+                    Section("Recorded months") {
                         ForEach(self.months, id: \.self) { month in
-                            self.option(
-                                MidasSpendPeriod(selection: month).label,
-                                selection: month,
-                                icon: "archivebox")
+                            Text(MidasSpendPeriod(selection: month).label).tag(month)
                         }
                     }
                 }
-                .accessibilityElement(children: .contain)
             }
+            .pickerStyle(.inline)
+            Divider()
+            Text(MidasSpendPeriodChoices.dateLabel(
+                selection: self.settings.midasSpendPeriodSelection,
+                timeZone: self.store.midasDisplayTimeZone))
+        } label: {
+            Text(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+                .label(reportingTimeZone: self.store.midasDisplayTimeZone))
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
         }
-    }
-
-    private func select(_ selection: String) {
-        self.settings.midasSpendPeriodSelection = selection
-        self.isExpanded = false
-    }
-
-    private func option(_ title: String, selection: String, icon: String) -> some View {
-        let selected = self.settings.midasSpendPeriodSelection == selection
-        return Button { self.select(selection) } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon).frame(width: 16).foregroundStyle(MidasTheme.secondaryText)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 13, weight: selected ? .semibold : .medium))
-                    Text(MidasSpendPeriodChoices.dateLabel(
-                        selection: selection,
-                        timeZone: self.store.midasDisplayTimeZone))
-                        .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
-                }
-                Spacer(minLength: 6)
-                Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(MidasTheme.accent).opacity(selected ? 1 : 0).accessibilityHidden(true)
-            }.frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
-        }
-        .buttonStyle(MidasPeriodButtonStyle(selected: selected))
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
-private struct MidasPeriodButtonStyle: ButtonStyle {
-    let selected: Bool
-    func makeBody(configuration: Configuration) -> some View {
-        Surface(configuration: configuration, selected: self.selected)
-    }
-
-    private struct Surface: View {
-        let configuration: ButtonStyleConfiguration
-        let selected: Bool
-        @State private var hovered = false
-        @Environment(\.isEnabled) private var enabled
-
-        var body: some View {
-            self.configuration.label
-                .padding(.horizontal, 10).padding(.vertical, 7)
-                .foregroundStyle(MidasTheme.text)
-                .background(self.fill, in: RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(
-                            self.selected ? MidasTheme.accent.opacity(0.45)
-                                : MidasTheme.secondaryText.opacity(self.hovered ? 0.3 : 0.12),
-                            lineWidth: 1)
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 8))
-                .opacity(self.enabled ? 1 : 0.45)
-                .onHover { self.hovered = $0 }
-        }
-
-        private var fill: Color {
-            if self.configuration.isPressed { return MidasTheme.accent.opacity(0.24) }
-            if self.selected { return MidasTheme.accent.opacity(self.hovered ? 0.2 : 0.12) }
-            return self.hovered ? MidasTheme.surface : MidasTheme.surface.opacity(0.35)
-        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .controlSize(.small)
+        .accessibilityLabel("Spend period")
+        .accessibilityValue(MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+            .label(reportingTimeZone: self.store.midasDisplayTimeZone))
+        .help("Choose the date range for estimated spend")
     }
 }
 

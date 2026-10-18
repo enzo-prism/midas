@@ -14,7 +14,7 @@ inherited naming.
 
 - **Midas source:** [enzo-prism/midas](https://github.com/enzo-prism/midas)
 - **Midas issues:** [issue tracker](https://github.com/enzo-prism/midas/issues)
-- **Requirements:** macOS 14 or later and a compatible Swift 6/Xcode toolchain.
+- **Requirements:** macOS 14 or later; full Xcode 26 or later is preferred for builds and tests.
 
 ## New-user setup
 
@@ -23,15 +23,24 @@ multi-account Codex tracking, automatic estimates, and coverage limitations.
 
 ## Current features
 
-Midas Air provides a native overview panel, a resizable Usage window, sidebar settings, and
-bundled provider logos. Token spend (API rates) and remaining capacity are prominent. The overview total
-includes enabled providers outside Favorites and discloses missing estimates and mixed periods.
-Different currencies stay separate; usage-rate estimates are not billed charges.
+The **0.48.0, build 126 candidate** adds a compact native panel, SF Pro/SF Symbols, adaptive
+system colors, and a macOS 26 Liquid Glass navigation capsule with an older-system/accessibility
+fallback. Usage and Settings have native selectable sidebars. Publication is pending; check
+[GitHub Releases](https://github.com/enzo-prism/midas/releases/latest) for the current installer.
+
+The overview keeps estimated AI token value, recorded tokens, per-provider dollars, remaining
+capacity, and reset times visible. Local totals include enabled providers outside Favorites;
+combined totals use the same shared source set on every Mac. Missing estimates and partial
+coverage stay explicit. Different currencies stay separate; estimates are not billed charges.
+Anthropic billed spend stays separate to avoid counting activity twice.
 
 Orbit shows total token spend beside one favorite provider’s capacity ring. Codex uses weekly
 remaining and retains reset-credit details in the panel.
-Cursor preserves actual usage pools and request counts. Meta supports local Muse usage history
-and cost estimates without inventing quota availability.
+Cursor preserves actual usage pools and request counts. Meta uses observed plan limits when
+available, with labeled recorded-activity baselines as fallback, and never drives a quota ring.
+Private Tailscale hub or shared-folder sync, independent OpenAI account history, and DGX Spark's
+recorded tokens and explicitly priced API-equivalent value retain the 0.47.x behavior. Unknown
+models and incomplete token classes remain unpriced. See [hub setup](MIDAS_TAILSCALE_HUB.md).
 
 See [Midas Air](MIDAS_AIR.md) for implementation boundaries and [Codex](codex.md) for provider
 behavior. Orbit is the default; Ledger, Focus, Constellation, and Legacy remain available in
@@ -40,8 +49,9 @@ implemented state behavior. Legacy restores the original icon preferences.
 
 ## Switch providers and update
 
-Open Midas and use the provider dropdown in the footer to change the menu-bar circle immediately.
-The dropdown selects Orbit; it does not change which providers contribute to the spend total.
+In the native redesign, choose **More actions → Menu-bar provider** to change the Orbit provider.
+This does not change which providers contribute to the total. **Settings → Display → Orbit provider**
+provides the same preference.
 Hover over Orbit to see 30-day token counts for the favorite and all enabled providers.
 
 Choose **Check for Updates** from the panel’s More actions menu or Settings → About.
@@ -54,7 +64,7 @@ not the Midas release path. A Sparkle release requires the Developer ID private 
 
 ## Build and verify
 
-Run from the repository root:
+With full Xcode selected, run from the repository root:
 
 ```sh
 make check
@@ -64,7 +74,9 @@ swift test
 
 The packaging script defaults to the Midas Developer ID identity (`L49MKXGVM4`); pass
 `APP_TEAM_ID` and `APP_IDENTITY` only to override it for a different Mac.
-See [Midas Air](MIDAS_AIR.md#local-rebuild) for details.
+See [Midas Air](MIDAS_AIR.md#local-rebuild) for the selected full Xcode installation, external
+scratch paths, synthetic preview exports, and historical CLT-only limitations. Release validation
+uses the canonical package; a focused or CLT-only pass does not establish a complete XCTest pass.
 
 For a focused Midas regression pass:
 
@@ -91,7 +103,9 @@ Generated work files and app bundles are excluded from Git.
 
 ## Navigation
 
-Left-click the status icon to open Midas Air. Use **Open Usage** for the larger window.
+Left-click the status icon to open Midas Air. Use **Spend history** for the larger window.
+In the native redesign, the date menu changes the value period without changing quota resets;
+estimate coverage and usage-scope/sync details open inside the panel with Back navigation.
 Right-click the icon, or choose **Provider actions & accounts…** inside the panel, for the
 original provider menu and existing account actions. Provider account settings retain the
 selected provider.
@@ -100,9 +114,13 @@ selected provider.
 
 | Surface | Current |
 | --- | --- |
-| Source on `main` | **0.37.0**, build **109** (own identity) |
-| Signed Sparkle / GitHub latest | **0.36.0**, tag `v0.36.0-midas.1` (CodexBar-era identity) |
-| Marketing site (`midas-site` / Vercel `midas-by-prism`) | **0.36.0** download |
+| Native redesign candidate | **0.48.0**, build **126**, publication pending |
+| Last verified source on `main` | **0.47.1**, build **125** |
+| Last verified GitHub latest | **0.47.1**, tag `v0.47.1-midas.2` |
+| Last verified marketing-site download (`midas-ai.dev`) | **0.47.1**, tag `v0.47.1-midas.2` |
+
+The verified release/site rows were checked during candidate preparation on October 17, 2026.
+Refresh them after publication; candidate source and local validation do not establish a release.
 
 Push source changes to `enzo-prism/midas`. Review `git status` and the staged diff before
 committing; exclude generated bundles, logs, credentials, and local configuration.
