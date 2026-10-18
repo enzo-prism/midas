@@ -12,8 +12,9 @@ Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` w
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.48.2**, build **128**, tagged
-`v0.48.2-midas.1`, superseding 0.48.1 (build 127, `v0.48.1-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.48.3**, build **129**, tagged
+`v0.48.3-midas.1`, superseding 0.48.2 (build 128, `v0.48.2-midas.1`),
+0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
 0.47.0 (build 124, `v0.47.0-midas.1`), and the earlier 0.46.x releases. Check GitHub releases for the current published binary; source and installed local
@@ -42,7 +43,25 @@ history, menus, setup previews, and widgets honor the selected identity. Missing
 mismatched accounts cannot fall back to another login. Mixed-account local and shared
 Codex totals are excluded while scoped; saved accounts and other providers remain intact.
 Single-account refresh retains verified identity when the quota response omits email.
-See [setup](MIDAS_SETUP.md#limit-codex-to-one-openai-account). Publication is pending.
+See [setup](MIDAS_SETUP.md#limit-codex-to-one-openai-account).
+
+The exact source `e20f0e760` passed 4,629 local tests in 525 suites and 44 bounded groups,
+with no test failures or runner timeouts. Strict lint passed with zero violations. Synthetic
+Codex light/dark provider fixtures were rendered and inspected. Remote CI is tracked separately
+in [run 39156445988](https://github.com/enzo-prism/midas/actions/runs/39156445988).
+
+Apple notarization submission `afad4fa0-0c1a-4f6f-853e-16248a69429a` was Accepted.
+App and dSYM share arm64 UUID `5C1F26A8-9DF2-3D7F-9FFC-25550B06CF4D`.
+Stapling, Gatekeeper, archive verification against the embedded Sparkle public key,
+both signed XML feeds, downloaded draft assets, anonymous public downloads, and both latest
+feed URLs passed. Published October 18, 2026; archive SHA-256:
+`57c9df5bf92aa3b638ae21407addde49509b67a6e689b14a6c0fad7136a0365b`.
+
+The installed 0.48.2 app discovered 0.48.3 through Sparkle, installed it, and relaunched.
+About shows 0.48.3 (129); the running installed binary matches the verified public archive.
+The selected-account setting survived and live Codex quota/reset readings remained scoped.
+Website commit `4c122d9` reached production Ready as `dpl_2U7UwAwEohYZqS31J7VCWCHp2dnw`;
+all 18 production browser checks passed, and both live download links resolve to the verified archive.
 
 ## 0.48.2 changes: AI Spend heading
 

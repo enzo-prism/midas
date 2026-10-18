@@ -32,6 +32,15 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.48.3: selected OpenAI account
+
+**0.48.3, build 129** is published as
+[v0.48.3-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.3-midas.1).
+An optional local account filter keeps Codex quotas, resets, cloud history, menus, and
+widgets tied to one OpenAI identity. Missing accounts never fall back to another login.
+Mixed-account local and shared totals are excluded while scoped; saved connections and
+other providers remain unchanged. See [setup](docs/MIDAS_SETUP.md#limit-codex-to-one-openai-account).
+
 ## Midas 0.48.2: AI Spend
 
 **0.48.2, build 128** is published as

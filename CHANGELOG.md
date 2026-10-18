@@ -6,7 +6,8 @@
 - Exclude mixed-account local and shared Codex totals while scoped; use only account-verified cloud history.
 - Preserve selected-account quota and reset readings when the usage response omits the account email. Saved connections and other providers remain unchanged.
 
-Build 129. See GitHub Releases for signed binary availability.
+Build 129. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.48.3-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.3-midas.1).
 
 ## Midas 0.48.2 — October 18, 2026
 
