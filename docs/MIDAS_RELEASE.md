@@ -12,8 +12,8 @@ Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` w
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.46.2**, build **123**, tagged
-`v0.46.2-midas.1` (superseding 0.46.1, build **122**, tagged `v0.46.1-midas.1`, and 0.46.0,
+The current **signed, notarized, Sparkle-published** binary is **0.47.0**, build **124**, tagged
+`v0.47.0-midas.1` (superseding 0.46.2, build **123**, tagged `v0.46.2-midas.1`, 0.46.1, build **122**, tagged `v0.46.1-midas.1`, and 0.46.0,
 build **121**, tagged `v0.46.0-midas.1`). Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
@@ -92,12 +92,24 @@ Source, collector fixtures, native render fixtures, signed artifacts, notarizati
 and website deployment are separate release gates. Record publication evidence only after each
 gate succeeds.
 
-The release candidate passed 4,536 Swift tests in 512 suites, all 82 Python collector/hub tests,
+Build 124 passed 4,536 Swift tests in 512 suites, all 82 Python collector/hub tests,
 and `make check`. Ten native synthetic fixtures cover the Spark card and detail in light and
 dark appearances, including waiting, unpriced, stale, and mixed price-coverage states. Live Spark records were received
 by the private hub with the verified public model and separate input/output/cache deltas; retained
 unclassified history stayed unpriced. These checks do not by themselves prove binary publication
 or an update on another Mac.
+
+The signed Apple Silicon archive was published on October 17, 2026 as
+[`v0.47.0-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.47.0-midas.1).
+It identifies source commit `a7c061162`. Notarization submission
+`79fd1c81-6106-46c6-8dd5-26a606391b23` was Accepted. Stapling, Gatekeeper, matching arm64
+dSYM UUIDs, archive verification against the app's embedded Sparkle public key, both signed
+feeds, and downloaded draft/public asset checks passed. The app ZIP's SHA-256 is
+`fe5dac2287cb5bb2456befb9dde20ed075fb8c19ef059e4478869a5dbc191de0`.
+The marketing repository's `0de36e1` was deployed to `midas-ai.dev` as
+`dpl_FNqjaypMZrEupJU6QUAGwmQcum9C`; all 18 public-site browser checks passed.
+The public bundle was installed and its three-device receipt verified on the release Mac.
+Another Mac's installation still requires its own version/checksum receipt.
 
 ## 0.46.0 changes: Meta plan usage
 
