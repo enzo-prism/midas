@@ -28,7 +28,20 @@ public struct MidasUsageSyncWorkspace: Codable, Sendable, Equatable {
     public func opaqueID(provider: UsageProvider, components: [String]) -> String {
         let value = [self.identitySalt, provider.rawValue] + components
         let data = (try? JSONEncoder().encode(value)) ?? Data()
-        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let digest = SHA256.hash(data: data)
+        // These IDs must remain byte-compatible with previous versions. Formatting each
+        // byte separately creates 32 Foundation strings for every scanned usage event.
+        return String(unsafeUninitializedCapacity: SHA256.byteCount * 2) { buffer in
+            var index = 0
+            for byte in digest {
+                let high = byte >> 4
+                let low = byte & 15
+                buffer[index] = high + (high < 10 ? 48 : 87)
+                buffer[index + 1] = low + (low < 10 ? 48 : 87)
+                index += 2
+            }
+            return index
+        }
     }
 
     public func validate() throws {
@@ -94,28 +107,27 @@ public struct MidasUsageSyncValues: Codable, Sendable, Equatable {
     }
 
     public func validate() throws {
-        let counts = [
-            self.tokens,
-            self.requests,
-            self.tokenMix.inputTokens,
-            self.tokenMix.outputTokens,
-            self.tokenMix.cacheReadTokens,
-            self.tokenMix.cacheCreationTokens,
-            self.tokenMix.reasoningTokens,
-            self.unpricedRequests,
-            self.estimatedRequests,
-        ]
         // Bound imported values so the capped 250k-record ledger remains safe in every existing chart aggregator.
-        guard counts.allSatisfy({ $0 == nil || (0...1_000_000_000_000).contains($0!) }),
-              [self.costUSD, self.apiEquivalentCostUSD].allSatisfy({
-                  $0 == nil || ($0!.isFinite && (0...1_000_000_000).contains($0!))
-              }),
+        guard Self.validCount(self.tokens), Self.validCount(self.requests),
+              Self.validCount(self.tokenMix.inputTokens), Self.validCount(self.tokenMix.outputTokens),
+              Self.validCount(self.tokenMix.cacheReadTokens), Self.validCount(self.tokenMix.cacheCreationTokens),
+              Self.validCount(self.tokenMix.reasoningTokens), Self.validCount(self.unpricedRequests),
+              Self.validCount(self.estimatedRequests), Self.validCost(self.costUSD),
+              Self.validCost(self.apiEquivalentCostUSD),
               self.model
                   .map({
                       $0.utf8.count <= 160 && !$0.unicodeScalars
                           .contains(where: CharacterSet.controlCharacters.contains) }) ??
                   true
         else { throw MidasUsageSyncError.invalidRecord }
+    }
+
+    private static func validCount(_ value: Int?) -> Bool {
+        value.map { (0...1_000_000_000_000).contains($0) } ?? true
+    }
+
+    private static func validCost(_ value: Double?) -> Bool {
+        value.map { $0.isFinite && (0...1_000_000_000).contains($0) } ?? true
     }
 }
 
@@ -208,13 +220,28 @@ public struct MidasUsageSyncPublication: Codable, Sendable, Equatable {
               (1...80).contains(self.deviceName.utf8.count),
               !self.deviceName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
         else { throw MidasUsageSyncError.invalidRecord }
-        let days = Set(self.events.map(\.day) + self.accountDays.map(\.day))
-        guard days.allSatisfy(Self.isDay), days.allSatisfy({ $0 <= Self.day(self.publishedAt.addingTimeInterval(300)) })
-        else { throw MidasUsageSyncError.invalidRecord }
+        let latestDay = Self.day(self.publishedAt.addingTimeInterval(300))
+        // Compute each distinct UTC day once. Calendar/date-formatting per event used
+        // to generate hundreds of thousands of temporary objects each sync cycle.
+        var dayStarts: [String: TimeInterval] = [:]
+        for event in self.events where dayStarts[event.day] == nil {
+            guard event.day <= latestDay, let start = Self.dayStart(event.day) else {
+                throw MidasUsageSyncError.invalidRecord
+            }
+            dayStarts[event.day] = start
+        }
+        for row in self.accountDays where dayStarts[row.day] == nil {
+            guard row.day <= latestDay, let start = Self.dayStart(row.day) else {
+                throw MidasUsageSyncError.invalidRecord
+            }
+            dayStarts[row.day] = start
+        }
         for event in self.events {
             guard [.codex, .claude, .meta, .localInference].contains(event.provider), Self.isOpaqueID(event.id),
                   Self.validObservation(event.observedAt, publishedAt: self.publishedAt),
-                  event.day == Self.day(event.observedAt)
+                  let start = dayStarts[event.day],
+                  event.observedAt.timeIntervalSince1970 >= start,
+                  event.observedAt.timeIntervalSince1970 < start + 86400
             else { throw MidasUsageSyncError.invalidRecord }
             try event.values.validate()
         }
@@ -234,14 +261,18 @@ public struct MidasUsageSyncPublication: Codable, Sendable, Equatable {
     }
 
     public static func isDay(_ value: String) -> Bool {
-        guard value.utf8.count == 10 else { return false }
+        self.dayStart(value) != nil
+    }
+
+    private static func dayStart(_ value: String) -> TimeInterval? {
+        guard value.utf8.count == 10 else { return nil }
         let parts = value.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return false }
+        guard parts.count == 3 else { return nil }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         guard let date = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
-        else { return false }
-        return self.day(date) == value
+        else { return nil }
+        return self.day(date) == value ? date.timeIntervalSince1970 : nil
     }
 
     private static func isOpaqueID(_ value: String) -> Bool {

@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.47.1 — October 17, 2026
+
+- Reduce large shared-history allocation: unchanged records skip canonical JSON, day/model totals accumulate without a second value corpus, and export reuses bounded event bookkeeping.
+- Decode shared history in bounded row and byte batches, avoiding a whole-history JSON index during cache restore and hub/folder imports.
+- Move recurring sync merge and atomic save work away from the UI thread, restore the saved cache once, and retain cancellation, connection identity, and offline-outbox guarantees.
+- Skip full Codex cache encoding and writes when scans find no changes; bind clean-scan freshness to file identity so restoring or replacing a cache cannot hide changed usage.
+- Bound temporary codec, network, and scan allocations while preserving stable event identities, token totals, account scope, and unknown-versus-zero pricing coverage.
+
+Build 125. See GitHub Releases for signed binary availability and [memory profiling](docs/MIDAS_MEMORY.md) for validation.
+
 ## Midas 0.47.0 — October 17, 2026
 
 - Add private Tailscale hub sync with per-device revocable credentials, offline retry, and shared history independent of iCloud.

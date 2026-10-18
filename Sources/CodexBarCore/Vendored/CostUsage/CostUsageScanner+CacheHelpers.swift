@@ -692,6 +692,7 @@ extension CostUsageScanner {
         guard !Self.cachedCodexFileNeedsPriorityRescan(cached, context: context) else { return false }
 
         if Self.needsCodexCostCache(cached, range: context.range) {
+            state.didMutateCache = true
             cache.files[input.metadata.path] = Self.codexFileUsageWithCostCache(cached, context: context)
         }
         Self.rememberScannedCodexFile(
@@ -766,6 +767,7 @@ extension CostUsageScanner {
             && initialCountedTotals != nil
             && cached.forkedFromId == nil
         guard canIncremental else { return false }
+        state.didMutateCache = true
 
         let delta = try Self.parseCodexFileCancellable(
             fileURL: input.fileURL,
@@ -854,6 +856,7 @@ extension CostUsageScanner {
         state: inout CodexScanState) throws
     {
         try context.checkCancellation?()
+        state.didMutateCache = true
         if let cached = input.cached {
             self.applyFileDays(cache: &cache, fileDays: cached.days, sign: -1)
         }

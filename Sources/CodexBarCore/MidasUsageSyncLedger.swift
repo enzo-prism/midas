@@ -13,42 +13,51 @@ public struct MidasUsageSyncLedger: Sendable {
         let previous = previous.flatMap {
             $0.workspaceID == fresh.workspaceID && $0.deviceID == fresh.deviceID ? $0 : nil
         }
-        var events: [String: MidasUsageSyncEvent] = [:]
-        for event in (previous?.events ?? []) + fresh.events {
-            let key = event.provider.rawValue + ":" + event.id
+        var events: [EventKey: MidasUsageSyncEvent] = [:]
+        events.reserveCapacity(min(
+            max(previous?.events.count ?? 0, fresh.events.count), MidasUsageSyncPublication.maximumRecords))
+        for event in [previous?.events ?? [], fresh.events].joined() {
+            let key = EventKey(event)
             if let old = events[key], !Self.prefers(event, over: old) { continue }
             events[key] = event
         }
-        var accounts: [String: MidasUsageSyncAccountDay] = [:]
-        for row in (previous?.accountDays ?? []) + fresh.accountDays {
-            let key = row.provider.rawValue + ":" + row.accountScope + ":" + row.day
+        var accounts: [AccountKey: MidasUsageSyncAccountDay] = [:]
+        for row in [previous?.accountDays ?? [], fresh.accountDays].joined() {
+            let key = AccountKey(row)
             if let old = accounts[key], !Self.prefers(row, over: old) { continue }
             accounts[key] = row
         }
         let cutoff = MidasUsageSyncPublication.day(fresh.publishedAt.addingTimeInterval(-364 * 86400))
-        let retainedEvents = events.values.filter { $0.day >= cutoff }.sorted {
-            $0.day == $1.day ? $0.provider.rawValue + $0.id < $1.provider.rawValue + $1.id : $0.day > $1.day
+        var retainedEvents = events.values.filter { $0.day >= cutoff }
+        retainedEvents.sort {
+            $0.day == $1.day ? Self.eventPrecedes($0, $1) : $0.day > $1.day
         }
-        let retainedAccounts = accounts.values.filter { $0.day >= cutoff }.sorted {
+        var retainedAccounts = accounts.values.filter { $0.day >= cutoff }
+        retainedAccounts.sort {
             $0.day == $1.day ? $0.accountScope < $1.accountScope : $0.day > $1.day
         }
         let encoder = JSONEncoder()
         var bytes = 4096 // Reserve the header and array punctuation before checking the whole publication.
         var keptAccounts: [MidasUsageSyncAccountDay] = []
         var keptEvents: [MidasUsageSyncEvent] = []
+        keptAccounts.reserveCapacity(min(retainedAccounts.count, MidasUsageSyncPublication.maximumRecords))
         for row in retainedAccounts {
-            guard keptAccounts.count < MidasUsageSyncPublication.maximumRecords,
-                  let encoded = try? encoder.encode(row),
-                  bytes + encoded.count + 1 <= MidasUsageSyncPublication.maximumFileBytes else { continue }
+            guard keptAccounts.count < MidasUsageSyncPublication.maximumRecords else { continue }
+            let encodedBytes = autoreleasepool { try? encoder.encode(row).count }
+            guard let encodedBytes,
+                  bytes + encodedBytes + 1 <= MidasUsageSyncPublication.maximumFileBytes else { continue }
             keptAccounts.append(row)
-            bytes += encoded.count + 1
+            bytes += encodedBytes + 1
         }
+        keptEvents.reserveCapacity(min(
+            retainedEvents.count, MidasUsageSyncPublication.maximumRecords - keptAccounts.count))
         for row in retainedEvents {
-            guard keptAccounts.count + keptEvents.count < MidasUsageSyncPublication.maximumRecords,
-                  let encoded = try? encoder.encode(row),
-                  bytes + encoded.count + 1 <= MidasUsageSyncPublication.maximumFileBytes else { continue }
+            guard keptAccounts.count + keptEvents.count < MidasUsageSyncPublication.maximumRecords else { continue }
+            let encodedBytes = autoreleasepool { try? encoder.encode(row).count }
+            guard let encodedBytes,
+                  bytes + encodedBytes + 1 <= MidasUsageSyncPublication.maximumFileBytes else { continue }
             keptEvents.append(row)
-            bytes += encoded.count + 1
+            bytes += encodedBytes + 1
         }
         let dropped = retainedEvents.count - keptEvents.count + retainedAccounts.count - keptAccounts.count
         return MidasUsageSyncPublication(
@@ -76,32 +85,38 @@ public struct MidasUsageSyncLedger: Sendable {
         let recordCount = self.publications.reduce(0) { $0 + $1.events.count + $1.accountDays.count }
         guard recordCount <= 250_000 else { throw MidasUsageSyncError.limitExceeded }
         self.excludedRecords = Self.sumIntegers(self.publications.map(\.excludedRecords)) ?? Int.max
-        var events: [String: MidasUsageSyncEvent] = [:]
-        var accounts: [String: MidasUsageSyncAccountDay] = [:]
+        var events: [EventKey: MidasUsageSyncEvent] = [:]
+        var accounts: [AccountKey: MidasUsageSyncAccountDay] = [:]
         for publication in self.publications {
             for event in publication.events {
-                let key = event.provider.rawValue + ":" + event.id
+                let key = EventKey(event)
                 if let previous = events[key], !Self.prefers(event, over: previous) { continue }
                 events[key] = event
             }
             for row in publication.accountDays {
-                let key = row.provider.rawValue + ":" + row.accountScope + ":" + row.day
+                let key = AccountKey(row)
                 if let previous = accounts[key], !Self.prefers(row, over: previous) { continue }
                 accounts[key] = row
             }
         }
-        var values: [UsageProvider: [String: [MidasUsageSyncValues]]] = [:]
-        for key in events.keys.sorted() {
-            guard let event = events[key] else { continue }
-            values[event.provider, default: [:]][event.day, default: []].append(event.values)
+        // Keep only compact day/model totals after selecting each event. The previous implementation
+        // retained another full copy of every value, then made many mapped/grouped arrays per field.
+        var values: [UsageProvider: [String: DayTotals]] = [:]
+        for event in events.values.sorted(by: Self.eventPrecedes) {
+            values[event.provider, default: [:]][event.day, default: DayTotals()].add(event.values)
         }
-        for key in accounts.keys.sorted() {
-            guard let row = accounts[key] else { continue }
-            values[row.provider, default: [:]][row.day, default: []].append(row.values)
+        for row in accounts.values.sorted(by: Self.accountPrecedes) {
+            values[row.provider, default: [:]][row.day, default: DayTotals()].add(row.values)
         }
         var providerUpdatedAt: [UsageProvider: Date] = [:]
         for publication in self.publications {
-            let providers = Set(publication.events.map(\.provider) + publication.accountDays.map(\.provider))
+            var providers: Set<UsageProvider> = []
+            for event in publication.events {
+                providers.insert(event.provider)
+            }
+            for row in publication.accountDays {
+                providers.insert(row.provider)
+            }
             for provider in providers {
                 providerUpdatedAt[provider] = max(providerUpdatedAt[provider] ?? .distantPast, publication.publishedAt)
             }
@@ -112,6 +127,37 @@ public struct MidasUsageSyncLedger: Sendable {
         })
     }
 
+    private struct EventKey: Hashable {
+        let provider: UsageProvider
+        let id: String
+
+        init(_ event: MidasUsageSyncEvent) {
+            self.provider = event.provider
+            self.id = event.id
+        }
+    }
+
+    private struct AccountKey: Hashable {
+        let provider: UsageProvider
+        let scope: String
+        let day: String
+
+        init(_ row: MidasUsageSyncAccountDay) {
+            self.provider = row.provider
+            self.scope = row.accountScope
+            self.day = row.day
+        }
+    }
+
+    private static func eventPrecedes(_ lhs: MidasUsageSyncEvent, _ rhs: MidasUsageSyncEvent) -> Bool {
+        lhs.provider == rhs.provider ? lhs.id < rhs.id : lhs.provider.rawValue < rhs.provider.rawValue
+    }
+
+    private static func accountPrecedes(_ lhs: MidasUsageSyncAccountDay, _ rhs: MidasUsageSyncAccountDay) -> Bool {
+        if lhs.provider != rhs.provider { return lhs.provider.rawValue < rhs.provider.rawValue }
+        return lhs.accountScope == rhs.accountScope ? lhs.day < rhs.day : lhs.accountScope < rhs.accountScope
+    }
+
     /// Merge complete records, never independently maximize monetary and token fields.
     private static func prefers(_ lhs: MidasUsageSyncEvent, over rhs: MidasUsageSyncEvent) -> Bool {
         // Streaming/copy-prefix revisions are monotonic. A later scan of an old copied prefix cannot erase completion.
@@ -119,27 +165,32 @@ public struct MidasUsageSyncLedger: Sendable {
             return (lhs.values.tokens ?? -1) > (rhs.values.tokens ?? -1)
         }
         if lhs.observedAt != rhs.observedAt { return lhs.observedAt > rhs.observedAt }
+        guard lhs != rhs else { return false }
         return self.canonical(lhs) > self.canonical(rhs)
     }
 
     private static func prefers(_ lhs: MidasUsageSyncAccountDay, over rhs: MidasUsageSyncAccountDay) -> Bool {
         if lhs.observedAt != rhs.observedAt { return lhs.observedAt > rhs.observedAt }
+        guard lhs != rhs else { return false }
         return self.canonical(lhs) > self.canonical(rhs)
     }
 
     private static func prefers(_ lhs: MidasUsageSyncPublication, over rhs: MidasUsageSyncPublication) -> Bool {
         if lhs.publishedAt != rhs.publishedAt { return lhs.publishedAt > rhs.publishedAt }
+        guard lhs != rhs else { return false }
         return self.canonical(lhs) > self.canonical(rhs)
     }
 
     private static func canonical(_ value: some Encodable) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        autoreleasepool {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        }
     }
 
     private static func snapshot(
-        provider: UsageProvider, days: [String: [MidasUsageSyncValues]], updatedAt: Date, now: Date)
+        provider: UsageProvider, days: [String: DayTotals], updatedAt: Date, now: Date)
         -> CostUsageTokenSnapshot
     {
         var calendar = Calendar(identifier: .gregorian)
@@ -148,9 +199,9 @@ public struct MidasUsageSyncLedger: Sendable {
         let start = calendar.date(byAdding: .day, value: -364, to: now) ?? now
         let firstDay = MidasUsageSyncPublication.day(start)
         let keys = days.keys.filter { $0 >= firstDay && $0 <= today }.sorted()
-        let daily = keys.map { self.entry(provider: provider, day: $0, values: days[$0] ?? []) }
+        let daily = keys.compactMap { day in days[day]?.entry(provider: provider, day: day) }
         let todayRows = daily.filter { $0.date == today }
-        let provenance = self.provenance(keys.flatMap { days[$0] ?? [] }.map(\.provenance))
+        let provenance = self.provenance(keys.compactMap { days[$0]?.totals.provenance })
         let totalCost = self.sumDoubles(daily.map(\.costUSD))
         return CostUsageTokenSnapshot(
             sessionTokens: self.sumIntegers(todayRows.map(\.totalTokens)),
@@ -168,56 +219,132 @@ public struct MidasUsageSyncLedger: Sendable {
             updatedAt: updatedAt)
     }
 
-    private static func entry(
-        provider: UsageProvider, day: String, values: [MidasUsageSyncValues]) -> CostUsageDailyReport.Entry
-    {
-        let models = Dictionary(grouping: values.compactMap { value -> (String, MidasUsageSyncValues)? in
-            value.model.map { ($0, value) }
-        }, by: { $0.0 })
-        let breakdowns = models.keys.sorted().map { model in
-            let rows = (models[model] ?? []).map(\.1)
-            let completeLocalMix = provider != .localInference || rows.allSatisfy { value in
-                guard let input = value.tokenMix.inputTokens, let output = value.tokenMix.outputTokens,
-                      let cached = value.tokenMix.cacheReadTokens, let total = value.tokens,
-                      cached <= input else { return false }
-                let sum = input.addingReportingOverflow(output)
-                return !sum.overflow && sum.partialValue == total
-            }
-            return CostUsageDailyReport.ModelBreakdown(
-                modelName: model,
-                costUSD: self.sumDoubles(rows.map(\.costUSD)),
-                totalTokens: self.sumIntegers(rows.map(\.tokens)),
-                requestCount: self.sumIntegers(rows.map(\.requests)),
-                inputTokens: self.sumIntegers(rows.map(\.tokenMix.inputTokens)),
-                outputTokens: self.sumIntegers(rows.map(\.tokenMix.outputTokens)),
-                // A cached-input subtotal cannot establish the missing mix of another local model record.
-                cacheReadTokens: completeLocalMix ? self.sumIntegers(rows.map(\.tokenMix.cacheReadTokens)) : nil,
-                cacheCreationTokens: self.sumIntegers(rows.map(\.tokenMix.cacheCreationTokens)),
-                reasoningTokens: self.sumIntegers(rows.map(\.tokenMix.reasoningTokens)))
+    private struct IntegerTotal {
+        private var sum = 0
+        private var hasValue = false
+        private var valid = true
+
+        var value: Int? {
+            self.hasValue && self.valid ? self.sum : nil
         }
-        let completeLocalCache = provider != .localInference || values.allSatisfy { value in
-            guard let input = value.tokenMix.inputTokens, let cached = value.tokenMix.cacheReadTokens else {
-                return false
-            }
-            return cached <= input
+
+        mutating func add(_ value: Int?) {
+            guard let value, self.valid else { return }
+            let next = self.sum.addingReportingOverflow(value)
+            self.valid = value >= 0 && !next.overflow
+            self.sum = next.partialValue
+            self.hasValue = true
         }
-        return CostUsageDailyReport.Entry(
-            date: day,
-            inputTokens: self.sumIntegers(values.map(\.tokenMix.inputTokens)),
-            outputTokens: self.sumIntegers(values.map(\.tokenMix.outputTokens)),
-            cacheReadTokens: completeLocalCache ? self.sumIntegers(values.map(\.tokenMix.cacheReadTokens)) : nil,
-            cacheCreationTokens: self.sumIntegers(values.map(\.tokenMix.cacheCreationTokens)),
-            reasoningTokens: self.sumIntegers(values.map(\.tokenMix.reasoningTokens)),
-            totalTokens: self.sumIntegers(values.map(\.tokens)),
-            requestCount: self.sumIntegers(values.map(\.requests)),
-            costUSD: self.sumDoubles(values.map(\.costUSD)),
-            apiEquivalentCostUSD: self.sumDoubles(values.map(\.apiEquivalentCostUSD)),
-            modelsUsed: models.isEmpty ? nil : models.keys.sorted(),
-            modelBreakdowns: breakdowns.isEmpty ? nil : breakdowns,
-            unpricedRequestCount: self.sumIntegers(values.map { value in
-                max(value.unpricedRequests, value.costUSD == nil ? 1 : 0)
-            }),
-            estimatedRequestCount: self.sumIntegers(values.map(\.estimatedRequests)))
+    }
+
+    private struct DollarTotal {
+        private var sum = 0.0
+        private var hasValue = false
+        private var valid = true
+
+        var value: Double? {
+            self.hasValue && self.valid ? self.sum : nil
+        }
+
+        mutating func add(_ value: Double?) {
+            guard let value, self.valid else { return }
+            self.sum += value
+            self.valid = value.isFinite && value >= 0 && self.sum.isFinite
+            self.hasValue = true
+        }
+    }
+
+    private struct ValueTotals {
+        var tokens = IntegerTotal()
+        var requests = IntegerTotal()
+        var input = IntegerTotal()
+        var output = IntegerTotal()
+        var cacheRead = IntegerTotal()
+        var cacheCreation = IntegerTotal()
+        var reasoning = IntegerTotal()
+        var unpriced = IntegerTotal()
+        var estimated = IntegerTotal()
+        var cost = DollarTotal()
+        var apiEquivalent = DollarTotal()
+        var provenance = CostProvenance.unknown
+        var completeLocalCache = true
+        var completeLocalMix = true
+
+        mutating func add(_ value: MidasUsageSyncValues) {
+            self.tokens.add(value.tokens)
+            self.requests.add(value.requests)
+            self.input.add(value.tokenMix.inputTokens)
+            self.output.add(value.tokenMix.outputTokens)
+            self.cacheRead.add(value.tokenMix.cacheReadTokens)
+            self.cacheCreation.add(value.tokenMix.cacheCreationTokens)
+            self.reasoning.add(value.tokenMix.reasoningTokens)
+            self.unpriced.add(max(value.unpricedRequests, value.costUSD == nil ? 1 : 0))
+            self.estimated.add(value.estimatedRequests)
+            self.cost.add(value.costUSD)
+            self.apiEquivalent.add(value.apiEquivalentCostUSD)
+            if value.provenance != .unknown {
+                if self.provenance == .unknown {
+                    self.provenance = value.provenance
+                } else if self.provenance != value.provenance {
+                    self.provenance = .mixed
+                }
+            }
+            if let input = value.tokenMix.inputTokens, let cached = value.tokenMix.cacheReadTokens, cached <= input {
+                if let output = value.tokenMix.outputTokens, let total = value.tokens {
+                    let sum = input.addingReportingOverflow(output)
+                    self.completeLocalMix = self.completeLocalMix && !sum.overflow && sum.partialValue == total
+                } else {
+                    self.completeLocalMix = false
+                }
+            } else {
+                self.completeLocalCache = false
+                self.completeLocalMix = false
+            }
+        }
+
+        func model(_ name: String, provider: UsageProvider) -> CostUsageDailyReport.ModelBreakdown {
+            CostUsageDailyReport.ModelBreakdown(
+                modelName: name,
+                costUSD: self.cost.value,
+                totalTokens: self.tokens.value,
+                requestCount: self.requests.value,
+                inputTokens: self.input.value,
+                outputTokens: self.output.value,
+                cacheReadTokens: provider != .localInference || self.completeLocalMix ? self.cacheRead.value : nil,
+                cacheCreationTokens: self.cacheCreation.value,
+                reasoningTokens: self.reasoning.value)
+        }
+    }
+
+    private struct DayTotals {
+        var totals = ValueTotals()
+        var models: [String: ValueTotals] = [:]
+
+        mutating func add(_ value: MidasUsageSyncValues) {
+            self.totals.add(value)
+            if let model = value.model { self.models[model, default: ValueTotals()].add(value) }
+        }
+
+        func entry(provider: UsageProvider, day: String) -> CostUsageDailyReport.Entry {
+            let names = self.models.keys.sorted()
+            let breakdowns = names.compactMap { self.models[$0]?.model($0, provider: provider) }
+            return CostUsageDailyReport.Entry(
+                date: day,
+                inputTokens: self.totals.input.value,
+                outputTokens: self.totals.output.value,
+                cacheReadTokens: provider != .localInference || self.totals.completeLocalCache
+                    ? self.totals.cacheRead.value : nil,
+                cacheCreationTokens: self.totals.cacheCreation.value,
+                reasoningTokens: self.totals.reasoning.value,
+                totalTokens: self.totals.tokens.value,
+                requestCount: self.totals.requests.value,
+                costUSD: self.totals.cost.value,
+                apiEquivalentCostUSD: self.totals.apiEquivalent.value,
+                modelsUsed: names.isEmpty ? nil : names,
+                modelBreakdowns: breakdowns.isEmpty ? nil : breakdowns,
+                unpricedRequestCount: self.totals.unpriced.value,
+                estimatedRequestCount: self.totals.estimated.value)
+        }
     }
 
     private static func provenance(_ values: [CostProvenance]) -> CostProvenance {

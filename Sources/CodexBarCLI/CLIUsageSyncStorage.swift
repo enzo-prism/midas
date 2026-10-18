@@ -51,6 +51,9 @@ struct MidasUsageCollectorStorage {
             data.append(chunk)
         }
         guard data.count <= maximumBytes else { throw MidasUsageSyncError.limitExceeded }
+        if T.self == MidasUsageSyncPublication.self {
+            return try MidasUsageSyncCodec.decodePublication(data) as? T
+        }
         return try JSONDecoder().decode(T.self, from: data)
     }
 

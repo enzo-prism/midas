@@ -94,7 +94,7 @@ public enum MidasUsageHubClient {
         let data = try await self.request(connection: connection, path: "v1/workspace", body: nil, limit: 4096)
         let workspace: MidasUsageSyncWorkspace
         do {
-            workspace = try JSONDecoder().decode(MidasUsageSyncWorkspace.self, from: data)
+            workspace = try autoreleasepool { try JSONDecoder().decode(MidasUsageSyncWorkspace.self, from: data) }
             try workspace.validate()
         } catch { throw MidasUsageHubError.invalidResponse }
         if let expected = connection.workspaceID, workspace.id != expected {
@@ -118,7 +118,7 @@ public enum MidasUsageHubClient {
         if let local, local.deviceID != connection.deviceID || local.deviceName != connection.deviceName {
             throw MidasUsageHubError.invalidConnection
         }
-        let body = try local.map { try JSONEncoder().encode($0) } ?? Data("null".utf8)
+        let body = try autoreleasepool { try local.map { try JSONEncoder().encode($0) } ?? Data("null".utf8) }
         guard body.count <= MidasUsageSyncPublication.maximumFileBytes else {
             throw MidasUsageSyncError.limitExceeded
         }
@@ -142,7 +142,16 @@ public enum MidasUsageHubClient {
         guard data.count <= self.maximumExchangeBytes else { throw MidasUsageHubError.responseTooLarge }
         let result: MidasUsageHubExchange
         do {
-            result = try JSONDecoder().decode(MidasUsageHubExchange.self, from: data)
+            result = try autoreleasepool {
+                let envelope = try MidasUsageSyncCodec.decodeEnvelope(data)
+                let metadata = try JSONDecoder().decode(MidasUsageHubExchange.self, from: envelope.metadata)
+                return MidasUsageHubExchange(
+                    workspace: metadata.workspace,
+                    publications: envelope.publications,
+                    publicationSucceeded: metadata.publicationSucceeded,
+                    unavailableFiles: metadata.unavailableFiles,
+                    rejectedFiles: metadata.rejectedFiles)
+            }
         } catch {
             throw MidasUsageHubError.invalidResponse
         }
@@ -160,7 +169,8 @@ public enum MidasUsageHubClient {
             if publication.deviceID == connection.deviceID, publication.deviceName != connection.deviceName {
                 throw MidasUsageHubError.invalidResponse
             }
-            guard try JSONEncoder().encode(publication).count <= MidasUsageSyncPublication.maximumFileBytes else {
+            let encodedBytes = try autoreleasepool { try JSONEncoder().encode(publication).count }
+            guard encodedBytes <= MidasUsageSyncPublication.maximumFileBytes else {
                 throw MidasUsageHubError.responseTooLarge
             }
             records += publication.events.count + publication.accountDays.count
@@ -279,6 +289,11 @@ public enum MidasUsageHubClient {
                     self.failure = MidasUsageHubError.responseTooLarge
                     return false
                 }
+                // Snapshot responses are large. Reserve a validated Content-Length once
+                // instead of repeatedly growing and copying the accumulated byte buffer.
+                if response.expectedContentLength > 0 {
+                    self.data.reserveCapacity(Int(response.expectedContentLength))
+                }
                 return true
             }
             completionHandler(accepted ? .allow : .cancel)
@@ -308,6 +323,9 @@ public enum MidasUsageHubClient {
                 self.continuation = nil
                 self.task = nil
                 self.session = nil
+                // The continuation now owns successful bytes. Drop our reference even
+                // while URLSession is asynchronously releasing its delegate/session.
+                self.data = Data()
                 return (continuation, result)
             }
             session.finishTasksAndInvalidate()

@@ -133,6 +133,38 @@ struct MidasUsageSyncCoordinatorTests {
         #expect(restarted.devices.count == 1)
     }
 
+    @Test func slowOutboxPersistenceRunsOffMainActorAndDisconnectPreventsPublication() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        let gate = MidasUsageSyncWriteGate()
+        defer { gate.release() }
+        let coordinator = fixture.coordinator(cacheWriter: { data, url in
+            #expect(!Thread.isMainThread)
+            try gate.write(data, to: url)
+        })
+        try await coordinator.connect(folder: folder)
+        self.collect(on: coordinator, event: "pending-on-disk", tokens: 123)
+        let sync = Task { await coordinator.syncNow() }
+        await gate.waitUntilBlocked()
+
+        // The UI executor remains responsive while fsync is pending on the worker actor.
+        #expect(coordinator.isSyncing)
+        coordinator.disconnect()
+        gate.release()
+        await sync.value
+
+        #expect(!coordinator.isEnabled)
+        #expect(coordinator.snapshots.isEmpty)
+        #expect(coordinator.status.hasPrefix("Disconnected."))
+        #expect(coordinator.lastPublishedAt == nil)
+        let devicesFolder = folder.appendingPathComponent("devices")
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: devicesFolder.path)) ?? []
+        #expect(files.isEmpty)
+        let cache = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: fixture.cache)) as? [String: Any])
+        #expect(cache["pendingLocal"] is [String: Any])
+    }
+
     @Test func movedFolderPreservesReceivedUsageAndRequiresExplicitReconnection() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
@@ -726,6 +758,7 @@ struct MidasUsageSyncCoordinatorTests {
             identity: MidasUsageSyncEnvironmentIdentity = .init(),
             cache: URL? = nil,
             currentTime: @escaping @MainActor () -> Date = { MidasUsageSyncCoordinatorTests.now },
+            cacheWriter: (@Sendable (Data, URL) throws -> Void)? = nil,
             loader: @escaping @Sendable (URL) async throws -> MidasUsageSyncWorkspace = {
                 try await MidasUsageSyncFolder.workspace(at: $0)
             },
@@ -735,7 +768,19 @@ struct MidasUsageSyncCoordinatorTests {
                     try await MidasUsageSyncFolder.exchange(at: $0, workspace: $1, local: $2, now: $3)
                 }) -> MidasUsageSyncCoordinator
         {
-            MidasUsageSyncCoordinator(
+            if let cacheWriter {
+                return MidasUsageSyncCoordinator(
+                    defaults: self.defaults,
+                    persistenceURL: cache ?? self.cache,
+                    automaticallySyncs: false,
+                    environmentIdentity: { identity },
+                    restoresConnection: restore,
+                    workspaceLoader: loader,
+                    exchangePublication: exchange,
+                    currentTime: currentTime,
+                    cacheWriter: cacheWriter)
+            }
+            return MidasUsageSyncCoordinator(
                 defaults: self.defaults,
                 persistenceURL: cache ?? self.cache,
                 automaticallySyncs: false,
@@ -903,5 +948,46 @@ private final class MidasUsageSyncSyntheticIdentityToken: NSObject, NSCoding {
 
     override var hash: Int {
         self.account.hashValue
+    }
+}
+
+private final class MidasUsageSyncWriteGate: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var blocked = false
+    private var released = false
+    private var observer: CheckedContinuation<Void, Never>?
+
+    func write(_ data: Data, to url: URL) throws {
+        self.condition.lock()
+        self.blocked = true
+        self.observer?.resume()
+        self.observer = nil
+        // A bounded wait makes a regression fail instead of hanging the test process.
+        let deadline = Date().addingTimeInterval(5)
+        while !self.released {
+            if !self.condition.wait(until: deadline) { break }
+        }
+        self.condition.unlock()
+        try data.write(to: url, options: .atomic)
+    }
+
+    func waitUntilBlocked() async {
+        await withCheckedContinuation { continuation in
+            self.condition.lock()
+            if self.blocked {
+                self.condition.unlock()
+                continuation.resume()
+            } else {
+                self.observer = continuation
+                self.condition.unlock()
+            }
+        }
+    }
+
+    func release() {
+        self.condition.lock()
+        self.released = true
+        self.condition.broadcast()
+        self.condition.unlock()
     }
 }

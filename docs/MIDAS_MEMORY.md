@@ -7,6 +7,57 @@ read_when:
 
 # Midas memory footprint
 
+## 0.47.1: shared-history allocation and scan persistence
+
+The October 17 profile of 0.47.0 found a physical footprint of 1.1–1.6 GB,
+with a 1.7 GB high-water mark after about 30 minutes. `leaks --noContent`
+reported zero leaked bytes. The heap instead contained large JSON buffers,
+several complete event arrays, and allocator fragmentation from repeated sync
+processing. This is a different workload from the earlier session-scanner issue:
+shared history now includes several devices and many copied events.
+
+The fixes preserve the existing numeric schema, source identities, byte limits,
+offline outbox, and pricing coverage:
+
+- Startup reuses the decoded cache rather than reading and decoding it twice.
+- Large saved snapshots and hub/folder publications use structural scanning and
+  bounded decoding: at most 512 rows and 256 KiB per decoder batch. Metadata,
+  keys, and individual rows are capped at 64 KiB, including unknown extension
+  fields; oversized extensions are rejected. This avoids a whole-history
+  Foundation JSON index while preserving normal generated snapshots and outboxes.
+- Recurring history retention, ledger aggregation, and atomic cache writes run on
+  one worker actor, with cancellation and connection-generation checks before
+  applying results. Startup restoration still performs one synchronous decode
+  and merge; this change does not claim asynchronous startup restoration.
+- Ledger deduplication skips canonical JSON for identical records, uses typed
+  identities, and accumulates compact day/model totals instead of retaining a
+  second corpus of values. Valid record ordering and floating-point sum order
+  remain deterministic.
+- Export retains one event/size/heap-position table, reuses an encoder, rejects
+  copied prefixes before encoding, and reuses compiled model-name validation.
+- Publication validation calculates each distinct UTC day once. Stable ID hashing
+  writes hexadecimal bytes directly and remains compatible with published IDs.
+- Explicit autorelease pools bound codec, per-file export, and entire scan work.
+  Network receive buffers reserve only a validated Content-Length and release
+  their retained bytes immediately after completion.
+- An unchanged Codex scan does not encode and rewrite its whole numeric cache.
+  A bounded 16-path clean-scan stamp preserves throttling and includes file
+  identity, size, and modification time so atomic replacement cannot inherit
+  freshness from the previous file. Force refresh bypasses this throttle.
+
+Validation covers exact ID vectors, UTC boundary timestamps, nil/zero and
+overflow totals, copied sessions, capped exporter replacement, unchanged cache
+writes, active appends/deletions, atomic cache replacement, slow disk writes,
+disconnect cancellation, and offline restart. A fixed private numeric corpus is
+also compared across both builds; source logs, credentials, and account
+identities are not included in public profiling artifacts.
+
+For future checks, compare physical footprint and its high-water mark across
+several complete collection/exchange cycles. RSS alone omits compressed pages,
+and a smaller live heap alone does not prove the allocator released its pages.
+
+## Earlier scanner profiles
+
 Why Midas could sit at 1.8 GB in Activity Monitor, what actually caused it, and the
 invariants that keep the menu bar process small. Profiled October 15, 2026 against a
 machine with 2.2 GB of Claude session logs (1,562 files), 2.2 GB of Codex rollout logs

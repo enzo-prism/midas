@@ -120,7 +120,11 @@ public enum CostUsageScanExecutor {
                 guard state.install(continuation) else { return }
                 queue.async {
                     guard state.begin() else { return }
-                    state.complete(with: Result { try work(checkCancellation) })
+                    // A utility queue can reuse its worker thread indefinitely. Drain all
+                    // Foundation transients before resuming the caller; per-file pools do
+                    // not cover report construction, directory enumeration, or cache work.
+                    let result = autoreleasepool { Result { try work(checkCancellation) } }
+                    state.complete(with: result)
                 }
             }
         } onCancel: {

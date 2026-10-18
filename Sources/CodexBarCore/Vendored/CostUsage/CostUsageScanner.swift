@@ -127,6 +127,7 @@ enum CostUsageScanner {
     struct CodexScanState {
         var seenSessionIds: Set<String> = []
         var seenFileIds: Set<String> = []
+        var didMutateCache = false
     }
 
     private struct CodexTimestampedTotals {
@@ -2272,12 +2273,14 @@ enum CostUsageScanner {
         try context.checkCancellation?()
         let metadata = Self.codexFileMetadata(fileURL: fileURL)
         if let fileId = metadata.fileId, state.seenFileIds.contains(fileId) {
+            state.didMutateCache = state.didMutateCache || cache.files[metadata.path] != nil
             Self.dropCachedCodexFile(path: metadata.path, cached: cache.files[metadata.path], cache: &cache)
             return
         }
 
         let cached = cache.files[metadata.path]
         if let cachedSessionId = cached?.sessionId, state.seenSessionIds.contains(cachedSessionId) {
+            state.didMutateCache = true
             Self.dropCachedCodexFile(path: metadata.path, cached: cached, cache: &cache)
             return
         }
@@ -2385,6 +2388,88 @@ enum CostUsageScanner {
             shouldRefresh: shouldRefresh)
     }
 
+    private struct CodexCacheFileIdentity: Equatable {
+        let fileID: String
+        let mtimeUnixMs: Int64
+        let size: Int64
+
+        init?(url: URL) {
+            let metadata = CostUsageScanner.codexFileMetadata(fileURL: url)
+            guard let fileID = metadata.fileId else { return nil }
+            self.fileID = fileID
+            self.mtimeUnixMs = metadata.mtimeUnixMs
+            self.size = metadata.size
+        }
+    }
+
+    /// Clean scans do not rewrite the numeric cache just to advance its refresh stamp.
+    /// Keep only the most recent working set of cache paths, and discard the stamp when
+    /// a different persisted scan replaces that cache (for example, a sync export).
+    private final class CodexCleanScanStamps: @unchecked Sendable {
+        private struct Stamp {
+            let persistedScanMs: Int64
+            let scannedAtMs: Int64
+            let identity: CodexCacheFileIdentity
+        }
+
+        private let lock = NSLock()
+        private var stamps: [String: Stamp] = [:]
+
+        func stamp(forPath path: String, persistedScanMs: Int64, identity: CodexCacheFileIdentity?) -> Int64 {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard let identity, let stamp = self.stamps[path], stamp.persistedScanMs == persistedScanMs,
+                  stamp.identity == identity else { return 0 }
+            return stamp.scannedAtMs
+        }
+
+        func store(
+            _ scannedAtMs: Int64, persistedScanMs: Int64, identity: CodexCacheFileIdentity, forPath path: String)
+        {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            if self.stamps.count >= 16, self.stamps[path] == nil {
+                self.stamps.removeAll()
+            }
+            self.stamps[path] = Stamp(persistedScanMs: persistedScanMs, scannedAtMs: scannedAtMs, identity: identity)
+        }
+    }
+
+    private static let codexCleanScanStamps = CodexCleanScanStamps()
+
+    private static func pruneUnscannedCodexFiles(
+        cache: inout CostUsageCache,
+        range: CostUsageDayRange,
+        filePathsInScan: Set<String>,
+        dropAllUnscannedFiles: Bool) -> Bool
+    {
+        var didMutateCache = false
+        for key in cache.files.keys where !filePathsInScan.contains(key) {
+            guard let old = cache.files[key] else { continue }
+            let shouldDrop = dropAllUnscannedFiles ||
+                old.touchesCodexScanWindow(sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey)
+            guard shouldDrop else { continue }
+            didMutateCache = true
+            Self.applyFileDays(cache: &cache, fileDays: old.days, sign: -1)
+            cache.files.removeValue(forKey: key)
+        }
+
+        if !dropAllUnscannedFiles {
+            for key in cache.files.keys {
+                guard let old = cache.files[key] else { continue }
+                guard old.touchesCodexScanWindow(sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey)
+                else { continue }
+                guard FileManager.default.fileExists(atPath: key) else {
+                    didMutateCache = true
+                    Self.applyFileDays(cache: &cache, fileDays: old.days, sign: -1)
+                    cache.files.removeValue(forKey: key)
+                    continue
+                }
+            }
+        }
+        return didMutateCache
+    }
+
     // swiftlint:disable:next function_body_length
     private static func loadCodexDaily(
         range: CostUsageDayRange,
@@ -2392,9 +2477,24 @@ enum CostUsageScanner {
         options: Options,
         checkCancellation: CancellationCheck?) throws -> CostUsageDailyReport
     {
+        let cacheURL = CostUsageCacheIO.cacheFileURL(provider: .codex, cacheRoot: options.cacheRoot)
+        let identityBeforeLoad = CodexCacheFileIdentity(url: cacheURL)
         var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: options.cacheRoot)
+        let identityAfterLoad = CodexCacheFileIdentity(url: cacheURL)
+        // If another process replaces the cache while it is decoded, its in-memory
+        // generation is uncertain and must not inherit a clean-scan freshness stamp.
+        let cacheIdentity = identityBeforeLoad == identityAfterLoad ? identityAfterLoad : nil
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+        let persistedScanMs = cache.lastScanUnixMs
+        let cachePath = cacheURL.path
+        // Preserve the persisted stamp while planning freshness against the last clean
+        // in-process scan. Window, pricing, roots, and explicit refresh gates still apply.
+        cache.lastScanUnixMs = max(
+            persistedScanMs,
+            Self.codexCleanScanStamps.stamp(
+                forPath: cachePath, persistedScanMs: persistedScanMs, identity: cacheIdentity))
         let plan = Self.makeCodexRefreshPlan(cache: cache, range: range, now: now, nowMs: nowMs, options: options)
+        cache.lastScanUnixMs = persistedScanMs
 
         if plan.shouldRefresh {
             try checkCancellation?()
@@ -2497,27 +2597,12 @@ enum CostUsageScanner {
                 isForceRescan: options.forceRescan)
 
             let shouldDropAllUnscannedFiles = options.forceRescan || plan.rootsChanged || cache.files.isEmpty
-            for key in cache.files.keys where !filePathsInScan.contains(key) {
-                guard let old = cache.files[key] else { continue }
-                let shouldDrop = shouldDropAllUnscannedFiles ||
-                    old.touchesCodexScanWindow(sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey)
-                guard shouldDrop else { continue }
-                Self.applyFileDays(cache: &cache, fileDays: old.days, sign: -1)
-                cache.files.removeValue(forKey: key)
-            }
-
-            if !shouldDropAllUnscannedFiles {
-                for key in cache.files.keys {
-                    guard let old = cache.files[key] else { continue }
-                    guard old.touchesCodexScanWindow(sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey)
-                    else { continue }
-                    guard FileManager.default.fileExists(atPath: key) else {
-                        Self.applyFileDays(cache: &cache, fileDays: old.days, sign: -1)
-                        cache.files.removeValue(forKey: key)
-                        continue
-                    }
-                }
-            }
+            let didPruneFiles = Self.pruneUnscannedCodexFiles(
+                cache: &cache,
+                range: range,
+                filePathsInScan: filePathsInScan,
+                dropAllUnscannedFiles: shouldDropAllUnscannedFiles)
+            scanState.didMutateCache = scanState.didMutateCache || didPruneFiles
 
             let shouldRetainWiderWindow = !options.forceRescan && !plan.pricingChanged && !plan
                 .priorityMetadataChanged && !plan.needsTurnIDCacheMigration
@@ -2527,29 +2612,45 @@ enum CostUsageScanner {
             let retainedUntilKey = shouldRetainWiderWindow
                 ? [cachedUntilKey, range.scanUntilKey].compactMap(\.self).max() ?? range.scanUntilKey
                 : range.scanUntilKey
+            var didMutateCache = scanState.didMutateCache || options.forceRescan
+                || cache.roots != plan.rootsFingerprint
+                || cache.scanSinceKey != retainedSinceKey || cache.scanUntilKey != retainedUntilKey
+                || cache.codexPricingKey != plan.codexPricingKey
+                || cache.codexPriorityMetadataKey != plan.codexPriorityMetadataKey
+            let dayCount = cache.days.count
             Self.pruneDays(cache: &cache, sinceKey: retainedSinceKey, untilKey: retainedUntilKey)
+            didMutateCache = didMutateCache || cache.days.count != dayCount
             cache.roots = plan.rootsFingerprint
             cache.scanSinceKey = retainedSinceKey
             cache.scanUntilKey = retainedUntilKey
             cache.codexPricingKey = plan.codexPricingKey
             cache.codexPriorityMetadataKey = plan.codexPriorityMetadataKey
             if plan.hasPriorityMetadata {
-                cache.codexPriorityTurnKeys = Self.mergePriorityTurnKeys(
+                let priorityTurnKeys = Self.mergePriorityTurnKeys(
                     existing: shouldRetainWiderWindow ? cache.codexPriorityTurnKeys : nil,
                     new: plan.priorityTurnKeys,
                     range: range,
                     retainedSinceKey: retainedSinceKey,
                     retainedUntilKey: retainedUntilKey)
-                cache.codexPriorityTurnIDsByDay = Self.mergePriorityTurnIDsByDay(
+                let priorityTurnIDsByDay = Self.mergePriorityTurnIDsByDay(
                     existing: shouldRetainWiderWindow ? cache.codexPriorityTurnIDsByDay : nil,
                     new: plan.priorityTurnIDsByDay,
                     range: range,
                     retainedSinceKey: retainedSinceKey,
                     retainedUntilKey: retainedUntilKey)
+                didMutateCache = didMutateCache || cache.codexPriorityTurnKeys != priorityTurnKeys
+                    || cache.codexPriorityTurnIDsByDay != priorityTurnIDsByDay
+                cache.codexPriorityTurnKeys = priorityTurnKeys
+                cache.codexPriorityTurnIDsByDay = priorityTurnIDsByDay
             }
             cache.lastScanUnixMs = nowMs
             try checkCancellation?()
-            Self.persistCodexCacheLoggingFailures(cache, cacheRoot: options.cacheRoot)
+            if didMutateCache {
+                Self.persistCodexCacheLoggingFailures(cache, cacheRoot: options.cacheRoot)
+            } else if let cacheIdentity, CodexCacheFileIdentity(url: cacheURL) == cacheIdentity {
+                Self.codexCleanScanStamps.store(
+                    nowMs, persistedScanMs: persistedScanMs, identity: cacheIdentity, forPath: cachePath)
+            }
         }
 
         options.cacheSnapshot?(cache)

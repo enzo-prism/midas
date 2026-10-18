@@ -32,6 +32,14 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.47.1: shared-history performance
+
+Large shared histories now use less repeated allocation and encoding. Recurring sync
+merges and saves run away from the UI thread, duplicate records skip canonical JSON,
+and unchanged Codex scans avoid whole-cache rewrites. Token totals, account scope,
+offline history, and estimated pricing coverage keep the same counting rules. See
+[memory profiling](docs/MIDAS_MEMORY.md) for the causes, validation, and remaining limits.
+
 ## Midas 0.47.0: DGX Spark and private network usage sync
 
 Midas can combine supported numeric usage through a private Mac mini hub over Tailscale.

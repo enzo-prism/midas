@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.47.0**, build **124**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.47.1**, build **125**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -32,6 +32,22 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.47.1 changes: shared-history performance
+
+Version 0.47.1, build 125, reduces shared-history allocation and recurring UI-thread
+work without changing usage totals, account scope, source identities, or estimated
+pricing coverage. Identical records skip canonical JSON; the ledger accumulates
+compact day/model totals; export reuses bounded bookkeeping; publication validation
+reuses UTC day boundaries; and stable ID hashing avoids per-byte formatting.
+
+The coordinator restores one decoded cache and moves recurring merge/encode/atomic
+write work to a serial worker with cancellation and generation checks. An unchanged
+Codex scan skips the full cache rewrite, and cache freshness is bound to file
+identity. Codec/scan autorelease pools and bounded network buffer ownership reduce
+transient allocation. See [memory footprint](MIDAS_MEMORY.md) for profiling details
+and invariants. Source selection is not binary publication evidence; the latest
+published binary remains listed above until the signed release is verified.
 
 ## 0.46.2 changes: Meta scan streaming
 

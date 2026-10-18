@@ -3,6 +3,23 @@ import Testing
 @testable import CodexBarCore
 
 struct CostUsageScanExecutorTests {
+    #if canImport(ObjectiveC)
+    @Test
+    func `drains scan autoreleases before returning to the caller`() async throws {
+        let released = LockedValue(false)
+        // Disable Dispatch's implicit work-item pools so this verifies the executor's
+        // explicit boundary rather than platform-dependent worker-thread behavior.
+        let queue = DispatchQueue(label: "midas.tests.scan-autorelease", autoreleaseFrequency: .never)
+        let value = try await CostUsageScanExecutor.run(on: queue) { _ in
+            _ = Unmanaged.passRetained(ScanAutoreleaseProbe { released.set(true) }).autorelease()
+            #expect(!released.value)
+            return 42
+        }
+        #expect(value == 42)
+        #expect(released.value)
+    }
+    #endif
+
     @Test
     func `runs work on the dedicated scan queue and returns its value`() async throws {
         let queue = self.makeQueue()
@@ -129,6 +146,20 @@ struct CostUsageScanExecutorTests {
         return condition()
     }
 }
+
+#if canImport(ObjectiveC)
+private final class ScanAutoreleaseProbe: NSObject {
+    private let onDeinit: @Sendable () -> Void
+
+    init(onDeinit: @escaping @Sendable () -> Void) {
+        self.onDeinit = onDeinit
+    }
+
+    deinit {
+        self.onDeinit()
+    }
+}
+#endif
 
 private final class LockedValue<Value>: @unchecked Sendable {
     private let lock = NSLock()

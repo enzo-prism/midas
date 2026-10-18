@@ -512,6 +512,44 @@ struct MidasUsageSyncExporterTests {
     }
 
     @Test
+    func `Byte cap reorders an updated event and ignores its later copied prefix`() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let timestamp = 1_792_051_200_000_000
+        let prefix = Self.metaLine(recordID: "growing", timestamp: timestamp - 7200 * 1_000_000)
+        let middle = Self.metaLine(recordID: "middle", timestamp: timestamp - 3600 * 1_000_000)
+        let newer = Self.metaLine(recordID: "newer", timestamp: timestamp - 1800 * 1_000_000)
+        var complete = Self.metaLine(recordID: "growing", timestamp: timestamp)
+        var payload = try #require(complete["payload"] as? [String: Any])
+        var event = try #require(payload["event"] as? [String: Any])
+        var usage = try #require(event["usage"] as? [String: Any])
+        usage["output_tokens"] = 200
+        event["usage"] = usage
+        payload["event"] = event
+        complete["payload"] = payload
+        try fixture.write([prefix, middle, complete, newer, prefix], at: fixture.meta.appendingPathComponent(
+            "one/session.jsonl"))
+        let workspace = MidasUsageSyncWorkspace()
+        let full = try await MidasUsageSyncExporter.export(
+            workspace: workspace, providers: [.meta], now: Self.now, options: fixture.options)
+        #expect(full.events.count == 3)
+        let sizes = try full.events.map { try JSONEncoder().encode($0).count + 1 }.sorted()
+        var options = fixture.options
+        options.maximumEventBytes = sizes.suffix(2).reduce(0, +) + 8
+        let limited = try await MidasUsageSyncExporter.export(
+            workspace: workspace, providers: [.meta], now: Self.now, options: options)
+        #expect(limited.events.count == 2)
+        #expect(limited.events.map(\.observedAt).sorted() == [
+            Date(timeIntervalSince1970: Double(timestamp - 1800 * 1_000_000) / 1_000_000),
+            Date(timeIntervalSince1970: Double(timestamp) / 1_000_000),
+        ])
+        #expect(limited.events.reduce(0) { $0 + ($1.values.tokens ?? 0) } == 430)
+        #expect(limited.excludedRecords == 1)
+        #expect(try limited.events.reduce(0) { try $0 + JSONEncoder().encode($1).count + 1 }
+            <= options.maximumEventBytes)
+    }
+
+    @Test
     func `Malformed local numeric counters are excluded before any pricing conversion or addition`() async throws {
         let invalid: [Any] = [Int.max, 1e100, -1, 1.5, true]
         for provider in [UsageProvider.codex, .claude, .meta] {

@@ -185,7 +185,7 @@ enum MidasUsageSyncFolder {
         if self.exists(destination) {
             try self.validateRegularFile(destination)
             if let existing = try? self.read(destination, maximumBytes: MidasUsageSyncPublication.maximumFileBytes),
-               let decoded = try? JSONDecoder().decode(MidasUsageSyncPublication.self, from: existing),
+               let decoded = try? MidasUsageSyncCodec.decodePublication(existing),
                decoded == publication
             {
                 return
@@ -239,7 +239,7 @@ enum MidasUsageSyncFolder {
                 let byteLimit = min(MidasUsageSyncPublication.maximumFileBytes, self.maximumExchangeBytes - bytesRead)
                 let data = try self.read(file, maximumBytes: byteLimit)
                 bytesRead += data.count
-                let publication = try JSONDecoder().decode(MidasUsageSyncPublication.self, from: data)
+                let publication = try MidasUsageSyncCodec.decodePublication(data)
                 guard publication.deviceID == id else { throw MidasUsageSyncError.invalidRecord }
                 try publication.validate(workspaceID: workspace.id, now: validationTime())
                 let recordCount = publication.events.count + publication.accountDays.count

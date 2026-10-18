@@ -503,6 +503,89 @@ struct MidasUsageSyncLedgerTests {
         #expect(DGXSparkPricing.project(snapshot: invalid, now: self.now).last30DaysCostUSD == nil)
     }
 
+    @Test func streamingDayAndModelTotalsPreserveUnknownsZeroesAndCoverage() throws {
+        let previousDay = self.now.addingTimeInterval(-86400)
+        let first = self.event("first-model", at: previousDay, values: .init(
+            tokens: 150,
+            requests: 2,
+            costUSD: 1.25,
+            apiEquivalentCostUSD: 2.5,
+            tokenMix: .init(
+                inputTokens: 100,
+                outputTokens: 20,
+                cacheReadTokens: 10,
+                cacheCreationTokens: 20,
+                reasoningTokens: 10),
+            model: "gpt-5",
+            estimatedRequests: 2))
+        let second = self.event("same-model-unknown", at: previousDay, values: .init(
+            tokens: 50,
+            requests: 1,
+            costUSD: nil,
+            tokenMix: .init(outputTokens: 50),
+            provenance: .unknown,
+            model: "gpt-5",
+            unpricedRequests: 1))
+        let unnamed = self.event("unnamed", at: previousDay, values: .init(
+            tokens: 7, costUSD: 0.25, provenance: .vendorMetered))
+        let zero = self.event("other-model-zero", values: .init(
+            tokens: 0,
+            requests: 0,
+            costUSD: 0,
+            apiEquivalentCostUSD: 0,
+            tokenMix: .init(inputTokens: 0, outputTokens: 0),
+            model: "gpt-5-mini"))
+        let rows = [first, second, unnamed, zero]
+        let snapshot = try #require(self.ledger([
+            self.publication(events: rows),
+            self.publication(device: self.second, events: Array(rows.reversed())),
+        ]).snapshots[.codex])
+        #expect(snapshot.last30DaysTokens == 207)
+        #expect(snapshot.last30DaysRequests == 3)
+        #expect(snapshot.last30DaysCostUSD == 1.5)
+        #expect(snapshot.last30DaysAPIEquivalentCostUSD == 2.5)
+        #expect(snapshot.costProvenance == .mixed)
+        #expect(snapshot.sessionTokens == 0)
+        #expect(snapshot.sessionCostUSD == 0)
+        let day = try #require(snapshot.daily.first)
+        #expect(day.inputTokens == 100)
+        #expect(day.outputTokens == 70)
+        #expect(day.cacheReadTokens == 10)
+        #expect(day.cacheCreationTokens == 20)
+        #expect(day.reasoningTokens == 10)
+        #expect(day.unpricedRequestCount == 1)
+        #expect(day.estimatedRequestCount == 2)
+        #expect(day.modelsUsed == ["gpt-5"])
+        let model = try #require(day.modelBreakdowns?.first)
+        #expect(model.totalTokens == 200)
+        #expect(model.requestCount == 3)
+        #expect(model.costUSD == 1.25)
+        #expect(model.inputTokens == 100)
+        #expect(model.outputTokens == 70)
+        #expect(model.cacheReadTokens == 10)
+        #expect(model.cacheCreationTokens == 20)
+        #expect(model.reasoningTokens == 10)
+        #expect(snapshot.daily.last?.modelBreakdowns?.first?.inputTokens == 0)
+    }
+
+    @Test func identicalCopiesAndEqualTimestampCorrectionsKeepCanonicalSelectionDuringRetention() throws {
+        let original = self.event("equal-time", values: .init(tokens: 100, costUSD: 1, model: "gpt-5"))
+        let correction = self.event("equal-time", values: .init(tokens: 100, costUSD: 2, model: "gpt-5"))
+        let originalAccount = self.account("same-account", values: .init(tokens: 20, costUSD: 3))
+        let correctedAccount = self.account("same-account", values: .init(tokens: 20, costUSD: 4))
+        let one = self.publication(events: [original, original], accounts: [originalAccount, originalAccount])
+        let two = self.publication(events: [correction, correction], accounts: [correctedAccount, correctedAccount])
+        let forward = MidasUsageSyncLedger.retainingLocalHistory(previous: one, fresh: two)
+        let backward = MidasUsageSyncLedger.retainingLocalHistory(previous: two, fresh: one)
+        #expect(forward.events == backward.events)
+        #expect(forward.accountDays == backward.accountDays)
+        #expect(forward.events.count == 1)
+        #expect(forward.accountDays.count == 1)
+        let ledger = try self.ledger([forward, forward])
+        #expect(ledger.snapshots[.codex]?.last30DaysTokens == 100)
+        #expect(ledger.snapshots[.cursor]?.last30DaysTokens == 20)
+    }
+
     private func ledger(_ publications: [MidasUsageSyncPublication], now: Date? = nil) throws -> MidasUsageSyncLedger {
         try MidasUsageSyncLedger(publications: publications, workspaceID: self.workspace.id, now: now ?? self.now)
     }

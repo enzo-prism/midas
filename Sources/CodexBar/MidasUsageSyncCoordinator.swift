@@ -180,18 +180,7 @@ final class MidasUsageSyncCoordinator {
     @ObservationIgnored private var poller: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var accountObservation: MidasSyncAccountObservation?
-
-    private struct Cache: Codable {
-        var schemaVersion = 2
-        let localDeviceID: UUID
-        let deviceBinding: String?
-        let accountFingerprint: String
-        let workspace: MidasUsageSyncWorkspace
-        let publications: [MidasUsageSyncPublication]
-        let pendingLocal: MidasUsageSyncPublication?
-        let lastPublishedAt: Date?
-        let lastReceivedAt: Date?
-    }
+    @ObservationIgnored private let worker: Worker
 
     init(
         defaults: UserDefaults = .standard,
@@ -217,9 +206,11 @@ final class MidasUsageSyncCoordinator {
             Date) async throws -> MidasUsageHubExchange = {
             try await MidasUsageHubClient.exchange(connection: $0, workspace: $1, local: $2, now: $3)
         },
-        currentTime: @escaping @MainActor () -> Date = { Date() })
+        currentTime: @escaping @MainActor () -> Date = { Date() },
+        cacheWriter: @escaping @Sendable (Data, URL) throws -> Void = { try LocalPersistence.write($0, to: $1) })
     {
         self.defaults = defaults
+        self.worker = Worker(write: cacheWriter)
         self.automaticallySyncs = automaticallySyncs
         let identityProvider: @MainActor () -> MidasUsageSyncEnvironmentIdentity = if let environmentIdentity {
             environmentIdentity
@@ -403,7 +394,9 @@ final class MidasUsageSyncCoordinator {
         self.isEnabled = true
         self.status = "Connected to your Tailscale hub. Waiting for usage."
         // Keep the pinned workspace available when the hub is offline after a restart.
-        try self.persistCache()
+        try await self.persistCache()
+        try Task.checkCancellation()
+        guard self.generation == generation, self.isEnabled else { throw CancellationError() }
         if self.automaticallySyncs { await self.syncNow() }
     }
 
@@ -533,12 +526,17 @@ final class MidasUsageSyncCoordinator {
                 events: local.events,
                 accountDays: local.accountDays,
                 excludedRecords: local.excludedRecords)
-            let publication = MidasUsageSyncLedger.retainingLocalHistory(previous: previous, fresh: fresh)
-            try publication.validate(workspaceID: workspace.id, now: now)
+            let publication = try await self.worker.retain(
+                previous: previous, fresh: fresh, workspaceID: workspace.id, now: now)
+            try Task.checkCancellation()
+            guard self.generation == generation, self.isEnabled, self.identityStillMatches() else { return }
             self.pendingLocal = publication
             do {
-                try self.persistCache()
+                try await self.persistCache()
+                try Task.checkCancellation()
+                guard self.generation == generation, self.isEnabled, self.identityStillMatches() else { return }
             } catch {
+                guard self.generation == generation, !(error is CancellationError) else { return }
                 self.issue = "This Mac could not preserve its offline sync history. No usage was shared."
                 self.status = "Waiting to save this Mac’s usage locally. Showing last received usage."
                 return
@@ -548,7 +546,8 @@ final class MidasUsageSyncCoordinator {
             try Task.checkCancellation()
             guard self.generation == generation, self.isEnabled, self.workspace == workspace,
                   self.identityStillMatches() else { return }
-            try self.recordExchange(result, publication: publication, workspace: workspace)
+            try await self.recordExchange(
+                result, publication: publication, workspace: workspace, generation: generation)
         } catch {
             guard self.generation == generation else { return }
             if case MidasUsageSyncError.wrongWorkspace = error {
@@ -594,7 +593,7 @@ final class MidasUsageSyncCoordinator {
                   self.hubConnection == connection, self.identityStillMatches() else { return false }
             guard result.workspace == workspace else { throw MidasUsageSyncError.wrongWorkspace }
             guard !result.publicationSucceeded else { throw MidasUsageHubError.invalidResponse }
-            try self.recordExchange(
+            try await self.recordExchange(
                 MidasUsageSyncFolder.Result(
                     workspace: result.workspace,
                     publications: result.publications,
@@ -602,7 +601,8 @@ final class MidasUsageSyncCoordinator {
                     unavailableFiles: result.unavailableFiles,
                     rejectedFiles: result.rejectedFiles),
                 publication: nil,
-                workspace: workspace)
+                workspace: workspace,
+                generation: generation)
             return true
         } catch {
             guard self.generation == generation, self.isEnabled else { return false }
@@ -620,12 +620,17 @@ final class MidasUsageSyncCoordinator {
     private func recordExchange(
         _ result: MidasUsageSyncFolder.Result,
         publication: MidasUsageSyncPublication?,
-        workspace: MidasUsageSyncWorkspace) throws
+        workspace: MidasUsageSyncWorkspace,
+        generation: UUID) async throws
     {
         let receivedAt = self.currentTime()
         var candidates = self.received + result.publications
         if let publication, result.publicationSucceeded { candidates.append(publication) }
-        let ledger = try MidasUsageSyncLedger(publications: candidates, workspaceID: workspace.id, now: receivedAt)
+        let ledger = try await self.worker.ledger(
+            publications: candidates, workspaceID: workspace.id, now: receivedAt)
+        try Task.checkCancellation()
+        guard self.generation == generation, self.isEnabled, self.workspace == workspace,
+              self.identityStillMatches() else { throw CancellationError() }
         let oldRemote = self.received.filter { $0.deviceID != self.syncDeviceID }
         let newRemote = ledger.publications.filter { $0.deviceID != self.syncDeviceID }
         if newRemote != oldRemote, !newRemote.isEmpty { self.lastReceivedAt = receivedAt }
@@ -657,8 +662,11 @@ final class MidasUsageSyncCoordinator {
             self.status = "Shared usage from \(ledger.publications.count) \(deviceKind)."
         }
         do {
-            try self.persistCache()
+            try await self.persistCache()
+            try Task.checkCancellation()
+            guard self.generation == generation, self.isEnabled else { throw CancellationError() }
         } catch {
+            guard self.generation == generation, !(error is CancellationError) else { throw CancellationError() }
             if let publication { self.pendingLocal = publication }
             self.issue = "Shared history could not be saved locally. Last received usage remains visible."
         }
@@ -742,7 +750,7 @@ final class MidasUsageSyncCoordinator {
             return
         }
         self.workspace = cache.workspace
-        self.restoreCache(expected: cache.workspace)
+        self.restoreCache(cache, expected: cache.workspace)
         var stale = false
         guard let folder = try? URL(
             resolvingBookmarkData: data,
@@ -768,13 +776,22 @@ final class MidasUsageSyncCoordinator {
     }
 
     private func restoreCache(expected: MidasUsageSyncWorkspace, acceptsExplicitReconnection: Bool = false) {
-        guard let cache = self.readCache(), cache.workspace == expected,
+        guard let cache = self.readCache() else { return }
+        self.restoreCache(cache, expected: expected, acceptsExplicitReconnection: acceptsExplicitReconnection)
+    }
+
+    private func restoreCache(
+        _ cache: Cache, expected: MidasUsageSyncWorkspace, acceptsExplicitReconnection: Bool = false)
+    {
+        guard cache.workspace == expected,
               cache.localDeviceID == self.syncDeviceID, cache.deviceBinding == self.deviceBinding,
               cache.accountFingerprint == self.accountFingerprint || acceptsExplicitReconnection,
-              let ledger = try? MidasUsageSyncLedger(
-                  publications: cache.publications,
-                  workspaceID: expected.id,
-                  now: self.currentTime())
+              let ledger = try? autoreleasepool(invoking: {
+                  try MidasUsageSyncLedger(
+                      publications: cache.publications,
+                      workspaceID: expected.id,
+                      now: self.currentTime())
+              })
         else { return }
         if let pending = cache.pendingLocal {
             guard pending.deviceID == self.syncDeviceID,
@@ -793,31 +810,6 @@ final class MidasUsageSyncCoordinator {
                 isThisMac: $0.deviceID == self.syncDeviceID,
                 eventCount: $0.events.count + $0.accountDays.count)
         }
-    }
-
-    private func readCache() -> Cache? {
-        guard let url = self.cacheURL,
-              let data = try? LocalPersistence.read(url), let cache = try? JSONDecoder().decode(Cache.self, from: data),
-              cache.schemaVersion == 2, (try? cache.workspace.validate()) != nil,
-              cache.accountFingerprint.utf8.count <= 128, (cache.deviceBinding?.utf8.count ?? 0) <= 128
-        else { return nil }
-        return cache
-    }
-
-    private func persistCache() throws {
-        guard let url = self.cacheURL, let workspace, let accountFingerprint else {
-            throw MidasUsageSyncError.folderUnavailable
-        }
-        let cache = Cache(
-            localDeviceID: self.syncDeviceID,
-            deviceBinding: self.deviceBinding,
-            accountFingerprint: accountFingerprint,
-            workspace: workspace,
-            publications: self.received,
-            pendingLocal: self.pendingLocal,
-            lastPublishedAt: self.lastPublishedAt,
-            lastReceivedAt: self.lastReceivedAt)
-        try LocalPersistence.write(JSONEncoder().encode(cache), to: url)
     }
 
     private func restoreHubConnection() {
@@ -848,7 +840,7 @@ final class MidasUsageSyncCoordinator {
                 return
             }
             self.workspace = cache.workspace
-            self.restoreCache(expected: cache.workspace)
+            self.restoreCache(cache, expected: cache.workspace)
             self.issue = nil
             self.status = "Showing last received usage. Waiting to reach your Tailscale hub."
         } catch {
@@ -895,7 +887,9 @@ final class MidasUsageSyncCoordinator {
             self.workspace = selected
             self.accountFingerprint = Self.hubFingerprint(pinned)
             self.deviceName = pinned.deviceName
-            try self.persistCache()
+            try await self.persistCache()
+            try Task.checkCancellation()
+            guard self.generation == generation, self.isEnabled else { return false }
             self.issue = nil
             return true
         } catch {
@@ -960,6 +954,100 @@ final class MidasUsageSyncCoordinator {
 }
 
 extension MidasUsageSyncCoordinator {
+    private struct Cache: Codable, Sendable {
+        var schemaVersion = 2
+        let localDeviceID: UUID
+        let deviceBinding: String?
+        let accountFingerprint: String
+        let workspace: MidasUsageSyncWorkspace
+        let publications: [MidasUsageSyncPublication]
+        let pendingLocal: MidasUsageSyncPublication?
+        let lastPublishedAt: Date?
+        let lastReceivedAt: Date?
+    }
+
+    /// Serializes large transient graphs and disk writes away from the UI executor.
+    /// Callers check cancellation and connection generation before applying results.
+    private actor Worker {
+        let write: @Sendable (Data, URL) throws -> Void
+
+        init(write: @escaping @Sendable (Data, URL) throws -> Void) {
+            self.write = write
+        }
+
+        func retain(
+            previous: MidasUsageSyncPublication?,
+            fresh: MidasUsageSyncPublication,
+            workspaceID: UUID,
+            now: Date) throws -> MidasUsageSyncPublication
+        {
+            try Task.checkCancellation()
+            return try autoreleasepool {
+                let publication = MidasUsageSyncLedger.retainingLocalHistory(previous: previous, fresh: fresh)
+                try publication.validate(workspaceID: workspaceID, now: now)
+                return publication
+            }
+        }
+
+        func ledger(
+            publications: [MidasUsageSyncPublication], workspaceID: UUID, now: Date) throws -> MidasUsageSyncLedger
+        {
+            try Task.checkCancellation()
+            return try autoreleasepool {
+                try MidasUsageSyncLedger(publications: publications, workspaceID: workspaceID, now: now)
+            }
+        }
+
+        func persist(_ cache: Cache, to url: URL) throws {
+            try Task.checkCancellation()
+            try autoreleasepool {
+                let data = try JSONEncoder().encode(cache)
+                try Task.checkCancellation()
+                try self.write(data, url)
+            }
+        }
+    }
+
+    private func readCache() -> Cache? {
+        autoreleasepool {
+            guard let url = self.cacheURL,
+                  let data = try? LocalPersistence.read(url),
+                  let envelope = try? MidasUsageSyncCodec.decodeEnvelope(data),
+                  let metadata = try? JSONDecoder().decode(Cache.self, from: envelope.metadata),
+                  metadata.schemaVersion == 2, (try? metadata.workspace.validate()) != nil,
+                  metadata.accountFingerprint.utf8.count <= 128, (metadata.deviceBinding?.utf8.count ?? 0) <= 128
+            else { return nil }
+            // Keep every schema-2 identity and timestamp field while decoding the bulk
+            // publication arrays in bounded batches instead of one Foundation JSON map.
+            return Cache(
+                schemaVersion: metadata.schemaVersion,
+                localDeviceID: metadata.localDeviceID,
+                deviceBinding: metadata.deviceBinding,
+                accountFingerprint: metadata.accountFingerprint,
+                workspace: metadata.workspace,
+                publications: envelope.publications,
+                pendingLocal: envelope.pendingLocal,
+                lastPublishedAt: metadata.lastPublishedAt,
+                lastReceivedAt: metadata.lastReceivedAt)
+        }
+    }
+
+    private func persistCache() async throws {
+        guard let url = self.cacheURL, let workspace, let accountFingerprint else {
+            throw MidasUsageSyncError.folderUnavailable
+        }
+        let cache = Cache(
+            localDeviceID: self.syncDeviceID,
+            deviceBinding: self.deviceBinding,
+            accountFingerprint: accountFingerprint,
+            workspace: workspace,
+            publications: self.received,
+            pendingLocal: self.pendingLocal,
+            lastPublishedAt: self.lastPublishedAt,
+            lastReceivedAt: self.lastReceivedAt)
+        try await self.worker.persist(cache, to: url)
+    }
+
     private static func safeDeviceName(_ name: String) -> String {
         let clean = name.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
         let value = String(String.UnicodeScalarView(clean)).trimmingCharacters(in: .whitespacesAndNewlines)
