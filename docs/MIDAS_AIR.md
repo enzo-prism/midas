@@ -4,8 +4,8 @@ Midas Air replaces the main menu presentation with one native SwiftUI popover ho
 existing status-item controller. It keeps the provider engine, account coordinators, saved
 settings, and legacy menu-bar icon preferences intact. macOS 14 remains the minimum target.
 
-The compact native redesign is the **0.48.0, build 126 candidate**. Its publication is pending;
-the last verified public release is [0.47.1](https://github.com/enzo-prism/midas/releases/tag/v0.47.1-midas.2).
+The compact native redesign is published as **0.48.0, build 126**:
+[v0.48.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.0-midas.1).
 
 ## Current onboarding and account coverage
 
@@ -189,8 +189,11 @@ MIDAS_PREVIEW_OUTPUT="$MIDAS_PREVIEW_OUTPUT" \
 
 Initial design exploration used CLT-only SDK/macro workarounds and an isolated validation
 manifest that excluded XCTest-only files. Those historical results are not a full-suite pass.
-The release candidate uses full Xcode and the canonical `Package.swift`; final release
-validation, signing, and publication remain pending.
+Release validation used full Xcode and the canonical `Package.swift`: all 4,569 Swift Testing
+tests plus 52 XCTest tests passed across 524 suites and 44 shards, with zero lint violations.
+The Python suites ran 82 tests with 9 existing skips. The published archive, both update feeds, Sparkle archive
+signatures, notarization ticket, and embedded widget build 126 were verified. Installation and
+receipt on another Mac require their own readback.
 
 Preview exports use synthetic accounts and isolated stores, with no provider or Keychain probes.
 Review light/dark, empty, stale, unavailable, exhausted, multi-account, and accessibility fixtures.

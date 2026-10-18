@@ -32,9 +32,10 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
-## Midas 0.48.0 candidate: a compact native Mac interface
+## Midas 0.48.0: a compact native Mac interface
 
-The native redesign is prepared for **0.48.0, build 126**; publication is pending.
+The native redesign is available in **0.48.0, build 126**, published as
+[v0.48.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.0-midas.1).
 The menu-bar panel is narrower and sizes to its content, with the total fixed above scrolling
 provider rows. Each provider keeps its dollar estimate, independent usage limits, percentage
 left, and reset time visible. A native date menu selects the spend period; coverage and sync

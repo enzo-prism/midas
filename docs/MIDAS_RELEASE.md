@@ -6,15 +6,15 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.48.0**, build **126** (native redesign candidate). 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.48.0**, build **126**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.47.1**, build **125**, tagged
-`v0.47.1-midas.2`, superseding 0.47.0 (build 124, `v0.47.0-midas.1`) and the earlier
-0.46.x releases. Check GitHub releases for the current published binary; source and installed local
+The current **signed, notarized, Sparkle-published** binary is **0.48.0**, build **126**, tagged
+`v0.48.0-midas.1`, superseding 0.47.1 (build 125, `v0.47.1-midas.2`),
+0.47.0 (build 124, `v0.47.0-midas.1`), and the earlier 0.46.x releases. Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
@@ -47,11 +47,33 @@ This integrates on top of 0.47.1: shared usage, both-account history, DGX Spark 
 coverage and token totals, and memory improvements are preserved. Local API-equivalent
 value remains an estimate, not a bill; billed provider charges stay separate.
 
-Release verification is pending. Full Xcode is available at
-`/Volumes/PortableSSD/Xcode/Xcode-27.0.0.app/Contents/Developer`; set `DEVELOPER_DIR`
-per command rather than changing the machine's selected developer tools. Use the canonical
-package and full XCTest/Swift Testing suite for release validation, superseding the initial
-CLT-only preview workaround.
+The canonical package passed 4,569 Swift Testing tests and all 52 XCTest tests across
+524 suites, using the repository's bounded suite runner (44 groups, no failures or timeouts).
+Strict lint passed with zero violations. The 82 Python hub/collector tests passed with nine
+existing skips, and native light/dark/accessibility render fixtures were inspected. A synthetic
+wheel fixture now clears inherited modifier flags, preventing a held Shift key from turning its
+vertical event into a horizontal one; production scrolling is unchanged.
+
+The signed binary identifies source `ff062967f`. Apple notarization submission
+`d9e4c376-ec76-4925-bc2a-2fee5ed32725` was Accepted. The app and dSYM share arm64 UUID
+`8BFBF2DC-0E57-3EEF-978E-339043D98C2A`. Stapling, Gatekeeper, the embedded Sparkle key,
+both XML feed signatures, the archive signature, and downloaded draft and anonymous public
+asset checks passed. The release was published October 17, 2026 (October 18 UTC), with archive
+SHA-256 `e73ebc67debb354dfd3619eb137b6f49aecb106df123d5a9a831bbcff06df623`.
+
+The same public bundle is installed at `/Applications/Midas.app` on the release Mac mini.
+Its running executable matches the downloaded binary; About shows 0.48.0 (126), and Sparkle's
+live check confirms it is the newest available version. Twelve superseded installer/notarization
+ZIPs and three old app/preview bundles were moved to recoverable Trash with hash readback;
+source, preferences, provider state, release evidence, and crash symbols were retained.
+
+Website commit `e846d43` reached production Ready as `dpl_HuKx7AdGSU34AkpwxaFDm4vNaqk6`.
+All 18 production browser tests passed; both public download links point to the verified archive,
+and a download followed from `midas-ai.dev` matches its SHA-256.
+
+Full Xcode is available at `/Volumes/PortableSSD/Xcode/Xcode-27.0.0.app/Contents/Developer`;
+set `DEVELOPER_DIR` per command rather than changing the machine's selected developer tools.
+This full canonical validation supersedes the initial CLT-only preview workaround.
 
 ## 0.47.1 changes: shared-history performance
 

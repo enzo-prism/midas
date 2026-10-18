@@ -23,10 +23,10 @@ multi-account Codex tracking, automatic estimates, and coverage limitations.
 
 ## Current features
 
-The **0.48.0, build 126 candidate** adds a compact native panel, SF Pro/SF Symbols, adaptive
+**0.48.0, build 126** adds a compact native panel, SF Pro/SF Symbols, adaptive
 system colors, and a macOS 26 Liquid Glass navigation capsule with an older-system/accessibility
-fallback. Usage and Settings have native selectable sidebars. Publication is pending; check
-[GitHub Releases](https://github.com/enzo-prism/midas/releases/latest) for the current installer.
+fallback. Usage and Settings have native selectable sidebars. The signed, notarized release is
+[v0.48.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.0-midas.1).
 
 The overview keeps estimated AI token value, recorded tokens, per-provider dollars, remaining
 capacity, and reset times visible. Local totals include enabled providers outside Favorites;
@@ -114,13 +114,13 @@ selected provider.
 
 | Surface | Current |
 | --- | --- |
-| Native redesign candidate | **0.48.0**, build **126**, publication pending |
-| Last verified source on `main` | **0.47.1**, build **125** |
-| Last verified GitHub latest | **0.47.1**, tag `v0.47.1-midas.2` |
-| Last verified marketing-site download (`midas-ai.dev`) | **0.47.1**, tag `v0.47.1-midas.2` |
+| Last verified source on `main` | **0.48.0**, build **126** |
+| Last verified GitHub latest / signed Sparkle feed | **0.48.0**, tag `v0.48.0-midas.1` |
+| Last verified marketing-site download (`midas-ai.dev`) | **0.48.0**, tag `v0.48.0-midas.1` |
 
-The verified release/site rows were checked during candidate preparation on October 17, 2026.
-Refresh them after publication; candidate source and local validation do not establish a release.
+The app release and public archive were verified on October 17, 2026 (published October 18 UTC).
+Website commit `e846d43` reached Vercel production Ready and passed all 18 browser checks against
+`https://midas-ai.dev`. Installed-app state and receipt on another Mac remain separate checks.
 
 Push source changes to `enzo-prism/midas`. Review `git status` and the staged diff before
 committing; exclude generated bundles, logs, credentials, and local configuration.
