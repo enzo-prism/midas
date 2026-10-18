@@ -6,7 +6,8 @@ settings, and legacy menu-bar icon preferences intact. macOS 14 remains the mini
 
 The compact native redesign is published as **0.48.0, build 126**:
 [v0.48.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.0-midas.1).
-The **0.48.1, build 127 candidate** refines that overview; publication and validation are pending.
+The **0.48.1, build 127** refinement is published as
+[v0.48.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.1-midas.1).
 
 ## Current onboarding and account coverage
 
@@ -26,8 +27,8 @@ a nested `.popover` or `.focusable()` key-view loop inside the status-item `NSPo
 `UsageStore+CloudUsage` combines available Codex account history, `MidasCodexEstimate` provides
 blended pricing, and `MidasCalibrationExchange` shares optional derived samples.
 
-The 0.48.1 candidate removes inline **Partial total** and **Partial estimate** notices. The
-neutral **Estimate details** action still opens complete coverage information, including missing
+Version 0.48.1 removes inline **Partial total** and **Partial estimate** notices. The
+neutral **More → Estimate details** action opens coverage information, including missing
 sources and unpriced history. No estimate, subtotal, exclusion, or unavailable state changes.
 
 ## Everyday surfaces
@@ -194,6 +195,14 @@ MIDAS_PREVIEW_OUTPUT="$MIDAS_PREVIEW_OUTPUT" \
 
 Initial design exploration used CLT-only SDK/macro workarounds and an isolated validation
 manifest that excluded XCTest-only files. Those historical results are not a full-suite pass.
+The 0.48.1 release passed all 4,571 Swift Testing tests plus 52 XCTest tests (4,623 total)
+across 524 suites and 44 shards, with no failures or timeouts and zero lint violations. Sixty
+native fixtures cover the presentation states. The public archive, signatures, notarization,
+and latest feeds were verified. The canonical local `/Applications/Midas.app` was verified as
+0.48.1 (127), matching the public executable; About and Sparkle reported 0.48.1. Website
+commit `b9086dc` reached production Ready, all 18 live browser checks passed, and the download
+followed from `midas-ai.dev` matched the signed archive. Receipt on another Mac remains separate.
+
 The 0.48.0 release validation used full Xcode and the canonical `Package.swift`: all 4,569 Swift Testing
 tests plus 52 XCTest tests passed across 524 suites and 44 shards, with zero lint violations.
 The Python suites ran 82 tests with 9 existing skips. The published archive, both update feeds, Sparkle archive

@@ -12,8 +12,9 @@ Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` w
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.48.0**, build **126**, tagged
-`v0.48.0-midas.1`, superseding 0.47.1 (build 125, `v0.47.1-midas.2`),
+The current **signed, notarized, Sparkle-published** binary is **0.48.1**, build **127**, tagged
+`v0.48.1-midas.1`, superseding 0.48.0 (build 126, `v0.48.0-midas.1`),
+0.47.1 (build 125, `v0.47.1-midas.2`),
 0.47.0 (build 124, `v0.47.0-midas.1`), and the earlier 0.46.x releases. Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
@@ -49,8 +50,24 @@ The canonical package passed 4,571 Swift Testing tests and all 52 XCTest tests
 across 524 suites in 44 bounded shards, without failures or shard timeouts. Strict lint
 passed with zero violations. Sixty synthetic native fixtures cover light/dark and accessibility
 appearances, including compact Cursor/Meta rows and missing-baseline states. Native layout
-measurements verify that Meta fits the same space as two Claude limits. Publication, installation,
-and production verification are pending for this source revision.
+measurements verify that Meta fits the same space as two Claude limits.
+
+The signed binary identifies source `66d5a193f`. Apple notarization submission
+`c88ed560-d219-4d5a-a626-330a327bd0a2` was Accepted. App and dSYM share arm64 UUID
+`7CCEAF5A-E64E-3D6F-96DB-42CB786CE80A`. Stapling, Gatekeeper, embedded Sparkle key,
+archive and both XML feed signatures, downloaded draft assets, anonymous public assets, and
+both actual latest-feed URLs passed verification. The release was published October 17, 2026
+(October 18 UTC). Archive SHA-256:
+`bca8b2fcd9f2b5c2bf00053504dd50aa997c10c7ae08827dfd006a4c867c4f84`.
+
+The identical public bundle is running at `/Applications/Midas.app` on the release Mac mini.
+About shows 0.48.1 (127); Sparkle's live check reports it is the newest available version.
+Five superseded 0.48.0 installer/notarization ZIPs (134.3 MiB), the old installed app, and
+three verified transient app copies were moved to recoverable Trash with checksum readback.
+Source, settings, provider state, release evidence, and crash symbols were retained.
+Website commit `b9086dc` reached production Ready as `dpl_At6A4DbU8LfFdsukBsCmDdiTwE9K`.
+All 18 browser checks passed against `midas-ai.dev`. Both live download links select 0.48.1,
+and an archive downloaded through the live page matches the signed public SHA-256.
 
 ## 0.48.0 changes: native macOS redesign
 

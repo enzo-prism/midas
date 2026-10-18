@@ -23,13 +23,14 @@ multi-account Codex tracking, automatic estimates, and coverage limitations.
 
 ## Current features
 
-The **0.48.1, build 127 candidate** removes inline partial-estimate notices and condenses Meta's
-recorded-activity fallback in the overview. **Estimate details** retains full coverage and pricing
-disclosures, and provider details retain the activity breakdown. Publication is pending.
+**0.48.1, build 127** removes inline partial-estimate notices and condenses Meta's
+recorded-activity fallback in the overview. **More → Estimate details** retains coverage and pricing
+disclosures, and provider details retain the activity breakdown. The signed, notarized release is
+[v0.48.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.1-midas.1).
 
-**0.48.0, build 126** adds a compact native panel, SF Pro/SF Symbols, adaptive
+The native design first shipped in **0.48.0, build 126**: a compact panel, SF Pro/SF Symbols, adaptive
 system colors, and a macOS 26 Liquid Glass navigation capsule with an older-system/accessibility
-fallback. Usage and Settings have native selectable sidebars. The signed, notarized release is
+fallback. Usage and Settings have native selectable sidebars. That original release is
 [v0.48.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.0-midas.1).
 
 The overview keeps estimated AI token value, recorded tokens, per-provider dollars, remaining
@@ -119,14 +120,16 @@ selected provider.
 
 | Surface | Current |
 | --- | --- |
-| Overview refinement candidate | **0.48.1**, build **127**, publication pending |
-| Last verified source on `main` | **0.48.0**, build **126** |
-| Last verified GitHub latest / signed Sparkle feed | **0.48.0**, tag `v0.48.0-midas.1` |
-| Last verified marketing-site download (`midas-ai.dev`) | **0.48.0**, tag `v0.48.0-midas.1` |
+| Last verified source on `main` | **0.48.1**, build **127** |
+| Last verified GitHub latest / signed Sparkle feed | **0.48.1**, tag `v0.48.1-midas.1` |
+| Last verified marketing-site download (`midas-ai.dev`) | **0.48.1**, tag `v0.48.1-midas.1` |
+| Verified local installation | `/Applications/Midas.app` **0.48.1**, build **127**, matching the public executable |
 
-The app release and public archive were verified on October 17, 2026 (published October 18 UTC).
-Website commit `e846d43` reached Vercel production Ready and passed all 18 browser checks against
-`https://midas-ai.dev`. Installed-app state and receipt on another Mac remain separate checks.
+The 0.48.1 app release and public archive were verified on October 17, 2026 (published October 18 UTC).
+Website commit `b9086dc` reached Vercel production Ready as
+`dpl_At6A4DbU8LfFdsukBsCmDdiTwE9K` and passed all 18 browser checks against
+`https://midas-ai.dev`; a download followed from the live page matches the public archive. Local About and Sparkle readbacks confirm 0.48.1; receipt on another Mac
+remains a separate check.
 
 Push source changes to `enzo-prism/midas`. Review `git status` and the staged diff before
 committing; exclude generated bundles, logs, credentials, and local configuration.

@@ -1,12 +1,13 @@
 # Changelog
 
-## Midas 0.48.1 — October 18, 2026
+## Midas 0.48.1 — October 17, 2026
 
 - Remove the inline Partial total row and repeated partial-estimate badges. Estimate coverage remains available through More actions → Estimate details and provider details.
 - Show Meta's recorded-activity fallback in two compact columns, with percentage left and a short busiest-day/week baseline caption. Token/request breakdowns move to details and tooltips; real plan limits and reset times remain unchanged.
 - Preserve exact provider and total dollar amounts, recorded-token totals, accounting coverage, unavailable values, and separate billed charges.
 
-Build 127. See GitHub Releases for signed binary availability.
+Build 127. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.48.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.1-midas.1).
 
 ## Midas 0.48.0 — October 17, 2026
 
