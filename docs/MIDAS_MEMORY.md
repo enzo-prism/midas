@@ -60,54 +60,89 @@ For future checks, compare physical footprint and its high-water mark across
 several complete collection/exchange cycles. RSS alone omits compressed pages,
 and a smaller live heap alone does not prove the allocator released its pages.
 
-### Initial fixed-corpus comparison
+### Fixed-corpus release comparison
 
-Before the final bounded-encoding pass, three fresh-process runs of each release
-build (candidate source `7359f7fe6`) used the same fixed numeric
-corpus and observation time. The probe decodes shared history, merges the
-ledger, retains an unchanged local publication, and encodes that publication.
-Both versions produced the same golden snapshot SHA-256 and encoded publication
-size in every run. No source logs, account identities, or credentials are needed
-in the published results.
+Three interleaved fresh-process runs of 0.47.0 and the final 0.47.1 release
+(source `d83d70d70`) used the same fixed numeric corpus and observation time.
+The probe decodes shared history, merges the ledger, retains an unchanged local
+publication, and encodes that publication. Both versions produced the same
+golden snapshot SHA-256 and encoded publication size in every run. No source
+logs, account identities, or credentials are needed in the published results.
 
 The following are medians. Memory is physical footprint in MiB (1,048,576 bytes),
-not RSS. Phase samples are taken after that phase's autorelease pool drains;
-the complete-process high-water mark also includes result verification.
+not RSS. Phase samples follow autorelease-pool drainage. The sampled lifetime
+high-water mark includes result verification; kernel counters and final samples
+are not captured atomically.
 
 | Physical footprint | 0.47.0 | 0.47.1 |
 | --- | ---: | ---: |
-| Complete-process peak | 626.8 MiB | 416.7 MiB |
-| After decode | 528.5 MiB | 167.7 MiB |
-| After merge | 163.1 MiB | 258.8 MiB |
-| After unchanged-history retention | 283.1 MiB | 290.7 MiB |
-| Final process sample | 208.5 MiB | 169.6 MiB |
+| Sampled lifetime high-water mark | 626.9 MiB | 321.2 MiB |
+| After decode | 528.5 MiB | 168.0 MiB |
+| After merge | 163.0 MiB | 259.1 MiB |
+| After unchanged-history retention | 283.9 MiB | 290.9 MiB |
+| Final process sample | 209.1 MiB | 321.4 MiB |
 
 | Elapsed time | 0.47.0 | 0.47.1 |
 | --- | ---: | ---: |
-| Decode | 1.00 s | 1.53 s |
-| Merge | 0.51 s | 0.32 s |
-| Retain unchanged local history | 1.35 s | 0.47 s |
-| Encode publication | 0.32 s | 0.34 s |
-| Sum of the four measured phases | 3.17 s | 2.66 s |
+| Decode | 1.04 s | 1.57 s |
+| Merge | 0.52 s | 0.34 s |
+| Retain unchanged local history | 1.44 s | 0.48 s |
+| Encode publication | 0.33 s | 0.34 s |
+| Sum of the four measured phases | 3.33 s | 2.72 s |
 
-The bounded decoder trades extra structural scanning and batch work for a much
-smaller decode allocation spike: decoding takes longer in this comparison.
-Merge and retention are faster, while publication encoding is slightly slower.
-Intermediate samples after merge and retention are higher even though the
-complete-process peak and final footprint are lower. The timing total is the
-median of each run's phase sum; these are elapsed timings, not CPU-time samples.
+The measured peak falls about 49% and total elapsed work about 18%. Bounded
+decoding takes longer; merge and retention are faster. Some intermediate and
+final samples are higher, so this result is not evidence that every allocation
+phase or settled sample is smaller. The timing total is the median of each
+run's phase sum; these are elapsed timings, not CPU-time samples.
 
-This probe excludes raw session-log scans, provider polling, network exchanges,
-UI/widgets, and cache fsync. It does not establish a whole-app memory budget,
-long-uptime behavior, or a speedup for every workload. The retained numeric
-history still consumes memory; bounded decoding controls temporary indexing
-rather than removing history.
+A second three-pair comparison isolates whole-envelope persistence encoding.
+Both modes use the same final-build bounded decoder and the same publication
+and pending-outbox values. Only encoding differs: Foundation's previous
+whole-envelope JSONEncoder path versus bounded encoding. Both outputs have the
+same byte count and decode to identical publications and outbox values.
+
+| Envelope comparison | Whole-envelope encoder | Bounded encoder |
+| --- | ---: | ---: |
+| Peak before round-trip verification | 585.6 MiB | 253.5 MiB |
+| Encode elapsed time | 1.04 s | 0.95 s |
+| End-of-encoding sample | 379.3 MiB | 253.5 MiB |
+
+These probes exclude raw session-log scans, provider polling, network exchanges,
+UI/widgets, and cache fsync. They do not establish a whole-app memory budget,
+long-uptime behavior, or a speedup for every workload. Retained numeric history
+still consumes memory; bounded codecs control temporary indexing and encoder
+graphs rather than removing history.
+
+### Live app observation
+
+The final signed, notarized build was installed at the normal Applications path
+and observed through repeated live exchanges with three devices. Existing
+multi-account tracking, the private connection, rolling 30-day scope, and combined
+totals remained enabled. No usage source was disabled to obtain these results.
+
+| Observation | 0.47.0 warm process | First candidate `7359f7fe6` | Final `d83d70d70` |
+| --- | ---: | ---: | ---: |
+| Window | 180 s | 480 s | 480 s |
+| Samples, approximately every 250 ms | 701 | 1,891 | 1,892 |
+| Median physical footprint | 1,434.2 MiB | 914.4 MiB | 441.9 MiB |
+| Highest sampled footprint | 1,631.4 MiB | 1,326.7 MiB | 778.8 MiB |
+| Final sample | 740.2 MiB | 329.9 MiB | 394.7 MiB |
+
+The final kernel lifetime high-water counter was 778.9 MiB. The earlier 0.47.0
+process already had about 30 minutes of uptime when its shorter observation
+started. Both candidates were fresh launches. Provider responses, active usage,
+and refresh phases can differ, so these observations are not a controlled
+whole-app A/B benchmark or evidence about longer uptime. The fixed-corpus tests
+above provide the matched comparison. `leaks --noContent` found zero leaked bytes
+in the final live process; allocator fragmentation remains possible between
+refreshes even with a smaller temporary workload.
 
 ### Test isolation
 
-The full serial Swift Testing run passed 4,558 tests across 515 suites. Repeated
-suite-heavy runs on the same signed-in user exhausted directory descriptors in
-that user's `cfprefsd`, temporarily making existing preferences unreadable. The
+The full serial Swift Testing run passed 4,568 tests across 516 suites. After
+repeated suite-heavy runs on the same signed-in user, that user's `cfprefsd` had
+exhausted its directory descriptors, temporarily making existing preferences unreadable. The
 on-disk settings remained intact; restarting only the affected user's daemon
 restored access. Prefer a dedicated test user or VM for full-suite repetition,
 and hermetic or in-memory defaults in test fixtures.

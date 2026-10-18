@@ -12,9 +12,9 @@ Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` w
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.47.0**, build **124**, tagged
-`v0.47.0-midas.1` (superseding 0.46.2, build **123**, tagged `v0.46.2-midas.1`, 0.46.1, build **122**, tagged `v0.46.1-midas.1`, and 0.46.0,
-build **121**, tagged `v0.46.0-midas.1`). Check GitHub releases for the current published binary; source and installed local
+The current **signed, notarized, Sparkle-published** binary is **0.47.1**, build **125**, tagged
+`v0.47.1-midas.2`, superseding 0.47.0 (build 124, `v0.47.0-midas.1`) and the earlier
+0.46.x releases. Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
 The downloadable app is for Apple Silicon Macs running macOS 14 or later.
 
@@ -47,8 +47,28 @@ Codex scan skips the full cache rewrite, and cache freshness is bound to file
 identity. Codec/scan autorelease pools and bounded network buffer ownership reduce
 transient allocation. Bounded envelope/publication encoding and size-only byte counting
 avoid whole-history encoder graphs on saves, uploads, and peer validation. See [memory footprint](MIDAS_MEMORY.md) for profiling details
-and invariants. Source selection is not binary publication evidence; the latest
-published binary remains listed above until the signed release is verified.
+and invariants. The final fixed-corpus comparison reduced peak physical footprint
+from 626.9 to 321.2 MiB with identical snapshots and about 18% less elapsed work.
+A separate envelope-encoding comparison reduced its peak from 585.6 to 253.5 MiB.
+These results apply to the measured workloads; intermediate samples can be higher.
+
+Build 125 passed all 4,568 Swift tests in 516 suites, the 82 Python hub/collector tests,
+and strict lint. Linux arm64 and x64 CI passed for the released source. The signed
+archive identifies source `d83d70d70`; Apple notarization submission
+`2837865c-f321-44f5-a9a3-1c6f1dbc9704` was Accepted. The app and dSYM share arm64 UUID
+`6658FCC8-6449-36C2-9526-E625508B5BFA`. Stapling, Gatekeeper, the embedded Sparkle key,
+both XML feed signatures, the archive signature, and downloaded draft and
+anonymous public asset checks passed.
+
+The public archive was published as
+[`v0.47.1-midas.2`](https://github.com/enzo-prism/midas/releases/tag/v0.47.1-midas.2)
+on October 17, 2026 (local release date). Its SHA-256 is
+`80c60fa54306ee5c798a179b1d702124d95ae5d90e43479fa6fb8ece1c475415`.
+The public bundle is installed on the release Mac. Installation on any other Mac
+requires its own version/checksum receipt. The marketing repository
+`bf65627` was deployed to `midas-ai.dev` as
+`dpl_7nPAUYEvxzvj96AvLuV8nCzA5Kbh`; all 18 production browser checks passed,
+and both immutable download links point to the verified archive.
 
 ## 0.46.2 changes: Meta scan streaming
 
