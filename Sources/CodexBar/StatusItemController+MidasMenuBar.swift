@@ -22,11 +22,13 @@ extension StatusItemController {
             isRefreshing: self.store.shouldShowRefreshingMenuCardIndicator(for: provider),
             isStale: self.store.isStale(provider: provider)
                 || (self.settings.midasMenuBarMode != .orbit && self.store.tokenErrors[provider] != nil))
-        if self.store.usesSyncedUsage(for: provider) {
+        let usesSyncedUsage = self.store.usesSyncedUsage(for: provider)
+        if usesSyncedUsage {
             result.spend?.detail = provider == .cursor
                 ? "Shared Cursor history, counted once per account and UTC day. An API-rate estimate, not a bill."
                 : "Combined recorded session history across Macs, counted once. An API-rate estimate, not a bill."
-        } else if provider == .codex, self.settings.midasCloudUsageEnabled {
+        }
+        if provider == .codex, self.settings.midasCloudUsageEnabled {
             // Cloud coverage follows all connected accounts independently of the quota layout.
             let rows = self.settings.codexVisibleAccountProjection.visibleAccounts.map { account in
                 MidasCloudUsagePresentation.Account(
@@ -36,28 +38,16 @@ extension StatusItemController {
                     usage: self.store.midasCloudAccounts[account.id],
                     error: self.store.midasCloudErrors[account.id])
             }
-            let cloudToken = self.store.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true ? token : nil
-            let estimate = self.store.midasCodexEstimate
-            result.spend = nil
-            if let estimate, let amount = cloudToken?.last30DaysCostUSD, amount.isFinite,
-               let updatedAt = cloudToken?.updatedAt
-            {
-                result.spend = MidasSpendPresentation(
-                    title: "Estimated inference spend",
-                    value: amount.formatted(.currency(code: "USD")),
-                    period: "Last 30 days",
-                    detail: estimate.detail + " "
-                        + "Missing account histories and reporting delays are excluded.",
-                    updatedAt: updatedAt,
-                    amount: amount,
-                    currency: "USD",
-                    secondaryValue: nil,
-                    secondaryLabel: nil,
-                    isEstimate: true)
-            }
-            result.cloudUsage = MidasCloudUsagePresentation(
-                accounts: rows, tokens: cloudToken?.last30DaysTokens, hasEstimate: result.spend != nil)
-        } else if provider == .codex, self.settings.midasTrackAllAccounts, result.spend != nil {
+            // The display snapshot can be shared session history. Cloud account history has its own scope.
+            let cloudToken = self.store.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true
+                ? self.store.tokenSnapshot(for: .codex) : nil
+            result = MidasCloudUsagePresentation.attachingAccountHistory(
+                to: result,
+                accounts: rows,
+                tokenSnapshot: cloudToken,
+                estimate: self.store.midasCodexEstimate,
+                usesSyncedUsage: usesSyncedUsage)
+        } else if !usesSyncedUsage, provider == .codex, self.settings.midasTrackAllAccounts, result.spend != nil {
             result.spend?.detail = "Combined local Codex history across accounts, counted once. "
                 + "Other devices and account-by-account cost attribution are unavailable. "
                 + "This is an API-rate estimate, not a bill."

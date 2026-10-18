@@ -83,14 +83,22 @@ extension UsageStore {
             provenance: snapshot?.costProvenance ?? .unknown)
     }
 
+    /// Sharing always includes every stored account's logs. Display and quota-account selection
+    /// must not change the numeric history other devices receive; the exporter also scans ambient logs.
+    var midasCodexSyncAdditionalSessionsRoots: [URL] {
+        let roots = self.settings.codexAccountReconciliationSnapshot.storedAccounts.map { account in
+            URL(fileURLWithPath: account.managedHomePath, isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true)
+                .resolvingSymlinksInPath().standardizedFileURL
+        }
+        return Array(Set(roots)).sorted { $0.path < $1.path }
+    }
+
     func makeMidasSyncUsage(workspace: MidasUsageSyncWorkspace, now: Date) async throws -> MidasUsageSyncLocalUsage {
         // Sync opt-in covers the supported numeric logs independently of provider display toggles.
         let enabled = self.enabledProvidersForBackgroundWork()
-        let scope = self.tokenCostScope(for: .codex)
         let options = MidasUsageSyncExporter.Options(
-            codexAdditionalSessionsRoots: scope.additionalHomes.map {
-                URL(fileURLWithPath: $0, isDirectory: true).appendingPathComponent("sessions", isDirectory: true)
-            })
+            codexAdditionalSessionsRoots: self.midasCodexSyncAdditionalSessionsRoots)
         let exported = try await MidasUsageSyncExporter.export(
             workspace: workspace,
             providers: [.codex, .claude, .meta],

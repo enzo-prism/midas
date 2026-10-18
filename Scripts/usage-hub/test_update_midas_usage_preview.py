@@ -57,6 +57,7 @@ class PreviewUpdaterTests(unittest.TestCase):
         self.signals = []
         self.commands = []
         self.identical_build_reopen = False
+        self.all_openai_accounts = False
         self.output = io.StringIO()
 
     def tearDown(self):
@@ -99,11 +100,26 @@ class PreviewUpdaterTests(unittest.TestCase):
             self.assertTrue(kwargs.get("check"))
             return subprocess.CompletedProcess(arguments, 0)
         if executable == "/usr/bin/open":
-            expected = ["/usr/bin/open", str(self.destination)] if self.identical_build_reopen else [
+            expected = ["/usr/bin/open", str(self.destination)] if (
+                self.identical_build_reopen or self.all_openai_accounts) else [
                 "/usr/bin/open", "-n", str(self.destination)]
             self.assertEqual(arguments, expected)
             self.assertTrue(self.destination.exists())
             self.assertTrue(kwargs.get("check"))
+            return subprocess.CompletedProcess(arguments, 0)
+        if executable == "/usr/bin/defaults":
+            self.assertTrue(self.all_openai_accounts)
+            self.assertEqual(arguments[1:3], ["write", "com.designprism.midas.debug"])
+            self.assertIn(arguments[3], ("midasTrackAllAccounts", "midasCloudUsageEnabled"))
+            self.assertEqual(arguments[4:], ["-bool", "true"])
+            self.assertTrue(kwargs.get("check"))
+            self.assertEqual({pid for pid, _ in self.signals}, {2101, 2102})
+            self.assertEqual(self.digest(self.destination), self.digest(self.source))
+            self.assertTrue(any(command[0] == "/usr/bin/codesign"
+                                and command[-1] == str(self.destination) for command in self.commands))
+            preferences = plistlib.loads(self.preferences.read_bytes())
+            preferences[arguments[3]] = True
+            self.preferences.write_bytes(plistlib.dumps(preferences))
             return subprocess.CompletedProcess(arguments, 0)
         raise AssertionError("Unexpected external command blocked by fixture")
 
@@ -112,10 +128,14 @@ class PreviewUpdaterTests(unittest.TestCase):
         self.assertEqual(kind, signal.SIGTERM)
         self.signals.append((pid, kind))
 
-    def execute(self, rename=None):
+    def execute(self, rename=None, all_openai_accounts=False):
+        self.all_openai_accounts = all_openai_accounts
+        arguments = ["synthetic-updater", str(self.source)]
+        if all_openai_accounts:
+            arguments.append("--all-openai-accounts")
         with contextlib.ExitStack() as stack:
             stack.enter_context(mock.patch.object(Path, "home", return_value=self.home))
-            stack.enter_context(mock.patch.object(sys, "argv", ["synthetic-updater", str(self.source)]))
+            stack.enter_context(mock.patch.object(sys, "argv", arguments))
             stack.enter_context(mock.patch("subprocess.run", side_effect=self.run_command))
             stack.enter_context(mock.patch("os.kill", side_effect=self.signal_process))
             stack.enter_context(mock.patch("os.umask", return_value=0o077))
@@ -125,9 +145,10 @@ class PreviewUpdaterTests(unittest.TestCase):
                 stack.enter_context(mock.patch.object(Path, "rename", autospec=True, side_effect=rename))
             exec(compile(self.embedded, str(self.script), "exec"), {"__name__": "__main__"})
 
-    def assert_private_state_unchanged(self):
+    def assert_private_state_unchanged(self, include_preferences=True):
         for path, (contents, mode) in self.private_before.items():
-            self.assertEqual(path.read_bytes(), contents)
+            if include_preferences or path != self.preferences:
+                self.assertEqual(path.read_bytes(), contents)
             self.assertEqual(path.stat().st_mode & 0o777, mode)
         self.assertNotIn("synthetic-private-sync-credential", self.output.getvalue())
 
@@ -222,6 +243,56 @@ class PreviewUpdaterTests(unittest.TestCase):
         self.assertNotIn("-n", opens[0])
         self.assertFalse(any(command[0] == "/bin/ps" for command in self.commands))
         self.assert_private_state_unchanged()
+
+    def test_flagged_upgrade_enables_only_two_account_preferences_and_keeps_private_state_and_backup(self):
+        old_hash = self.digest(self.destination)
+        original_preferences = plistlib.loads(self.preferences.read_bytes())
+        self.execute(all_openai_accounts=True)
+        self.assertEqual(self.digest(self.destination), self.digest(self.source))
+        backup = self.destination.parent / ("Midas Tailscale Preview-backup-" + old_hash[:12] + ".app")
+        self.assertEqual(self.digest(backup), old_hash)
+        self.assertEqual(plistlib.loads(self.preferences.read_bytes()), {
+            **original_preferences, "midasTrackAllAccounts": True, "midasCloudUsageEnabled": True,
+        })
+        self.assertEqual([command for command in self.commands if command[0] == "/usr/bin/defaults"], [
+            ("/usr/bin/defaults", "write", "com.designprism.midas.debug", "midasTrackAllAccounts", "-bool", "true"),
+            ("/usr/bin/defaults", "write", "com.designprism.midas.debug", "midasCloudUsageEnabled", "-bool", "true"),
+        ])
+        self.assertEqual([command for command in self.commands if command[0] == "/usr/bin/open"], [
+            ("/usr/bin/open", str(self.destination)),
+        ])
+        self.assertEqual({pid for pid, _ in self.signals}, {2101, 2102})
+        self.assert_private_state_unchanged(include_preferences=False)
+
+    def test_flagged_identical_build_restarts_only_preview_and_reapplies_two_account_preferences(self):
+        (self.source / "Contents/MacOS/Midas").write_bytes(self.old_binary)
+        (self.source / "Contents/_CodeSignature/CodeResources").write_bytes(b"old sealed resources")
+        old_hash = self.digest(self.destination)
+        original_preferences = {
+            **plistlib.loads(self.preferences.read_bytes()),
+            "midasTrackAllAccounts": False,
+            "midasCloudUsageEnabled": False,
+            "midasSpendPeriodSelection": "rolling30Days",
+            "midasUsageSyncIncludeInTotals": True,
+            "unrelatedProviderOrder": ["claude", "codex"],
+        }
+        self.preferences.write_bytes(plistlib.dumps(original_preferences))
+        with self.assertRaises(SystemExit) as caught:
+            self.execute(all_openai_accounts=True)
+        self.assertEqual(caught.exception.code, 0)
+        self.assertEqual(self.digest(self.destination), old_hash)
+        self.assertEqual({pid for pid, _ in self.signals}, {2101, 2102})
+        self.assertTrue({3101, 3102, 3103, 3104}.isdisjoint(pid for pid, _ in self.signals))
+        self.assertEqual(plistlib.loads(self.preferences.read_bytes()), {
+            **original_preferences, "midasTrackAllAccounts": True, "midasCloudUsageEnabled": True,
+        })
+        self.assertEqual(sum(command[0] == "/usr/bin/defaults" for command in self.commands), 2)
+        self.assertEqual([command for command in self.commands if command[0] == "/usr/bin/open"], [
+            ("/usr/bin/open", str(self.destination)),
+        ])
+        self.assertEqual(list(self.destination.parent.glob(".Midas-preview-stage-*.app")), [])
+        self.assertEqual(list(self.destination.parent.glob("Midas Tailscale Preview-backup-*.app")), [])
+        self.assert_private_state_unchanged(include_preferences=False)
 
 
 if __name__ == "__main__":

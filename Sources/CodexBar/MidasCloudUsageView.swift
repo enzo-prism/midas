@@ -13,11 +13,47 @@ struct MidasCloudUsagePresentation {
     let tokens: Int?
     let hasEstimate: Bool
     var period = "Last 30 days · UTC"
+    var accompaniesSharedUsage = false
+
+    /// Cloud account history may overlap session records, so shared spend keeps its original source.
+    static func attachingAccountHistory(
+        to presentation: MidasProviderPresentation,
+        accounts: [Account],
+        tokenSnapshot: CostUsageTokenSnapshot?,
+        estimate: MidasCodexEstimate?,
+        usesSyncedUsage: Bool) -> MidasProviderPresentation
+    {
+        var result = presentation
+        if !usesSyncedUsage {
+            result.spend = nil
+            if let estimate, let amount = tokenSnapshot?.last30DaysCostUSD, amount.isFinite,
+               let updatedAt = tokenSnapshot?.updatedAt
+            {
+                result.spend = MidasSpendPresentation(
+                    title: "Estimated inference spend",
+                    value: amount.formatted(.currency(code: "USD")),
+                    period: "Last 30 days",
+                    detail: estimate.detail + " Missing account histories and reporting delays are excluded.",
+                    updatedAt: updatedAt,
+                    amount: amount,
+                    currency: "USD",
+                    secondaryValue: nil,
+                    secondaryLabel: nil,
+                    isEstimate: true)
+            }
+        }
+        result.cloudUsage = Self(
+            accounts: accounts,
+            tokens: tokenSnapshot?.last30DaysTokens,
+            hasEstimate: result.spend != nil,
+            accompaniesSharedUsage: usesSyncedUsage)
+        return result
+    }
 
     var coverage: String {
         let reported = self.accounts.count { $0.usage?.totalTokens != nil }
         let failures = self.accounts.count { $0.error != nil }
-        let status = failures > 0 ? " · \(failures) refresh failures" : ""
+        let status = failures > 0 ? " · \(failures) refresh \(failures == 1 ? "failure" : "failures")" : ""
         return "\(reported) of \(self.accounts.count) account histories · OpenAI-reported" + status
     }
 }
@@ -34,6 +70,10 @@ struct MidasCloudUsageView: View {
                 .font(.system(size: 24, weight: .medium)).monospacedDigit()
             Text(self.summary.period).font(.caption).foregroundStyle(MidasTheme.secondaryText)
             Text(self.summary.coverage).font(.caption2).foregroundStyle(MidasTheme.secondaryText)
+            if self.summary.accompaniesSharedUsage {
+                Text("Account histories may overlap shared session records and are excluded from the combined total.")
+                    .font(.caption2).foregroundStyle(MidasTheme.secondaryText)
+            }
             if self.showsAccounts {
                 ForEach(self.summary.accounts) { account in
                     VStack(alignment: .leading, spacing: 5) {
@@ -48,6 +88,8 @@ struct MidasCloudUsageView: View {
                         }
                         if let usage = account.usage {
                             Text("Stats as of \(usage.statsAsOf)").foregroundStyle(MidasTheme.secondaryText)
+                            Text("Fetched \(usage.fetchedAt.formatted(date: .abbreviated, time: .shortened))")
+                                .foregroundStyle(MidasTheme.secondaryText)
                             if !usage.models.isEmpty {
                                 DisclosureGroup("Model usage") {
                                     VStack(alignment: .leading, spacing: 6) {

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${1:-}" == --help || "$#" -ne 1 ]]; then
-  printf '%s\n' 'Usage: update_midas_usage_preview.sh APP_PATH' \
+if [[ "${1:-}" == --help || "$#" -lt 1 || "$#" -gt 2 \
+  || ( "$#" -eq 2 && "${2:-}" != --all-openai-accounts ) ]]; then
+  printf '%s\n' 'Usage: update_midas_usage_preview.sh APP_PATH [--all-openai-accounts]' \
     'Updates the installed Midas Tailscale preview and reopens it.' \
-    'Keeps its connection, preferences, usage history, and a backup of the prior app.'
+    'Keeps its connection, preferences, usage history, and a backup of the prior app.' \
+    'Optional: enable all connected OpenAI accounts and their reported history, then restart the preview.'
   [[ "${1:-}" == --help ]] && exit 0
   exit 1
 fi
@@ -13,7 +15,7 @@ fi
   exit 1
 }
 /usr/bin/codesign --verify --deep --strict "$1"
-/usr/bin/python3 - "$1" <<'PY'
+/usr/bin/python3 - "$1" "${2:-}" <<'PY'
 import hashlib
 import os
 from pathlib import Path
@@ -26,6 +28,7 @@ import time
 
 os.umask(0o077)
 source = Path(sys.argv[1]).absolute()
+all_openai_accounts = sys.argv[2:] == ['--all-openai-accounts']
 home = Path.home().absolute()
 destination = home / 'Applications/Midas Tailscale Preview.app'
 if str(home).startswith(('/Volumes/', '/mnt/', '/media/')):
@@ -44,9 +47,34 @@ def digest(app):
     for name in ('Contents/MacOS/Midas', 'Contents/Info.plist', 'Contents/_CodeSignature/CodeResources'):
         value.update((app / name).read_bytes())
     return value.hexdigest()
+def preview_pids():
+    result = subprocess.run(['/bin/ps', '-axo', 'pid=,command='], check=True, capture_output=True, text=True)
+    executable = str(destination / 'Contents/MacOS/Midas')
+    return [int(parts[0]) for line in result.stdout.splitlines()
+            if len(parts := line.strip().split(None, 1)) == 2
+            and (parts[1] == executable or parts[1].startswith(executable + ' '))]
+def stop_preview():
+    for pid in preview_pids():
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for _ in range(50):
+        if not preview_pids():
+            return
+        time.sleep(0.1)
+    raise SystemExit('Midas is still quitting. The installed preview is unchanged.')
+def enable_all_openai_accounts():
+    for preference in ('midasTrackAllAccounts', 'midasCloudUsageEnabled'):
+        subprocess.run(['/usr/bin/defaults', 'write', 'com.designprism.midas.debug',
+                        preference, '-bool', 'true'], check=True)
+    print('All connected OpenAI accounts and their reported history are enabled.')
 old_hash, new_hash = digest(destination), digest(source)
 if old_hash == new_hash:
     print('The preview already has this update.')
+    if all_openai_accounts:
+        stop_preview()
+        enable_all_openai_accounts()
     subprocess.run(['/usr/bin/open', str(destination)], check=True)
     raise SystemExit(0)
 stage = destination.parent / ('.Midas-preview-stage-' + new_hash[:12] + '.app')
@@ -57,23 +85,7 @@ shutil.copytree(source, stage, symlinks=True)
 subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(stage)], check=True)
 if digest(stage) != new_hash:
     raise SystemExit('Copied app verification failed. The installed preview is unchanged.')
-def preview_pids():
-    result = subprocess.run(['/bin/ps', '-axo', 'pid=,command='], check=True, capture_output=True, text=True)
-    executable = str(destination / 'Contents/MacOS/Midas')
-    return [int(parts[0]) for line in result.stdout.splitlines()
-            if len(parts := line.strip().split(None, 1)) == 2
-            and (parts[1] == executable or parts[1].startswith(executable + ' '))]
-for pid in preview_pids():
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-for _ in range(50):
-    if not preview_pids():
-        break
-    time.sleep(0.1)
-else:
-    raise SystemExit('Midas is still quitting. The installed preview is unchanged.')
+stop_preview()
 destination.rename(backup)
 try:
     stage.rename(destination)
@@ -82,7 +94,10 @@ except OSError:
         backup.rename(destination)
     raise
 subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(destination)], check=True)
-subprocess.run(['/usr/bin/open', '-n', str(destination)], check=True)
-print('Midas preview updated. Connection, preferences, and usage history preserved.')
+if all_openai_accounts:
+    enable_all_openai_accounts()
+subprocess.run(['/usr/bin/open', *([] if all_openai_accounts else ['-n']), str(destination)], check=True)
+print('Midas preview updated. Connection, usage history, and other preferences preserved.'
+      if all_openai_accounts else 'Midas preview updated. Connection, preferences, and usage history preserved.')
 print('The prior app was retained as a backup in Applications.')
 PY
