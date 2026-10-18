@@ -99,7 +99,12 @@ connection uses the same connection format. Run the Midas app as the collector o
 the standalone collector on Spark. Use one stable identity and one writer per device; simultaneous
 app and standalone writers for the same UUID can conflict even if their local directories differ.
 
-### MacBook preview package
+### Optional development preview package
+
+For production, install the signed, notarized Midas 0.47.0 or later app from
+[Midas releases](https://github.com/enzo-prism/midas/releases/latest), then import this Mac's
+private connection in Settings → Sync. Stable updates use Midas's signed update feed. The
+following package is an optional development workflow; it is not required for stable releases.
 
 The private Apple silicon setup package contains `Midas.app`, `install_midas_usage_preview.sh`,
 `install-mac.sh` (a copy of `Scripts/install_midas_macbook.sh`), and the enrolled MacBook's

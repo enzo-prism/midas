@@ -6,7 +6,7 @@ read_when:
 
 # Usage across Macs
 
-The development preview also supports a private Tailscale hub. Its connection and offline cache
+Midas 0.47.0 and later also support a private Tailscale hub. Its connection and offline cache
 are independent of iCloud identity; the numeric exporters and merge ledger are shared with the
 folder transport. See [Tailscale hub setup and coverage](MIDAS_TAILSCALE_HUB.md). Combined summary
 totals use the same synchronized provider set on every Mac. Sync opt-in collects supported local
