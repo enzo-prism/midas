@@ -223,6 +223,11 @@ enum MidasCodexAccountPolicy {
         refreshGuard: CodexAccountScopedRefreshGuard?) -> (snapshot: UsageSnapshot?, error: String?)
     {
         if let entry, self.entryBelongs(to: account, entry: entry) {
+            if let email = entry.snapshot?.accountEmail(for: .codex),
+               CodexIdentityResolver.normalizeEmail(email) != CodexIdentityResolver.normalizeEmail(account.email)
+            {
+                return (nil, nil)
+            }
             return (entry.snapshot, entry.error)
         }
         guard self.canUseProviderSnapshot(for: account, refreshGuard: refreshGuard) else { return (nil, nil) }

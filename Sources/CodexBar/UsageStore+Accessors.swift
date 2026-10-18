@@ -2,8 +2,18 @@ import CodexBarCore
 import Foundation
 
 extension UsageStore {
+    func snapshot(for provider: UsageProvider) -> UsageSnapshot? {
+        let snapshot = self.snapshots[provider]
+        if provider == .codex, let email = self.settings.midasCodexAccountEmailFilter,
+           CodexIdentityResolver.normalizeEmail(snapshot?.accountEmail(for: .codex)) != email
+        {
+            return nil
+        }
+        return snapshot
+    }
+
     var codexSnapshot: UsageSnapshot? {
-        self.snapshots[.codex]
+        self.snapshot(for: .codex)
     }
 
     var claudeSnapshot: UsageSnapshot? {

@@ -41,6 +41,23 @@ struct MidasCodexAccountPolicyTests {
                 loginMethod: nil))
     }
 
+    @Test func cachedSnapshotWithDifferentEmailCannotBorrowMatchingAccountMetadata() {
+        let selected = self.account("selected", active: true)
+        let other = self.account("other", active: false)
+        let entry = CodexAccountUsageSnapshot(
+            account: selected,
+            snapshot: self.snapshot(other),
+            error: nil,
+            sourceLabel: "oauth")
+        let usage = MidasCodexAccountPolicy.usage(
+            for: selected,
+            entry: entry,
+            providerSnapshot: nil,
+            providerError: nil,
+            refreshGuard: self.scope(selected))
+        #expect(usage.snapshot == nil)
+    }
+
     @Test func selectedOnlyUsesProviderSnapshotForSingleOrMultipleAccounts() {
         let selected = self.account("selected", active: true)
         let other = self.account("other", active: false)

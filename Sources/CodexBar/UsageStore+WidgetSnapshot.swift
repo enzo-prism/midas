@@ -71,7 +71,7 @@ extension UsageStore {
 
     private func makeWidgetEntry(for provider: UsageProvider) -> WidgetSnapshot.ProviderEntry? {
         let shared = self.usesSyncedUsage(for: provider) ? self.midasUsageSync.snapshots[provider] : nil
-        guard let snapshot = self.snapshots[provider] ?? shared.map({
+        guard let snapshot = self.snapshot(for: provider) ?? shared.map({
             UsageSnapshot(primary: nil, secondary: nil, updatedAt: $0.updatedAt)
         }) else { return nil }
 

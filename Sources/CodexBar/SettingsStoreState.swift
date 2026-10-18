@@ -34,6 +34,7 @@ struct SettingsDefaultsState {
     var midasCloudUSDPerMillionTokens: Double
     var midasSpendPeriodSelection: String
     var midasAccountAliases: [String: String]
+    var midasCodexAccountEmailFilter: String?
     var midasTrackAllAccounts: Bool
     var multiAccountMenuLayoutRaw: String
     var menuBarMetricPreferencesRaw: [String: String]

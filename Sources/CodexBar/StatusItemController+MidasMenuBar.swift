@@ -30,13 +30,16 @@ extension StatusItemController {
         }
         if provider == .codex, self.settings.midasCloudUsageEnabled {
             // Cloud coverage follows all connected accounts independently of the quota layout.
-            let rows = self.settings.codexVisibleAccountProjection.visibleAccounts.map { account in
+            let accounts = self.settings.codexVisibleAccountProjection.visibleAccounts
+            let hasCurrentCloudScope = self.store.lastTokenFetchScope[.codex]
+                == "cloud:" + UsageStore.cloudAccountSignature(accounts)
+            let rows = accounts.map { account in
                 MidasCloudUsagePresentation.Account(
                     id: account.id,
                     name: self.settings
                         .hidePersonalInfo ? "Account" : (self.accountInfo(for: account).email ?? "Account"),
-                    usage: self.store.midasCloudAccounts[account.id],
-                    error: self.store.midasCloudErrors[account.id])
+                    usage: hasCurrentCloudScope ? self.store.midasCloudAccounts[account.id] : nil,
+                    error: hasCurrentCloudScope ? self.store.midasCloudErrors[account.id] : nil)
             }
             // The display snapshot can be shared session history. Cloud account history has its own scope.
             let cloudToken = self.store.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true

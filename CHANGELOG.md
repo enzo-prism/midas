@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.48.3 — October 18, 2026
+
+- Add an optional local OpenAI account filter across Codex quotas, cloud history, menus, and widgets. A missing selected account never falls back to another login.
+- Exclude mixed-account local and shared Codex totals while scoped; use only account-verified cloud history.
+- Preserve selected-account quota and reset readings when the usage response omits the account email. Saved connections and other providers remain unchanged.
+
+Build 129. See GitHub Releases for signed binary availability.
+
 ## Midas 0.48.2 — October 18, 2026
 
 - Rename the menu-panel and Usage-overview heading to **AI Spend**. Keep the API-rate estimate explanation in the heading's help text.

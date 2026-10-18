@@ -333,7 +333,7 @@ struct MidasSpendSetupView: View {
     }
 
     private func hasUsage(_ provider: UsageProvider) -> Bool {
-        self.store.snapshots[provider] != nil || self.store.tokenSnapshots[provider]?.last30DaysTokens != nil
+        self.store.snapshot(for: provider) != nil || self.store.tokenSnapshot(for: provider)?.last30DaysTokens != nil
     }
 
     private func accountName(_ account: CodexVisibleAccount) -> String {
@@ -345,7 +345,12 @@ struct MidasSpendSetupView: View {
         return names[account.id] ?? "Account"
     }
 
+    private var hasCurrentCloudScope: Bool {
+        self.store.lastTokenFetchScope[.codex] == "cloud:" + UsageStore.cloudAccountSignature(self.accounts)
+    }
+
     private func accountStatus(_ account: CodexVisibleAccount) -> String {
+        guard self.hasCurrentCloudScope else { return "Connected · history pending" }
         if self.store.midasCloudErrors[account.id] != nil { return "History unavailable · refresh or reconnect" }
         if self.store.midasCloudAccounts[account.id]?.totalTokens != nil { return "Cloud history available" }
         return account.storedAccountID == nil
@@ -353,8 +358,9 @@ struct MidasSpendSetupView: View {
     }
 
     private func amount(_ provider: UsageProvider) -> Double? {
-        var snapshot = self.store.tokenSnapshots[provider]
+        var snapshot = self.store.tokenSnapshot(for: provider)
         if provider == .codex, self.settings.midasCloudUsageEnabled {
+            guard self.hasCurrentCloudScope else { return nil }
             let rate = self.estimateMode == .automatic ? self.store.midasCodexAutomaticEstimate?.rate
                 : (self.estimateMode == .custom ? self.rate : nil)
             snapshot = UsageStore.cloudTokenSnapshot(

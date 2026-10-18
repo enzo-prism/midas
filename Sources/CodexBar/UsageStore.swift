@@ -43,6 +43,7 @@ extension UsageStore {
         for implementation in ProviderCatalog.all {
             implementation.observeSettings(self.settings)
         }
+        _ = self.settings.midasCodexAccountEmailFilter
         _ = self.settings.midasTrackAllAccounts
         _ = self.settings.multiAccountMenuLayout
         _ = self.settings.tokenAccountsByProvider
@@ -463,10 +464,6 @@ final class UsageStore {
 
     var codexBrowserCookieOrder: BrowserCookieImportOrder {
         self.metadata(for: .codex).browserCookieOrder ?? Browser.defaultImportOrder
-    }
-
-    func snapshot(for provider: UsageProvider) -> UsageSnapshot? {
-        self.snapshots[provider]
     }
 
     func sourceLabel(for provider: UsageProvider) -> String {

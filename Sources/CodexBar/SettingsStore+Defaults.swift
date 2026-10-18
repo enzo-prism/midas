@@ -317,6 +317,18 @@ extension SettingsStore {
         }
     }
 
+    var midasCodexAccountEmailFilter: String? {
+        get { self.defaultsState.midasCodexAccountEmailFilter }
+        set {
+            let email = CodexIdentityResolver.normalizeEmail(newValue)
+            self.defaultsState.midasCodexAccountEmailFilter = email
+            self.userDefaults.set(email, forKey: "midasCodexAccountEmailFilter")
+            self.invalidateCodexAccountReconciliationSnapshotCache()
+            self.cachedCodexAccountMenuProjection = nil
+            _ = self.persistResolvedCodexActiveSourceCorrectionIfNeeded()
+        }
+    }
+
     var midasTrackAllAccounts: Bool {
         get { self.defaultsState.midasTrackAllAccounts }
         set {

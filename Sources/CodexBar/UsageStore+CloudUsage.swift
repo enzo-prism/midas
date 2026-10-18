@@ -32,14 +32,20 @@ extension UsageStore {
         for account in accounts {
             if Task.isCancelled { return }
             var environment = self.environmentBase
-            if let id = account.storedAccountID, let saved = stored.first(where: { $0.id == id }) {
+            if let id = account.storedAccountID {
+                guard let saved = stored.first(where: { $0.id == id }) else { continue }
                 environment["CODEX_HOME"] = saved.managedHomePath
+            } else if let live = self.settings.codexAccountReconciliationSnapshot.liveSystemAccount {
+                environment["CODEX_HOME"] = live.codexHomePath
+            } else {
+                continue
             }
             do {
                 if let loader {
                     results[account.id] = try await loader(environment, now)
                 } else {
-                    results[account.id] = try await CodexCloudUsageFetcher.fetch(env: environment, now: now)
+                    results[account.id] = try await CodexCloudUsageFetcher.fetch(
+                        env: environment, now: now, expectedEmail: self.settings.midasCodexAccountEmailFilter)
                 }
             } catch {
                 if error is CancellationError { return }
@@ -89,7 +95,8 @@ extension UsageStore {
 
     nonisolated static func cloudAccountSignature(_ accounts: [CodexVisibleAccount]) -> String {
         accounts.map {
-            "\($0.id)|\($0.workspaceAccountID ?? "")|\($0.storedAccountID?.uuidString ?? "live")"
+            "\($0.id)|\($0.email)|\($0.workspaceAccountID ?? "")|"
+                + "\($0.storedAccountID?.uuidString ?? "live")|\($0.authFingerprint ?? "")"
         }.sorted().joined(separator: ";")
     }
 

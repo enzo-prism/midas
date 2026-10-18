@@ -153,8 +153,13 @@ extension SettingsStore {
     }
 
     var codexResolvedActiveSourceState: CodexResolvedActiveSource {
-        CodexActiveSourceResolver.resolve(
-            from: self.codexAccountReconciliationSnapshot, preferManagedAccounts: self.midasTrackAllAccounts)
+        let snapshot = self.codexAccountReconciliationSnapshot
+        let resolution = CodexActiveSourceResolver.resolve(
+            from: snapshot,
+            preferManagedAccounts: self.midasTrackAllAccounts || self.midasCodexAccountEmailFilter != nil)
+        return CodexResolvedActiveSource(
+            persistedSource: self.codexPersistedActiveSource,
+            resolvedSource: resolution.resolvedSource)
     }
 
     @discardableResult
@@ -216,6 +221,11 @@ extension SettingsStore {
         self.codexAccountReconciliationGeneration &+= 1
     }
 
+    /// Sharing keeps its original all-account source set independently of this Mac's display scope.
+    var unscopedCodexAccountReconciliationSnapshot: CodexAccountReconciliationSnapshot {
+        self.codexAccountSnapshotLoader(activeSource: self.codexPersistedActiveSource)()
+    }
+
     var codexAccountReconciliationSnapshot: CodexAccountReconciliationSnapshot {
         self.codexAccountReconciliationSnapshot(activeSourceOverride: nil)
     }
@@ -234,7 +244,9 @@ extension SettingsStore {
             return cached.snapshot
         }
 
-        let snapshot = self.codexAccountSnapshotLoader(activeSource: activeSource)()
+        let snapshot = MidasCodexAccountScope.applying(
+            email: self.midasCodexAccountEmailFilter,
+            to: self.codexAccountSnapshotLoader(activeSource: activeSource)())
         let loadedAt = Date()
         if cacheInterval > 0 {
             self.cachedCodexAccountReconciliationSnapshot = CachedCodexAccountReconciliationSnapshot(
@@ -248,7 +260,7 @@ extension SettingsStore {
                 loadedAt: loadedAt,
                 projection: CodexVisibleAccountProjection.make(
                     from: snapshot,
-                    preferManagedAccounts: self.midasTrackAllAccounts))
+                    preferManagedAccounts: self.midasTrackAllAccounts || self.midasCodexAccountEmailFilter != nil))
         }
         return snapshot
     }
@@ -280,7 +292,9 @@ extension SettingsStore {
         let activeSource = self.codexPersistedActiveSource
         let generation = self.codexAccountReconciliationGeneration
         let loader = self.codexAccountSnapshotLoader(activeSource: activeSource)
-        let snapshot = await Self.loadCodexAccountSnapshot(loader)
+        let snapshot = await MidasCodexAccountScope.applying(
+            email: self.midasCodexAccountEmailFilter,
+            to: Self.loadCodexAccountSnapshot(loader))
 
         guard generation == self.codexAccountReconciliationGeneration,
               activeSource == self.codexPersistedActiveSource
@@ -291,7 +305,7 @@ extension SettingsStore {
         let now = Date()
         let projection = CodexVisibleAccountProjection.make(
             from: snapshot,
-            preferManagedAccounts: self.midasTrackAllAccounts)
+            preferManagedAccounts: self.midasTrackAllAccounts || self.midasCodexAccountEmailFilter != nil)
         let previousProjection = self.cachedCodexAccountMenuProjection.flatMap { cached in
             cached.activeSource == activeSource ? cached.projection : nil
         }
@@ -319,7 +333,7 @@ extension SettingsStore {
     var codexVisibleAccountProjection: CodexVisibleAccountProjection {
         CodexVisibleAccountProjection.make(
             from: self.codexAccountReconciliationSnapshot,
-            preferManagedAccounts: self.midasTrackAllAccounts)
+            preferManagedAccounts: self.midasTrackAllAccounts || self.midasCodexAccountEmailFilter != nil)
     }
 
     var codexVisibleAccounts: [CodexVisibleAccount] {
@@ -668,7 +682,8 @@ extension SettingsStore {
         let reconciliationSnapshot = self.codexAccountReconciliationSnapshot(
             activeSourceOverride: activeSourceOverride)
         let resolvedActiveSource = CodexActiveSourceResolver.resolve(
-            from: reconciliationSnapshot, preferManagedAccounts: self.midasTrackAllAccounts)
+            from: reconciliationSnapshot,
+            preferManagedAccounts: self.midasTrackAllAccounts || self.midasCodexAccountEmailFilter != nil)
         return CodexProviderSettingsBuilder.make(input: CodexProviderSettingsBuilderInput(
             usageDataSource: self.codexUsageDataSource,
             cookieSource: self.codexSnapshotCookieSource(tokenOverride: tokenOverride),

@@ -3,7 +3,14 @@ import Foundation
 
 extension UsageStore {
     func tokenSnapshot(for provider: UsageProvider) -> CostUsageTokenSnapshot? {
-        self.tokenSnapshots[provider]
+        if provider == .codex, self.settings.midasCodexAccountEmailFilter != nil {
+            // Ambient and synchronized session logs can include several signed-in accounts.
+            let accounts = self.settings.codexVisibleAccountProjection.visibleAccounts
+            guard self.settings.midasCloudUsageEnabled, !accounts.isEmpty,
+                  self.lastTokenFetchScope[.codex] == "cloud:" + Self.cloudAccountSignature(accounts)
+            else { return nil }
+        }
+        return self.tokenSnapshots[provider]
     }
 
     func tokenError(for provider: UsageProvider) -> String? {
@@ -79,6 +86,16 @@ extension UsageStore {
         }
         guard provider == .codex else {
             return (nil, [], provider.rawValue)
+        }
+        if let email = self.settings.midasCodexAccountEmailFilter {
+            let homes = self.settings.codexAccountReconciliationSnapshot.storedAccounts
+                .map(\.managedHomePath).sorted()
+            let emptyHome = ManagedCodexHomeFactory.defaultRootURL()
+                .appendingPathComponent("unavailable-account-scope").path
+            return (
+                homes.first ?? emptyHome,
+                Array(homes.dropFirst()),
+                "codex:email:" + email + ":" + homes.joined(separator: "|"))
         }
         if self.settings.midasTrackAllAccounts {
             let homes = self.settings.codexAccountReconciliationSnapshot.storedAccounts

@@ -5,6 +5,62 @@ import Testing
 
 @MainActor
 struct MidasUsageSyncDisplayTests {
+    @Test func emailScopeRejectsCombinedSyncLocalAndStaleCloudTotals() {
+        let fixture = Fixture()
+        defer { fixture.cleanup() }
+        let store = fixture.store
+        store.settings._test_activeManagedCodexAccount = ManagedCodexAccount(
+            id: UUID(),
+            email: "person@example.com",
+            managedHomePath: "/synthetic/person",
+            createdAt: 0,
+            updatedAt: 0,
+            lastAuthenticatedAt: nil)
+        store.settings.midasCodexAccountEmailFilter = " PERSON@EXAMPLE.COM "
+        #expect(store.settings.midasCodexAccountEmailFilter == "person@example.com")
+        let local = Self.snapshot(tokens: 900, cost: 90)
+        let shared = Self.snapshot(tokens: 30, cost: 3)
+        store._setTokenSnapshotForTesting(local, provider: .codex)
+        store.midasUsageSync.snapshots[.codex] = shared
+        store.midasUsageSync.snapshots[.claude] = shared
+        store.midasUsageSync.folderURL = URL(fileURLWithPath: "/synthetic-shared-folder")
+        store.midasUsageSync.isEnabled = true
+        #expect(!store.usesSyncedUsage(for: .codex))
+        #expect(store.usesSyncedUsage(for: .claude))
+        #expect(store.displayTokenSnapshot(for: .codex) == nil)
+        #expect(store.displayTokenSnapshot(for: .claude) == shared)
+        store.settings.midasCloudUsageEnabled = true
+        store.lastTokenFetchScope[.codex] = "cloud:previous-accounts"
+        #expect(store.displayTokenSnapshot(for: .codex) == nil)
+        store.lastTokenFetchScope[.codex] = "cloud:" + UsageStore.cloudAccountSignature(
+            store.settings.codexVisibleAccountProjection.visibleAccounts)
+        #expect(store.displayTokenSnapshot(for: .codex) == local)
+        store.settings.midasCodexAccountEmailFilter = nil
+        #expect(store.usesSyncedUsage(for: .codex))
+    }
+
+    @Test func emailScopeHidesCachedQuotaForAnotherAccount() {
+        let fixture = Fixture()
+        defer { fixture.cleanup() }
+        let store = fixture.store
+        store.settings.midasCodexAccountEmailFilter = "person@example.com"
+        for email in ["different@example.com", "person@example.com"] {
+            store._setSnapshotForTesting(
+                UsageSnapshot(
+                    primary: nil,
+                    secondary: nil,
+                    updatedAt: Date(),
+                    identity: ProviderIdentitySnapshot(
+                        providerID: .codex,
+                        accountEmail: email,
+                        accountOrganization: nil,
+                        loginMethod: nil)),
+                provider: .codex)
+            #expect((store.snapshot(for: .codex) != nil) == (email == "person@example.com"))
+            #expect((store.codexSnapshot != nil) == (email == "person@example.com"))
+        }
+    }
+
     @Test func sharedScopeReplacesCloudTotalsAndUsesUTC() {
         let fixture = Fixture()
         defer { fixture.cleanup() }

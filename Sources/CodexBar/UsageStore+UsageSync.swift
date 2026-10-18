@@ -45,7 +45,9 @@ extension UsageStore {
     static let midasSyncProviders: Set<UsageProvider> = [.codex, .claude, .cursor, .meta, .localInference]
 
     func usesSyncedUsage(for provider: UsageProvider) -> Bool {
-        self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
+        // Shared session events do not retain a verifiable OpenAI account owner.
+        if provider == .codex, self.settings.midasCodexAccountEmailFilter != nil { return false }
+        return self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
             && (self.midasUsageSync.hasConnection || !self.midasUsageSync.snapshots.isEmpty)
             && Self.midasSyncProviders.contains(provider)
     }
@@ -89,7 +91,7 @@ extension UsageStore {
     /// Sharing always includes every stored account's logs. Display and quota-account selection
     /// must not change the numeric history other devices receive; the exporter also scans ambient logs.
     var midasCodexSyncAdditionalSessionsRoots: [URL] {
-        let roots = self.settings.codexAccountReconciliationSnapshot.storedAccounts.map { account in
+        let roots = self.settings.unscopedCodexAccountReconciliationSnapshot.storedAccounts.map { account in
             URL(fileURLWithPath: account.managedHomePath, isDirectory: true)
                 .appendingPathComponent("sessions", isDirectory: true)
                 .resolvingSymlinksInPath().standardizedFileURL

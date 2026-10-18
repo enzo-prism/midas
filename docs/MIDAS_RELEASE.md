@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.48.2**, build **128**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.48.3**, build **129**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -34,6 +34,15 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.48.3 changes: selected OpenAI account
+
+Version 0.48.3, build 129, adds an optional local Codex account filter. Quotas, cloud
+history, menus, setup previews, and widgets honor the selected identity. Missing or
+mismatched accounts cannot fall back to another login. Mixed-account local and shared
+Codex totals are excluded while scoped; saved accounts and other providers remain intact.
+Single-account refresh retains verified identity when the quota response omits email.
+See [setup](MIDAS_SETUP.md#limit-codex-to-one-openai-account). Publication is pending.
 
 ## 0.48.2 changes: AI Spend heading
 

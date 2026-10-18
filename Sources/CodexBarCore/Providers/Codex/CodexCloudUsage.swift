@@ -126,9 +126,19 @@ public enum CodexCloudUsageError: LocalizedError {
 }
 
 public enum CodexCloudUsageFetcher {
-    public static func fetch(env: [String: String], now: Date = Date()) async throws -> CodexCloudAccountUsage {
+    public static func fetch(
+        env: [String: String], now: Date = Date(), expectedEmail: String? = nil) async throws -> CodexCloudAccountUsage
+    {
         // Quota refresh owns token rotation. This reader never races another refresh by rotating credentials.
         let credentials = try CodexOAuthCredentialsStore.load(env: env)
+        if let expectedEmail = CodexIdentityResolver.normalizeEmail(expectedEmail) {
+            let payload = credentials.idToken.flatMap { UsageFetcher.parseJWT($0) }
+            let profile = payload?["https://api.openai.com/profile"] as? [String: Any]
+            let email = (payload?["email"] as? String) ?? (profile?["email"] as? String)
+            guard CodexIdentityResolver.normalizeEmail(email) == expectedEmail else {
+                throw CodexCloudUsageError.invalidData
+            }
+        }
         let window = CodexCloudAccountUsage.window(now: now)
         let profile = try await self.get(path: "/wham/profiles/me", credentials: credentials)
         let breakdown = try await self.get(

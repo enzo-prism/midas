@@ -457,6 +457,8 @@ extension SettingsStore {
             midasCloudUSDPerMillionTokens: userDefaults.double(forKey: "midasCloudUSDPerMillionTokens"),
             midasSpendPeriodSelection: userDefaults.string(forKey: "midasSpendPeriodSelection") ?? "rolling30Days",
             midasAccountAliases: userDefaults.dictionary(forKey: "midasAccountAliases") as? [String: String] ?? [:],
+            midasCodexAccountEmailFilter: CodexIdentityResolver.normalizeEmail(
+                userDefaults.string(forKey: "midasCodexAccountEmailFilter")),
             midasTrackAllAccounts: userDefaults.bool(forKey: "midasTrackAllAccounts"),
             multiAccountMenuLayoutRaw: multiAccountMenuLayoutRaw,
             menuBarMetricPreferencesRaw: resolvedPreferences,

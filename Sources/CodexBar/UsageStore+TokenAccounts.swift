@@ -73,6 +73,7 @@ extension UsageStore {
 
     func shouldFetchAllCodexVisibleAccounts() -> Bool {
         let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
+        if self.settings.midasCodexAccountEmailFilter != nil { return !projection.visibleAccounts.isEmpty }
         return (self.settings.midasTrackAllAccounts || self.settings.multiAccountMenuLayout == .stacked) &&
             projection.visibleAccounts.count > 1
     }
@@ -83,7 +84,7 @@ extension UsageStore {
             projection.visibleAccounts,
             snapshots: self.codexAccountSnapshots,
             activeVisibleAccountID: projection.activeVisibleAccountID)
-        guard accounts.count > 1 else {
+        guard accounts.count > 1 || (self.settings.midasCodexAccountEmailFilter != nil && !accounts.isEmpty) else {
             self.codexAccountSnapshots = []
             return
         }
@@ -231,7 +232,8 @@ extension UsageStore {
         return Self.codexVisibleAccountProjectionWithFreshManagedAuthFingerprints(
             CodexVisibleAccountProjection.make(
                 from: snapshot,
-                preferManagedAccounts: self.settings.midasTrackAllAccounts),
+                preferManagedAccounts: self.settings.midasTrackAllAccounts
+                    || self.settings.midasCodexAccountEmailFilter != nil),
             snapshot: snapshot,
             requireLiveManagedAuthFor: accountIDs)
     }

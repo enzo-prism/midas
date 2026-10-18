@@ -34,6 +34,7 @@ extension SettingsStore {
         _ = self.midasCloudUSDPerMillionTokens
         _ = self.midasSpendPeriodSelection
         _ = self.midasAccountAliases
+        _ = self.midasCodexAccountEmailFilter
         _ = self.midasTrackAllAccounts
         _ = self.multiAccountMenuLayout
         _ = self.menuBarMetricPreferencesRaw

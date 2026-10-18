@@ -420,16 +420,21 @@ extension UsageStore {
         errorOverride: String? = nil,
         now: Date = Date()) -> CodexConsumerProjection
     {
-        let snapshot = surface == .overrideCard ? snapshotOverride : snapshotOverride ?? self.snapshots[.codex]
+        let candidate = surface == .overrideCard ? snapshotOverride : snapshotOverride ?? self.snapshot(for: .codex)
+        let matchesScope = self.settings.midasCodexAccountEmailFilter.map { email in
+            CodexIdentityResolver.normalizeEmail(candidate?.accountEmail(for: .codex)) == email
+        } ?? true
+        let snapshot = matchesScope ? candidate : nil
+        let allowsAdjuncts = self.settings.midasCodexAccountEmailFilter == nil
         let rawUsageError = surface == .overrideCard ? errorOverride : errorOverride ?? self.errors[.codex]
         let context = CodexConsumerProjection.Context(
             snapshot: snapshot,
             rawUsageError: rawUsageError,
-            liveCredits: self.credits,
+            liveCredits: allowsAdjuncts ? self.credits : nil,
             rawCreditsError: self.lastCreditsError,
-            liveDashboard: self.openAIDashboard,
+            liveDashboard: allowsAdjuncts ? self.openAIDashboard : nil,
             rawDashboardError: self.lastOpenAIDashboardError,
-            dashboardAttachmentAuthorized: self.openAIDashboardAttachmentAuthorized,
+            dashboardAttachmentAuthorized: allowsAdjuncts && self.openAIDashboardAttachmentAuthorized,
             dashboardRequiresLogin: self.openAIDashboardRequiresLogin,
             now: now)
         return CodexConsumerProjection.make(surface: surface, context: context)

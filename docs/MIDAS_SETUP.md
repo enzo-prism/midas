@@ -115,6 +115,21 @@ The shared JSON is readable to anyone with folder access, so keep the folder pri
 stops sharing and keeps existing shared files. See [usage sync](MIDAS_USAGE_SYNC.md) for coverage,
 deduplication, privacy, recovery, and verification details.
 
+## Limit Codex to one OpenAI account
+
+The optional local preference `midasCodexAccountEmailFilter` limits Codex to a normalized
+OpenAI email address. Set it in the `com.designprism.midas` defaults domain, then restart Midas.
+Only matching accounts appear in Codex usage, including cached quota rows and cloud history.
+If that account is unavailable, Midas does not fall back to another OpenAI login.
+
+With this filter enabled, Codex spend and token totals use account-verified cloud history.
+Combined device history and ambient local session logs are excluded because they cannot
+reliably identify the OpenAI account that produced every event. Cloud history may have a
+shorter reporting window or unavailable dollar estimates. Other providers retain their existing
+usage scope. Saved connections and shared-history contributions are preserved.
+
+Remove the preference and restart to restore the normal multi-account behavior.
+
 ## Multiple Claude accounts
 
 1. Open **Settings → Providers → Claude → Add Claude account**.

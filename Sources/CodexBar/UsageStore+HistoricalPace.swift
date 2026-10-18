@@ -99,7 +99,7 @@ extension UsageStore {
             from: dashboard.usageBreakdown)
         guard !usageBreakdown.isEmpty else { return }
 
-        let codexSnapshot = self.snapshots[.codex]
+        let codexSnapshot = self.snapshot(for: .codex)
         let ownership = self.codexOwnershipContext(preferredEmail: attachedAccountEmail)
         let referenceWindow: RateWindow
         let calibrationAt: Date
