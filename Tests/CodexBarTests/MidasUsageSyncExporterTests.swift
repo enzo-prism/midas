@@ -318,6 +318,58 @@ struct MidasUsageSyncExporterTests {
     }
 
     @Test
+    func `Meta candidate filtering preserves escaped usage and malformed line exclusions`() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let file = fixture.meta.appendingPathComponent("candidate/session.jsonl")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var body = Data()
+        func append(_ line: Data) {
+            body.append(line)
+            body.append(0x0A)
+        }
+        func encode(_ record: [String: Any]) throws -> Data {
+            try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
+        }
+        func recordText(_ id: String, escaped: Bool) throws -> String {
+            let value = try #require(String(bytes: encode(Self.metaLine(recordID: id)), encoding: .utf8))
+            return escaped ? value.replacingOccurrences(of: "model_completed", with: #"model\u005fcompleted"#) : value
+        }
+        try append(encode(["payload": ["text": String(repeating: "unrelated transcript text ", count: 10000)]]))
+        try append(encode(Self.metaLine(recordID: "direct")))
+        try append(encode([
+            "retained_frame": "transaction",
+            "children": [["record_json": recordText("retained", escaped: false)]],
+        ]))
+        try append(Data(recordText("escaped-direct", escaped: true).utf8))
+        try append(encode([
+            "retained_frame": "transaction",
+            "children": [["record_json": recordText("escaped-retained", escaped: true)]],
+        ]))
+        var bad = Self.metaLine(recordID: "bad-counter")
+        var payload = try #require(bad["payload"] as? [String: Any])
+        var event = try #require(payload["event"] as? [String: Any])
+        var usage = try #require(event["usage"] as? [String: Any])
+        usage["input_tokens"] = -1
+        event["usage"] = usage
+        payload["event"] = event
+        bad["payload"] = payload
+        try append(encode(bad))
+        append(Data([0xFF]))
+        append(Data(repeating: 0x78, count: MuseSessionLogScanner.maxLineBytes + 1))
+        try body.write(to: file)
+
+        let result = try await MidasUsageSyncExporter.export(
+            workspace: MidasUsageSyncWorkspace(),
+            providers: [.meta],
+            now: Self.now,
+            options: fixture.options)
+        #expect(result.events.count == 4)
+        #expect(result.events.reduce(0) { $0 + ($1.values.tokens ?? 0) } == 500)
+        #expect(result.excludedRecords == 3)
+    }
+
+    @Test
     func `UTC day derives from source offset and history window omits older events`() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

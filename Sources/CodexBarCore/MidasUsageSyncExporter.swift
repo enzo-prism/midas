@@ -417,14 +417,14 @@ public enum MidasUsageSyncExporter {
                 prefixBytes: MuseSessionLogScanner.maxLineBytes,
                 checkCancellation: checkCancellation,
                 onLine: { line in
-                    guard !line.wasTruncated, let text = String(
-                        data: line.bytes,
-                        encoding: .utf8)
-                    else {
+                    guard !line.wasTruncated, String(data: line.bytes, encoding: .utf8) != nil else {
                         output.excludedRecords += 1
                         return
                     }
-                    let parsed = MuseSessionLogScanner.parseResponsesForSync(fromLine: text)
+                    // Most transcript lines have no usage. Keep Unicode-escaped JSON as candidates too,
+                    // including escaped record_json children, so this optimization never drops valid counters.
+                    guard line.bytes.containsAscii("model_completed") || line.bytes.containsAscii("\\u") else { return }
+                    let parsed = MuseSessionLogScanner.parseResponsesForSync(fromData: line.bytes)
                     output.excludedRecords = CostUsageScanner.boundedAdd(output.excludedRecords, parsed.excludedRecords)
                     for response in parsed.responses {
                         guard response.hasRecordedTimestamp, let identity = response.sourceIDComponents else {
