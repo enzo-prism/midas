@@ -119,6 +119,17 @@ sync; original supported logs can be collected after an app or network outage. T
 ad hoc signed development preview, not a notarized public release. Do not bypass a macOS security
 warning; resolve signing or use the normal approved release workflow if one appears.
 
+App-only updates use `Scripts/update_midas_usage_preview.sh APP_PATH`. They verify both app
+signatures, quit only the installed preview, preserve the connection/preferences/history, and keep
+the prior app as a backup. A failed staged replacement restores the prior installed path.
+`Scripts/verify_midas_usage_preview.py --wait 180` prints a compact numeric receipt showing the
+installed binary fingerprint and received publications. It does not read credentials or provider
+logs. The real three-device setup uses Mac mini, MacBook Pro, and Spark local runtime labels.
+
+Sync uses a dedicated scanner cache in `~/Library/Caches/Midas/usage-sync-scan`, so a normal
+30-day cost refresh cannot shrink its year-long scan history and force repeated full scans.
+An empty hub cache receives the existing shared totals before collecting the Mac's local history.
+
 ## Run the collector
 
 First perform one exchange with the hub available so the shared salt can be cached:

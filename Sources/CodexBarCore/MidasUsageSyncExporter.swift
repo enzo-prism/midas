@@ -49,14 +49,34 @@ public enum MidasUsageSyncExporter {
         options: Options = Options()) async throws -> ExportResult
     {
         try workspace.validate()
+        let resolvedOptions = self.resolvingCacheRoot(options)
+        if options.cacheRoot == nil, providers.contains(.codex) || providers.contains(.claude) {
+            // Only live default exports refresh the public catalog. Explicit fixture and CLI roots stay isolated.
+            await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: resolvedOptions.cacheRoot)
+            try Task.checkCancellation()
+        }
         return try await CostUsageScanExecutor.run { checkCancellation in
             try self.exportSynchronously(
                 workspace: workspace,
                 providers: providers,
                 now: now,
-                options: options,
+                options: resolvedOptions,
                 checkCancellation: checkCancellation)
         }
+    }
+
+    /// Normal cost views retain a narrower history window. Sharing their cache would make each
+    /// 365-day sync expand backward and reparse the corpus after an ordinary 30-day refresh.
+    static func resolvingCacheRoot(
+        _ options: Options,
+        cachesDirectory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]) -> Options
+    {
+        guard options.cacheRoot == nil else { return options }
+        var resolved = options
+        resolved.cacheRoot = cachesDirectory
+            .appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
+            .appendingPathComponent("usage-sync-scan", isDirectory: true)
+        return resolved
     }
 
     /// The scanner callback is Sendable; this lock protects its value-only cache snapshot.

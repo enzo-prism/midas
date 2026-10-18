@@ -286,6 +286,80 @@ struct MidasHubCoordinatorTests {
         #expect(requestsAfterRestore == requestsBeforeRestore)
     }
 
+    @Test func firstSyncReceivesExistingTotalsBeforeTheSlowLocalScan() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let peer = self.publication(workspace: fixture.workspace, deviceID: UUID(), event: "peer", tokens: 200)
+        await fixture.hub.setPublications([peer])
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        let gate = Gate()
+        coordinator.makeLocalUsage = { workspace, now in
+            await gate.suspend()
+            return MidasUsageSyncLocalUsage(events: [Self.event(
+                workspace: workspace, name: "mini", tokens: 100, now: now)])
+        }
+        let sync = Task { await coordinator.syncNow() }
+        await gate.waitUntilBlocked()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 200)
+        #expect(coordinator.lastPublishedAt == nil)
+        #expect(coordinator.lastReceivedAt == Self.now)
+        #expect(coordinator.devices.count == 1)
+        await gate.release()
+        await sync.value
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
+        #expect(coordinator.lastPublishedAt == Self.now)
+        self.collect(on: coordinator, event: nil, tokens: 0)
+        await coordinator.syncNow()
+        let reads = await fixture.hub.readRequests
+        #expect(reads == 1)
+    }
+
+    @Test func readOnlyAcknowledgementIsRejectedWhileLocalCollectionContinues() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let peer = self.publication(workspace: fixture.workspace, deviceID: UUID(), event: "peer", tokens: 900)
+        let hub = fixture.hub
+        let coordinator = fixture.coordinator(exchange: { connection, workspace, local, now in
+            if local == nil {
+                return MidasUsageHubExchange(
+                    workspace: workspace,
+                    publications: [peer],
+                    publicationSucceeded: true,
+                    unavailableFiles: 0,
+                    rejectedFiles: 0)
+            }
+            return try await hub.exchange(connection: connection, workspace: workspace, local: local, now: now)
+        })
+        try await coordinator.connect(hub: fixture.connection)
+        self.collect(on: coordinator, event: "mini", tokens: 100)
+        await coordinator.syncNow()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
+        #expect(coordinator.devices.count == 1)
+        #expect(coordinator.lastReceivedAt == nil)
+        #expect(coordinator.lastPublishedAt == Self.now)
+    }
+
+    @Test func failedColdReadNeverAcknowledgesOrDiscardsTheOfflineOutbox() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        await fixture.hub.setFailure(.unavailable)
+        self.collect(on: coordinator, event: "offline", tokens: 100)
+        await coordinator.syncNow()
+        struct SavedOutbox: Decodable { let pendingLocal: MidasUsageSyncPublication? }
+        let before = try JSONDecoder().decode(SavedOutbox.self, from: Data(contentsOf: fixture.hubCache))
+        #expect(before.pendingLocal?.events.count == 1)
+        let restarted = fixture.coordinator(restore: true)
+        restarted.makeLocalUsage = { _, _ in throw CancellationError() }
+        await restarted.syncNow()
+        let after = try JSONDecoder().decode(SavedOutbox.self, from: Data(contentsOf: fixture.hubCache))
+        #expect(after.pendingLocal == before.pendingLocal)
+        #expect(restarted.lastPublishedAt == nil)
+        #expect(restarted.snapshots.isEmpty)
+    }
+
     private func collect(on coordinator: MidasUsageSyncCoordinator, event: String?, tokens: Int) {
         coordinator.makeLocalUsage = { workspace, now in
             guard let event else { return MidasUsageSyncLocalUsage() }
@@ -365,7 +439,7 @@ struct MidasHubCoordinatorTests {
             restore: Bool = false,
             identity: Identity = Identity(),
             exchange: (@Sendable (
-                MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication,
+                MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication?,
                 Date) async throws -> MidasUsageHubExchange)? = nil) -> MidasUsageSyncCoordinator
         {
             let hub = self.hub
@@ -423,6 +497,7 @@ struct MidasHubCoordinatorTests {
         private var publications: [MidasUsageSyncPublication] = []
         private var failure: MidasUsageHubError?
         private(set) var workspaceRequests = 0
+        private(set) var readRequests = 0
 
         func loadWorkspace() throws -> MidasUsageSyncWorkspace {
             self.workspaceRequests += 1
@@ -449,19 +524,23 @@ struct MidasHubCoordinatorTests {
         func exchange(
             connection: MidasUsageHubConnection,
             workspace: MidasUsageSyncWorkspace,
-            local: MidasUsageSyncPublication,
+            local: MidasUsageSyncPublication?,
             now: Date) throws -> MidasUsageHubExchange
         {
             if let failure { throw failure }
-            try local.validate(workspaceID: workspace.id, now: now)
-            #expect(local.deviceID == connection.deviceID)
-            #expect(local.deviceName == connection.deviceName)
-            self.publications.removeAll { $0.deviceID == local.deviceID }
-            self.publications.append(local)
+            if let local {
+                try local.validate(workspaceID: workspace.id, now: now)
+                #expect(local.deviceID == connection.deviceID)
+                #expect(local.deviceName == connection.deviceName)
+                self.publications.removeAll { $0.deviceID == local.deviceID }
+                self.publications.append(local)
+            } else {
+                self.readRequests += 1
+            }
             return MidasUsageHubExchange(
                 workspace: self.workspace,
                 publications: self.publications,
-                publicationSucceeded: true,
+                publicationSucceeded: local != nil,
                 unavailableFiles: 0,
                 rejectedFiles: 0)
         }

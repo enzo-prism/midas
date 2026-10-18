@@ -154,7 +154,7 @@ final class MidasUsageSyncCoordinator {
     @ObservationIgnored private let hubWorkspaceLoader: @Sendable (
         MidasUsageHubConnection) async throws -> MidasUsageSyncWorkspace
     @ObservationIgnored private let hubExchange: @Sendable (
-        MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication,
+        MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication?,
         Date) async throws -> MidasUsageHubExchange
     private var hubConnection: MidasUsageHubConnection?
     private var syncDeviceID: UUID {
@@ -213,7 +213,7 @@ final class MidasUsageSyncCoordinator {
             try await MidasUsageHubClient.workspace(connection: $0)
         },
         hubExchange: @escaping @Sendable (
-            MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication,
+            MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication?,
             Date) async throws -> MidasUsageHubExchange = {
             try await MidasUsageHubClient.exchange(connection: $0, workspace: $1, local: $2, now: $3)
         },
@@ -511,9 +511,10 @@ final class MidasUsageSyncCoordinator {
         }
         guard let makeLocalUsage = self.makeLocalUsage else { return }
         self.isSyncing = true
-        self.status = "Updating shared usage…"
         let generation = self.generation
         defer { if self.generation == generation { self.isSyncing = false } }
+        guard await self.receiveInitialHubUsage(workspace: workspace, generation: generation) else { return }
+        self.status = "Updating shared usage…"
         let collectionStartedAt = self.currentTime()
         do {
             let local = try await makeLocalUsage(workspace, collectionStartedAt)
@@ -542,21 +543,7 @@ final class MidasUsageSyncCoordinator {
                 self.status = "Waiting to save this Mac’s usage locally. Showing last received usage."
                 return
             }
-            let result: MidasUsageSyncFolder.Result
-            switch self.transport {
-            case .folder:
-                guard let folder = self.folderURL else { throw MidasUsageSyncError.folderUnavailable }
-                result = try await self.exchangePublication(folder, workspace, publication, now)
-            case .tailscaleHub:
-                guard let connection = self.hubConnection else { throw MidasUsageSyncError.folderUnavailable }
-                let exchange = try await self.hubExchange(connection, workspace, publication, now)
-                result = MidasUsageSyncFolder.Result(
-                    workspace: exchange.workspace,
-                    publications: exchange.publications,
-                    publicationSucceeded: exchange.publicationSucceeded,
-                    unavailableFiles: exchange.unavailableFiles,
-                    rejectedFiles: exchange.rejectedFiles)
-            }
+            let result = try await self.exchangeUsage(workspace: workspace, publication: publication, now: now)
             guard result.workspace == workspace else { throw MidasUsageSyncError.wrongWorkspace }
             try Task.checkCancellation()
             guard self.generation == generation, self.isEnabled, self.workspace == workspace,
@@ -574,14 +561,70 @@ final class MidasUsageSyncCoordinator {
         }
     }
 
+    private func exchangeUsage(
+        workspace: MidasUsageSyncWorkspace,
+        publication: MidasUsageSyncPublication,
+        now: Date) async throws -> MidasUsageSyncFolder.Result
+    {
+        switch self.transport {
+        case .folder:
+            guard let folder = self.folderURL else { throw MidasUsageSyncError.folderUnavailable }
+            return try await self.exchangePublication(folder, workspace, publication, now)
+        case .tailscaleHub:
+            guard let connection = self.hubConnection else { throw MidasUsageSyncError.folderUnavailable }
+            let exchange = try await self.hubExchange(connection, workspace, publication, now)
+            return MidasUsageSyncFolder.Result(
+                workspace: exchange.workspace,
+                publications: exchange.publications,
+                publicationSucceeded: exchange.publicationSucceeded,
+                unavailableFiles: exchange.unavailableFiles,
+                rejectedFiles: exchange.rejectedFiles)
+        }
+    }
+
+    /// A first local scan can take minutes. Receive existing shared totals before beginning it.
+    private func receiveInitialHubUsage(workspace: MidasUsageSyncWorkspace, generation: UUID) async -> Bool {
+        guard self.transport == .tailscaleHub, self.received.isEmpty,
+              let connection = self.hubConnection else { return true }
+        self.status = "Receiving shared usage…"
+        do {
+            let result = try await self.hubExchange(connection, workspace, nil, self.currentTime())
+            try Task.checkCancellation()
+            guard self.generation == generation, self.isEnabled, self.workspace == workspace,
+                  self.hubConnection == connection, self.identityStillMatches() else { return false }
+            guard result.workspace == workspace else { throw MidasUsageSyncError.wrongWorkspace }
+            guard !result.publicationSucceeded else { throw MidasUsageHubError.invalidResponse }
+            try self.recordExchange(
+                MidasUsageSyncFolder.Result(
+                    workspace: result.workspace,
+                    publications: result.publications,
+                    publicationSucceeded: false,
+                    unavailableFiles: result.unavailableFiles,
+                    rejectedFiles: result.rejectedFiles),
+                publication: nil,
+                workspace: workspace)
+            return true
+        } catch {
+            guard self.generation == generation, self.isEnabled else { return false }
+            if error is CancellationError { return false }
+            if case MidasUsageSyncError.wrongWorkspace = error {
+                self.invalidateConnection(message: self.message(error))
+                return false
+            }
+            // A failed read does not acknowledge or discard the offline outbox, or prevent local collection.
+            self.issue = self.message(error)
+            return true
+        }
+    }
+
     private func recordExchange(
         _ result: MidasUsageSyncFolder.Result,
-        publication: MidasUsageSyncPublication,
+        publication: MidasUsageSyncPublication?,
         workspace: MidasUsageSyncWorkspace) throws
     {
         let receivedAt = self.currentTime()
         var candidates = self.received + result.publications
-        if result.publicationSucceeded { candidates.append(publication) }
+        if let publication, result.publicationSucceeded { candidates.append(publication) }
         let ledger = try MidasUsageSyncLedger(publications: candidates, workspaceID: workspace.id, now: receivedAt)
         let oldRemote = self.received.filter { $0.deviceID != self.syncDeviceID }
         let newRemote = ledger.publications.filter { $0.deviceID != self.syncDeviceID }
@@ -596,12 +639,14 @@ final class MidasUsageSyncCoordinator {
                 isThisMac: value.deviceID == self.syncDeviceID,
                 eventCount: value.events.count + value.accountDays.count)
         }
-        if result.publicationSucceeded {
+        if publication != nil, result.publicationSucceeded {
             self.lastPublishedAt = receivedAt
             self.pendingLocal = nil
         }
         self.issue = Self.coverageIssue(result: result, ledger: ledger)
-        if !result.publicationSucceeded {
+        if publication == nil {
+            self.status = "Shared usage received. Preparing this Mac’s usage."
+        } else if !result.publicationSucceeded {
             self.status = "Shared usage received. This Mac’s changes are waiting to save."
         } else if newRemote.isEmpty {
             self.status = self.transport == .folder
@@ -614,8 +659,8 @@ final class MidasUsageSyncCoordinator {
         do {
             try self.persistCache()
         } catch {
-            self.pendingLocal = publication
-            self.issue = "Usage was shared, but this Mac could not preserve its offline history."
+            if let publication { self.pendingLocal = publication }
+            self.issue = "Shared history could not be saved locally. Last received usage remains visible."
         }
     }
 
@@ -878,17 +923,6 @@ final class MidasUsageSyncCoordinator {
             .appendingPathComponent("state.json")
     }
 
-    private static func safeDeviceName(_ name: String) -> String {
-        let clean = name.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
-        let value = String(String.UnicodeScalarView(clean)).trimmingCharacters(in: .whitespacesAndNewlines)
-        var bounded = ""
-        for character in value {
-            guard bounded.utf8.count + String(character).utf8.count <= 80 else { break }
-            bounded.append(character)
-        }
-        return bounded.isEmpty ? "Mac" : bounded
-    }
-
     private func message(_ error: Error) -> String {
         if self.transport == .tailscaleHub {
             if case MidasUsageSyncError.wrongWorkspace = error {
@@ -922,6 +956,19 @@ final class MidasUsageSyncCoordinator {
             0 { return "Some device files are still downloading. Last received history is retained." }
         if ledger.excludedRecords > 0 { return "Some activity lacked a stable identity or timestamp and was excluded." }
         return nil
+    }
+}
+
+extension MidasUsageSyncCoordinator {
+    private static func safeDeviceName(_ name: String) -> String {
+        let clean = name.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
+        let value = String(String.UnicodeScalarView(clean)).trimmingCharacters(in: .whitespacesAndNewlines)
+        var bounded = ""
+        for character in value {
+            guard bounded.utf8.count + String(character).utf8.count <= 80 else { break }
+            bounded.append(character)
+        }
+        return bounded.isEmpty ? "Mac" : bounded
     }
 }
 

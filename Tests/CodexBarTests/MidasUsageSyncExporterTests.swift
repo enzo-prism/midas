@@ -260,6 +260,48 @@ struct MidasUsageSyncExporterTests {
     }
 
     @Test
+    func `Default sync cache remains isolated from ordinary narrow Claude scans`() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let cachesDirectory = fixture.root.appendingPathComponent("caches", isDirectory: true)
+        let normalRoot = cachesDirectory.appendingPathComponent(MidasIdentity.supportDirectoryName, isDirectory: true)
+        var defaults = fixture.options
+        defaults.cacheRoot = nil
+        let options = MidasUsageSyncExporter.resolvingCacheRoot(defaults, cachesDirectory: cachesDirectory)
+        let syncRoot = try #require(options.cacheRoot)
+        #expect(syncRoot == normalRoot.appendingPathComponent("usage-sync-scan", isDirectory: true))
+        #expect(MidasUsageSyncExporter.resolvingCacheRoot(fixture.options).cacheRoot == fixture.cache)
+        let oldTimestamp = ISO8601DateFormatter().string(from: Self.now.addingTimeInterval(-100 * 86400))
+        try fixture.write([
+            Self.claudeLine(output: 20, message: "old", request: "old", timestamp: oldTimestamp),
+            Self.claudeLine(output: 20),
+        ], at: fixture.claude.appendingPathComponent("project/session.jsonl"))
+        let workspace = MidasUsageSyncWorkspace()
+        // Passing the resolved temporary root deliberately keeps this fixture free of network requests.
+        let first = try await MidasUsageSyncExporter.export(
+            workspace: workspace, providers: [.claude], now: Self.now, options: options)
+        #expect(first.events.count == 2)
+        let syncFile = CostUsageCacheIO.cacheFileURL(provider: .claude, cacheRoot: syncRoot)
+        let original = try Data(contentsOf: syncFile)
+        let normalOptions = CostUsageScanner.Options(claudeProjectsRoots: [fixture.claude], cacheRoot: normalRoot)
+        _ = try CostUsageScanner.loadDailyReportCancellable(
+            provider: .claude,
+            since: Self.now.addingTimeInterval(-29 * 86400),
+            until: Self.now,
+            now: Self.now,
+            options: normalOptions,
+            checkCancellation: nil)
+        #expect(try Data(contentsOf: syncFile) == original)
+        let normalCache = CostUsageCacheIO.load(provider: .claude, cacheRoot: normalRoot)
+        let syncCache = CostUsageCacheIO.load(provider: .claude, cacheRoot: syncRoot)
+        #expect(try #require(syncCache.scanSinceKey) < #require(normalCache.scanSinceKey))
+        let repeated = try await MidasUsageSyncExporter.export(
+            workspace: workspace, providers: [.claude], now: Self.now.addingTimeInterval(1), options: options)
+        #expect(repeated.events == first.events)
+        #expect(try Data(contentsOf: syncFile) == original)
+    }
+
+    @Test
     func `Legacy usage without stable identity or timestamp is excluded visibly`() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
