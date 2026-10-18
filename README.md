@@ -32,6 +32,13 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.48.2 candidate: AI Spend
+
+**0.48.2, build 128** is in preparation. The total's heading becomes **AI Spend**. Help text and
+**More → Estimate details** retain its meaning as estimated value at API rates; amounts,
+coverage, missing-data handling, and separate billed spend are unchanged. The latest verified
+published release remains 0.48.1 until this candidate is released.
+
 ## Midas 0.48.1: a cleaner usage overview
 
 **0.48.1, build 127** is published as
@@ -57,8 +64,8 @@ styling. On macOS 26 and later, one Liquid Glass capsule groups navigation actio
 solid fallback for Reduce Transparency and older macOS versions. Usage and Settings use native
 sidebars. macOS 14 remains supported.
 
-Estimated AI token value remains an estimate, with recorded tokens shown separately. Missing
-data stays unavailable, partial totals stay labeled, and billed Anthropic spend stays outside
+Token value remains an estimate, with recorded tokens shown separately. Missing
+data stays unavailable, coverage details remain available, and billed Anthropic spend stays outside
 the estimate sum. Separate account limits, DGX Spark pricing coverage, private usage sync, and
 the 0.47.1 history-performance improvements retain their existing rules. See
 [Midas Air](docs/MIDAS_AIR.md) for behavior and verification boundaries; use

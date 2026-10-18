@@ -23,6 +23,10 @@ multi-account Codex tracking, automatic estimates, and coverage limitations.
 
 ## Current features
 
+The **0.48.2, build 128 candidate** shortens the total's heading to **AI Spend**. Its help and
+**More → Estimate details** retain the API-rate estimate explanation. This is a label change;
+calculation, accounting, and coverage rules are unchanged. Publication is pending.
+
 **0.48.1, build 127** removes inline partial-estimate notices and condenses Meta's
 recorded-activity fallback in the overview. **More → Estimate details** retains coverage and pricing
 disclosures, and provider details retain the activity breakdown. The signed, notarized release is
@@ -120,6 +124,7 @@ selected provider.
 
 | Surface | Current |
 | --- | --- |
+| Label update candidate | **0.48.2**, build **128**, publication pending |
 | Last verified source on `main` | **0.48.1**, build **127** |
 | Last verified GitHub latest / signed Sparkle feed | **0.48.1**, tag `v0.48.1-midas.1` |
 | Last verified marketing-site download (`midas-ai.dev`) | **0.48.1**, tag `v0.48.1-midas.1` |

@@ -1,5 +1,11 @@
 # Changelog
 
+## Midas 0.48.2 — October 18, 2026
+
+- Rename the menu-panel and Usage-overview heading to **AI Spend**. Keep the API-rate estimate explanation in the heading's help text.
+
+Build 128. See GitHub Releases for signed binary availability.
+
 ## Midas 0.48.1 — October 17, 2026
 
 - Remove the inline Partial total row and repeated partial-estimate badges. Estimate coverage remains available through More actions → Estimate details and provider details.

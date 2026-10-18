@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.48.1**, build **127**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.48.2**, build **128**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -33,6 +33,16 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.48.2 changes: AI Spend heading
+
+Version 0.48.2, build 128, replaces the overview heading with **AI Spend** in both the
+menu panel and Usage window. Its help text explains the public API-rate estimate basis.
+Unavailable-value accessibility uses the same label. Amounts, recorded tokens, independent
+quotas, source coverage, and billed-charge exclusions are unchanged. The canonical package
+passed 4,623 tests across 524 suites in 44 bounded groups, with no failures or shard timeouts.
+Strict lint passed with zero violations; 60 native synthetic fixtures were rendered and the
+new heading was inspected. Publication and installation are pending for this source revision.
 
 ## 0.48.1 changes: quieter overview and compact Meta
 

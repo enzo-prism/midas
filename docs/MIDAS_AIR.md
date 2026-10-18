@@ -9,6 +9,8 @@ The compact native redesign is published as **0.48.0, build 126**:
 The **0.48.1, build 127** refinement is published as
 [v0.48.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.1-midas.1).
 
+The 0.48.2 candidate changes the shared overview heading to **AI Spend**; publication is pending.
+
 ## Current onboarding and account coverage
 
 Onboarding follows Services → Accounts → Overview. See [the setup guide](MIDAS_SETUP.md)
@@ -17,8 +19,9 @@ for sign-in, cloud coverage, pricing, iCloud privacy, and missing-data behavior.
 `PreferencesSelection` persists deferred progress. `MidasSpendSetupView` uses the existing
 account coordinators and finishes without blocking on provider refreshes.
 
-The primary display is **Estimated AI token value** for the selected period, accompanied by
+The primary display is **AI Spend** for the selected period, accompanied by
 recorded token totals. Both preserve the 0.47.x counting and coverage rules.
+The heading's help text explains that spend is estimated token value at public API rates.
 `MidasSpendPeriod` selects actual daily history for calendar or rolling periods;
 `MidasSpendPeriodControl` uses a native `Menu` and `Picker` for date choices. Estimate coverage
 and usage-scope/sync details open as pages inside the same panel, with a Back action. Never add

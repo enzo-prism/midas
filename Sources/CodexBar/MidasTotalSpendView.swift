@@ -16,15 +16,16 @@ struct MidasTotalSpendView: View {
         let total = self.total
         VStack(alignment: .leading, spacing: self.compact ? 5 : 10) {
             HStack {
-                Text("Estimated AI token value")
+                Text("AI Spend")
                     .font(self.compact ? .system(size: 11, weight: .medium) : .callout)
                     .foregroundStyle(MidasTheme.secondaryText)
+                    .help("Estimated AI token value at public API rates for the selected period.")
                 Spacer(minLength: 4)
                 if self.compact, let periodControl { periodControl }
             }
             if total.totals.isEmpty {
                 Text("—").font(.system(size: self.compact ? 34 : 44, weight: .semibold))
-                    .accessibilityLabel("Estimated AI token value unavailable")
+                    .accessibilityLabel("AI Spend unavailable")
             } else {
                 ForEach(total.totals) { currency in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
