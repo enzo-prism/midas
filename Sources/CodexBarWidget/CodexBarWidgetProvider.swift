@@ -108,6 +108,7 @@ enum ProviderChoice: String, AppEnum {
         case .llmproxy: return nil // LLM Proxy not yet supported in widgets
         case .deepgram: return nil // Deepgram not yet supported in widgets
         case .meta: self = .meta
+        case .localInference: return nil // Local runtime records have no account quota.
         }
     }
 }

@@ -104,6 +104,7 @@ public enum ProviderDescriptorRegistry {
         .llmproxy: LLMProxyProviderDescriptor.descriptor,
         .deepgram: DeepgramProviderDescriptor.descriptor,
         .meta: MetaProviderDescriptor.descriptor,
+        .localInference: LocalInferenceProviderDescriptor.descriptor,
     ]
     private static let bootstrap: Void = {
         for provider in UsageProvider.allCases {

@@ -6,6 +6,22 @@ import Foundation
 import IOKit
 import Observation
 
+enum MidasUsageSyncTransport: String, CaseIterable, Identifiable {
+    case folder
+    case tailscaleHub
+
+    var id: String {
+        self.rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .folder: "Shared folder"
+        case .tailscaleHub: "Tailscale hub"
+        }
+    }
+}
+
 struct MidasUsageSyncDeviceStatus: Identifiable, Equatable {
     let id: UUID
     let name: String
@@ -105,7 +121,19 @@ final class MidasUsageSyncCoordinator {
         didSet { self.defaults.set(self.deviceName, forKey: "midasUsageSyncDeviceName") }
     }
 
+    private(set) var transport: MidasUsageSyncTransport
     var folderURL: URL?
+    var hubEndpoint: URL? {
+        self.hubConnection?.endpoint
+    }
+
+    var hasConnection: Bool {
+        switch self.transport {
+        case .folder: self.folderURL != nil
+        case .tailscaleHub: self.hubConnection != nil
+        }
+    }
+
     var status = "Sync is off."
     var issue: String?
     var isSyncing = false
@@ -122,6 +150,23 @@ final class MidasUsageSyncCoordinator {
     @ObservationIgnored private let workspaceLoader: @Sendable (URL) async throws -> MidasUsageSyncWorkspace
     @ObservationIgnored private let exchangePublication: @Sendable (
         URL, MidasUsageSyncWorkspace, MidasUsageSyncPublication, Date) async throws -> MidasUsageSyncFolder.Result
+    @ObservationIgnored private let hubConnectionURL: URL
+    @ObservationIgnored private let hubWorkspaceLoader: @Sendable (
+        MidasUsageHubConnection) async throws -> MidasUsageSyncWorkspace
+    @ObservationIgnored private let hubExchange: @Sendable (
+        MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication,
+        Date) async throws -> MidasUsageHubExchange
+    private var hubConnection: MidasUsageHubConnection?
+    private var syncDeviceID: UUID {
+        self.hubConnection?.deviceID ?? self.deviceID
+    }
+
+    private var cacheURL: URL? {
+        guard let persistenceURL = self.persistenceURL else { return nil }
+        return self.transport == .folder ? persistenceURL : persistenceURL
+            .deletingLastPathComponent().appendingPathComponent("hub-state.json")
+    }
+
     @ObservationIgnored private let currentTime: @MainActor () -> Date
     @ObservationIgnored private let deviceBinding: String?
     @ObservationIgnored private var accountFingerprint: String?
@@ -162,6 +207,16 @@ final class MidasUsageSyncCoordinator {
             .Result = {
                 try await MidasUsageSyncFolder.exchange(at: $0, workspace: $1, local: $2, now: $3)
             },
+        hubConnectionURL: URL? = nil,
+        hubWorkspaceLoader: @escaping @Sendable (
+            MidasUsageHubConnection) async throws -> MidasUsageSyncWorkspace = {
+            try await MidasUsageHubClient.workspace(connection: $0)
+        },
+        hubExchange: @escaping @Sendable (
+            MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication,
+            Date) async throws -> MidasUsageHubExchange = {
+            try await MidasUsageHubClient.exchange(connection: $0, workspace: $1, local: $2, now: $3)
+        },
         currentTime: @escaping @MainActor () -> Date = { Date() })
     {
         self.defaults = defaults
@@ -177,9 +232,15 @@ final class MidasUsageSyncCoordinator {
         self.workspaceLoader = workspaceLoader
         self.exchangePublication = exchangePublication
         self.currentTime = currentTime
+        self.hubWorkspaceLoader = hubWorkspaceLoader
+        self.hubExchange = hubExchange
         let identity = identityProvider()
         self.deviceBinding = identity.deviceBinding
         self.persistenceURL = persistenceURL ?? (automaticallySyncs ? Self.defaultPersistenceURL : nil)
+        self.hubConnectionURL = hubConnectionURL ?? (persistenceURL ?? Self.defaultPersistenceURL)
+            .deletingLastPathComponent().appendingPathComponent("hub-connection.json")
+        self.transport = defaults.string(forKey: "midasUsageSyncTransport")
+            .flatMap(MidasUsageSyncTransport.init(rawValue:)) ?? .folder
         self.isEnabled = defaults.bool(forKey: "midasUsageSyncEnabled")
         self.includesSyncedUsage = defaults.object(forKey: "midasUsageSyncIncludeTotals") as? Bool ?? true
         self.deviceName = defaults.string(forKey: "midasUsageSyncDeviceName") ?? "Mac"
@@ -193,11 +254,15 @@ final class MidasUsageSyncCoordinator {
         if automaticallySyncs, identity.deviceBinding == nil {
             self
                 .invalidateConnection(
-                    message: "This Mac’s sync identity is unavailable. Choose the folder again to reconnect.")
+                    message: self.transport == .folder
+                        ? "This Mac’s sync identity is unavailable. Choose the folder again to reconnect."
+                        : "This Mac’s sync identity is unavailable. Import its connection file again to reconnect.")
         } else if copiedIdentity, self.isEnabled {
             self
                 .invalidateConnection(
-                    message: "This sync connection was copied from another Mac. Choose the folder again.")
+                    message: self.transport == .folder
+                        ? "This sync connection was copied from another Mac. Choose the folder again."
+                        : "This sync connection was copied from another Mac. Import this Mac’s connection file.")
         } else if restoresConnection ?? automaticallySyncs {
             self.restoreConnection()
         }
@@ -253,13 +318,107 @@ final class MidasUsageSyncCoordinator {
             Task { @MainActor [weak self] in
                 do { try await self?.connect(folder: folder) } catch is CancellationError {
                     return
-                } catch { self?.issue = Self.message(error) }
+                } catch { self?.issue = self?.message(error) }
             }
         }
     }
 
+    func selectTransport(_ selected: MidasUsageSyncTransport) {
+        guard selected != self.transport else { return }
+        self.isEnabled = false
+        self.pause()
+        self.clearReceivedView()
+        self.folderURL = nil
+        self.hubConnection = nil
+        self.workspace = nil
+        self.accountFingerprint = nil
+        self.transport = selected
+        self.defaults.set(selected.rawValue, forKey: "midasUsageSyncTransport")
+        self.status = selected == .folder ? "Choose a shared folder." : "Import this device’s hub connection file."
+        self.issue = nil
+    }
+
+    func chooseHubConnection() {
+        let panel = NSOpenPanel()
+        panel.title = "Connect to your Tailscale hub"
+        panel.message = "Choose the private Midas connection file created for this Mac."
+        panel.prompt = "Connect"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.begin { [weak self] response in
+            guard response == .OK, let file = panel.url else { return }
+            Task { @MainActor [weak self] in
+                do { try await self?.connect(hubConnectionFile: file) } catch is CancellationError {
+                    return
+                } catch { self?.issue = self?.message(error) }
+            }
+        }
+    }
+
+    func connect(hubConnectionFile file: URL) async throws {
+        let connection = try MidasUsageHubConnectionFile.load(at: file)
+        try await self.connect(hub: connection)
+    }
+
+    /// Import is explicit. The private credential is stored only in a protected local file.
+    func connect(hub connection: MidasUsageHubConnection) async throws {
+        self.selectTransport(.tailscaleHub)
+        self.isEnabled = false
+        self.pause()
+        let generation = self.generation
+        let identity = self.environmentIdentity()
+        guard identity.deviceBinding == self.deviceBinding,
+              !self.automaticallySyncs || identity.deviceBinding != nil
+        else {
+            throw MidasUsageSyncError.folderUnavailable
+        }
+        try connection.validate()
+        let selected = try await self.hubWorkspaceLoader(connection)
+        try selected.validate()
+        try Task.checkCancellation()
+        guard self.generation == generation,
+              self.environmentIdentity().deviceBinding == identity.deviceBinding else { throw CancellationError() }
+        guard connection.workspaceID == nil || connection.workspaceID == selected.id else {
+            throw MidasUsageSyncError.wrongWorkspace
+        }
+        if let previous = self.readCache(), previous.workspace.id == selected.id, previous.workspace != selected {
+            throw MidasUsageSyncError.wrongWorkspace
+        }
+        let pinned = MidasUsageHubConnection(
+            endpoint: connection.endpoint,
+            deviceID: connection.deviceID,
+            deviceName: connection.deviceName,
+            credential: connection.credential,
+            workspaceID: selected.id)
+        try LocalPersistence.write(JSONEncoder().encode(pinned), to: self.hubConnectionURL)
+        self.hubConnection = pinned
+        self.workspace = selected
+        self.folderURL = nil
+        self.deviceName = connection.deviceName
+        self.accountFingerprint = Self.hubFingerprint(pinned)
+        self.clearReceivedView()
+        self.restoreCache(expected: selected, acceptsExplicitReconnection: true)
+        self.issue = nil
+        self.isEnabled = true
+        self.status = "Connected to your Tailscale hub. Waiting for usage."
+        // Keep the pinned workspace available when the hub is offline after a restart.
+        try self.persistCache()
+        if self.automaticallySyncs { await self.syncNow() }
+    }
+
+    private func clearReceivedView() {
+        self.received = []
+        self.pendingLocal = nil
+        self.snapshots = [:]
+        self.devices = []
+        self.lastPublishedAt = nil
+        self.lastReceivedAt = nil
+    }
+
     /// Also the test seam: callers must explicitly supply their isolated folder.
     func connect(folder: URL) async throws {
+        self.selectTransport(.folder)
         self.isEnabled = false
         self.pause()
         let generation = self.generation
@@ -294,6 +453,7 @@ final class MidasUsageSyncCoordinator {
     func disconnect() {
         self.isEnabled = false
         self.folderURL = nil
+        self.hubConnection = nil
         self.workspace = nil
         self.received = []
         self.pendingLocal = nil
@@ -301,11 +461,15 @@ final class MidasUsageSyncCoordinator {
         self.devices = []
         self.lastPublishedAt = nil
         self.lastReceivedAt = nil
-        self.defaults.removeObject(forKey: "midasUsageSyncFolderBookmark")
-        self.defaults.removeObject(forKey: "midasUsageSyncWorkspaceID")
-        self.defaults.removeObject(forKey: "midasUsageSyncAccountFingerprint")
+        if self.transport == .folder {
+            self.defaults.removeObject(forKey: "midasUsageSyncFolderBookmark")
+            self.defaults.removeObject(forKey: "midasUsageSyncWorkspaceID")
+            self.defaults.removeObject(forKey: "midasUsageSyncAccountFingerprint")
+        }
         self.accountFingerprint = nil
-        self.status = "Disconnected. Shared history remains in the folder."
+        self.status = self.transport == .folder
+            ? "Disconnected. Shared history remains in the folder."
+            : "Disconnected. Usage already received by the hub is retained there."
         self.issue = nil
     }
 
@@ -335,9 +499,14 @@ final class MidasUsageSyncCoordinator {
     private func performSync() async {
         guard self.isEnabled, !self.isSyncing, !Task.isCancelled else { return }
         guard self.identityStillMatches() else { return }
-        if self.folderURL == nil { self.restoreConnection() }
-        guard let folder = self.folderURL, let workspace = self.workspace else {
-            if self.issue == nil { self.status = "Choose a shared folder to connect this Mac." }
+        if !self.hasConnection { self.restoreConnection() }
+        guard await self.prepareHubWorkspaceIfNeeded() else { return }
+        guard self.hasConnection, let workspace = self.workspace else {
+            if self.issue == nil {
+                self.status = self.transport == .folder
+                    ? "Choose a shared folder to connect this Mac."
+                    : "Import this device’s hub connection file."
+            }
             return
         }
         guard let makeLocalUsage = self.makeLocalUsage else { return }
@@ -352,13 +521,13 @@ final class MidasUsageSyncCoordinator {
             guard self.generation == generation, self.isEnabled, self.identityStillMatches() else { return }
             // A first yearly scan can outlast provider refreshes. Publish against completion time.
             let now = self.currentTime()
-            let previous = self.pendingLocal ?? self.received.first { $0.deviceID == self.deviceID }
+            let previous = self.pendingLocal ?? self.received.first { $0.deviceID == self.syncDeviceID }
             // A repeated or slightly corrected wall clock must not let peers prefer an older local revision.
             let publishedAt = previous.map { max(now, $0.publishedAt.addingTimeInterval(0.001)) } ?? now
             let fresh = MidasUsageSyncPublication(
                 workspaceID: workspace.id,
-                deviceID: self.deviceID,
-                deviceName: Self.safeDeviceName(self.deviceName),
+                deviceID: self.syncDeviceID,
+                deviceName: self.hubConnection?.deviceName ?? Self.safeDeviceName(self.deviceName),
                 publishedAt: publishedAt,
                 events: local.events,
                 accountDays: local.accountDays,
@@ -373,54 +542,80 @@ final class MidasUsageSyncCoordinator {
                 self.status = "Waiting to save this Mac’s usage locally. Showing last received usage."
                 return
             }
-            let result = try await self.exchangePublication(folder, workspace, publication, now)
+            let result: MidasUsageSyncFolder.Result
+            switch self.transport {
+            case .folder:
+                guard let folder = self.folderURL else { throw MidasUsageSyncError.folderUnavailable }
+                result = try await self.exchangePublication(folder, workspace, publication, now)
+            case .tailscaleHub:
+                guard let connection = self.hubConnection else { throw MidasUsageSyncError.folderUnavailable }
+                let exchange = try await self.hubExchange(connection, workspace, publication, now)
+                result = MidasUsageSyncFolder.Result(
+                    workspace: exchange.workspace,
+                    publications: exchange.publications,
+                    publicationSucceeded: exchange.publicationSucceeded,
+                    unavailableFiles: exchange.unavailableFiles,
+                    rejectedFiles: exchange.rejectedFiles)
+            }
+            guard result.workspace == workspace else { throw MidasUsageSyncError.wrongWorkspace }
             try Task.checkCancellation()
             guard self.generation == generation, self.isEnabled, self.workspace == workspace,
                   self.identityStillMatches() else { return }
-            let receivedAt = self.currentTime()
-            var candidates = self.received + result.publications
-            if result.publicationSucceeded { candidates.append(publication) }
-            let ledger = try MidasUsageSyncLedger(publications: candidates, workspaceID: workspace.id, now: receivedAt)
-            let oldRemote = self.received.filter { $0.deviceID != self.deviceID }
-            let newRemote = ledger.publications.filter { $0.deviceID != self.deviceID }
-            if newRemote != oldRemote, !newRemote.isEmpty { self.lastReceivedAt = receivedAt }
-            self.received = ledger.publications
-            self.snapshots = ledger.snapshots
-            self.devices = ledger.publications.map { value in
-                MidasUsageSyncDeviceStatus(
-                    id: value.deviceID,
-                    name: value.deviceName,
-                    lastSeenAt: value.publishedAt,
-                    isThisMac: value.deviceID == self.deviceID,
-                    eventCount: value.events.count + value.accountDays.count)
-            }
-            if result.publicationSucceeded {
-                self.lastPublishedAt = receivedAt
-                self.pendingLocal = nil
-            }
-            self.issue = Self.coverageIssue(result: result, ledger: ledger)
-            if !result.publicationSucceeded {
-                self.status = "Shared usage received. This Mac’s changes are waiting to save."
-            } else if newRemote.isEmpty {
-                self.status = "Saved on this Mac. Waiting for another Mac’s usage."
-            } else {
-                self.status = "Shared usage from \(ledger.publications.count) Macs."
-            }
-            do {
-                try self.persistCache()
-            } catch {
-                self.pendingLocal = publication
-                self.issue = "Usage was saved to the folder, but this Mac could not preserve its offline history."
-            }
+            try self.recordExchange(result, publication: publication, workspace: workspace)
         } catch {
             guard self.generation == generation else { return }
             if case MidasUsageSyncError.wrongWorkspace = error {
-                self.invalidateConnection(message: Self.message(error))
+                self.invalidateConnection(message: self.message(error))
                 return
             }
             if error is CancellationError { return }
-            self.issue = Self.message(error)
+            self.issue = self.message(error)
             self.status = "Sync unavailable. Showing last received usage."
+        }
+    }
+
+    private func recordExchange(
+        _ result: MidasUsageSyncFolder.Result,
+        publication: MidasUsageSyncPublication,
+        workspace: MidasUsageSyncWorkspace) throws
+    {
+        let receivedAt = self.currentTime()
+        var candidates = self.received + result.publications
+        if result.publicationSucceeded { candidates.append(publication) }
+        let ledger = try MidasUsageSyncLedger(publications: candidates, workspaceID: workspace.id, now: receivedAt)
+        let oldRemote = self.received.filter { $0.deviceID != self.syncDeviceID }
+        let newRemote = ledger.publications.filter { $0.deviceID != self.syncDeviceID }
+        if newRemote != oldRemote, !newRemote.isEmpty { self.lastReceivedAt = receivedAt }
+        self.received = ledger.publications
+        self.snapshots = ledger.snapshots
+        self.devices = ledger.publications.map { value in
+            MidasUsageSyncDeviceStatus(
+                id: value.deviceID,
+                name: value.deviceName,
+                lastSeenAt: value.publishedAt,
+                isThisMac: value.deviceID == self.syncDeviceID,
+                eventCount: value.events.count + value.accountDays.count)
+        }
+        if result.publicationSucceeded {
+            self.lastPublishedAt = receivedAt
+            self.pendingLocal = nil
+        }
+        self.issue = Self.coverageIssue(result: result, ledger: ledger)
+        if !result.publicationSucceeded {
+            self.status = "Shared usage received. This Mac’s changes are waiting to save."
+        } else if newRemote.isEmpty {
+            self.status = self.transport == .folder
+                ? "Saved on this Mac. Waiting for another Mac’s usage."
+                : "Saved to your hub. Waiting for another device’s usage."
+        } else {
+            let deviceKind = self.transport == .folder ? "Macs" : "devices"
+            self.status = "Shared usage from \(ledger.publications.count) \(deviceKind)."
+        }
+        do {
+            try self.persistCache()
+        } catch {
+            self.pendingLocal = publication
+            self.issue = "Usage was shared, but this Mac could not preserve its offline history."
         }
     }
 
@@ -438,14 +633,16 @@ final class MidasUsageSyncCoordinator {
 
     func accountChanged() {
         guard self.isEnabled, self.identityStillMatches() else { return }
-        if self.folderURL == nil { self.restoreConnection() }
+        if !self.hasConnection { self.restoreConnection() }
         self.scheduleSync()
     }
 
     private func invalidateConnection(message: String) {
         self.disconnect()
         self.issue = message
-        self.status = "Sync disconnected. Choose the shared folder again."
+        self.status = self.transport == .folder
+            ? "Sync disconnected. Choose the shared folder again."
+            : "Sync disconnected. Import this device’s connection file again."
     }
 
     private func identityStillMatches() -> Bool {
@@ -453,9 +650,13 @@ final class MidasUsageSyncCoordinator {
         guard current.deviceBinding == self.deviceBinding else {
             self
                 .invalidateConnection(
-                    message: "This Mac’s sync identity changed. Choose the folder again to reconnect.")
+                    message: self.transport == .folder
+                        ? "This Mac’s sync identity changed. Choose the folder again to reconnect."
+                        : "This Mac’s sync identity changed. Import this Mac’s connection file to reconnect.")
             return false
         }
+        // Tailscale authenticates the hub with a per-device credential, independently of iCloud.
+        if self.transport == .tailscaleHub { return true }
         let expected = self.accountFingerprint ?? self.defaults.string(forKey: "midasUsageSyncAccountFingerprint")
         if current.cloudAccountFingerprint == "identity-unavailable" ||
             (current.cloudAccountFingerprint == "no-icloud-account" && expected != "no-icloud-account")
@@ -478,6 +679,10 @@ final class MidasUsageSyncCoordinator {
     }
 
     private func restoreConnection() {
+        if self.transport == .tailscaleHub {
+            self.restoreHubConnection()
+            return
+        }
         guard self.isEnabled, let data = self.defaults.data(forKey: "midasUsageSyncFolderBookmark"),
               let expectedID = self.defaults.string(forKey: "midasUsageSyncWorkspaceID").flatMap(UUID.init(uuidString:))
         else { return }
@@ -485,7 +690,7 @@ final class MidasUsageSyncCoordinator {
               let fingerprint = self.defaults.string(forKey: "midasUsageSyncAccountFingerprint") else { return }
         self.accountFingerprint = fingerprint
         guard let cache = self.readCache(), cache.workspace.id == expectedID,
-              cache.localDeviceID == self.deviceID, cache.deviceBinding == self.deviceBinding,
+              cache.localDeviceID == self.syncDeviceID, cache.deviceBinding == self.deviceBinding,
               cache.accountFingerprint == fingerprint
         else {
             self.issue = "Choose your shared folder again to restore this connection."
@@ -519,7 +724,7 @@ final class MidasUsageSyncCoordinator {
 
     private func restoreCache(expected: MidasUsageSyncWorkspace, acceptsExplicitReconnection: Bool = false) {
         guard let cache = self.readCache(), cache.workspace == expected,
-              cache.localDeviceID == self.deviceID, cache.deviceBinding == self.deviceBinding,
+              cache.localDeviceID == self.syncDeviceID, cache.deviceBinding == self.deviceBinding,
               cache.accountFingerprint == self.accountFingerprint || acceptsExplicitReconnection,
               let ledger = try? MidasUsageSyncLedger(
                   publications: cache.publications,
@@ -527,7 +732,7 @@ final class MidasUsageSyncCoordinator {
                   now: self.currentTime())
         else { return }
         if let pending = cache.pendingLocal {
-            guard pending.deviceID == self.deviceID,
+            guard pending.deviceID == self.syncDeviceID,
                   (try? pending.validate(workspaceID: expected.id, now: self.currentTime())) != nil else { return }
         }
         self.received = ledger.publications
@@ -540,13 +745,13 @@ final class MidasUsageSyncCoordinator {
                 id: $0.deviceID,
                 name: $0.deviceName,
                 lastSeenAt: $0.publishedAt,
-                isThisMac: $0.deviceID == self.deviceID,
+                isThisMac: $0.deviceID == self.syncDeviceID,
                 eventCount: $0.events.count + $0.accountDays.count)
         }
     }
 
     private func readCache() -> Cache? {
-        guard let url = self.persistenceURL,
+        guard let url = self.cacheURL,
               let data = try? LocalPersistence.read(url), let cache = try? JSONDecoder().decode(Cache.self, from: data),
               cache.schemaVersion == 2, (try? cache.workspace.validate()) != nil,
               cache.accountFingerprint.utf8.count <= 128, (cache.deviceBinding?.utf8.count ?? 0) <= 128
@@ -555,11 +760,11 @@ final class MidasUsageSyncCoordinator {
     }
 
     private func persistCache() throws {
-        guard let url = self.persistenceURL, let workspace, let accountFingerprint else {
+        guard let url = self.cacheURL, let workspace, let accountFingerprint else {
             throw MidasUsageSyncError.folderUnavailable
         }
         let cache = Cache(
-            localDeviceID: self.deviceID,
+            localDeviceID: self.syncDeviceID,
             deviceBinding: self.deviceBinding,
             accountFingerprint: accountFingerprint,
             workspace: workspace,
@@ -568,6 +773,102 @@ final class MidasUsageSyncCoordinator {
             lastPublishedAt: self.lastPublishedAt,
             lastReceivedAt: self.lastReceivedAt)
         try LocalPersistence.write(JSONEncoder().encode(cache), to: url)
+    }
+
+    private func restoreHubConnection() {
+        guard self.isEnabled, self.identityStillMatches() else { return }
+        do {
+            let connection = try MidasUsageHubConnectionFile.load(at: self.hubConnectionURL)
+            self.hubConnection = connection
+            self.accountFingerprint = Self.hubFingerprint(connection)
+            guard let cache = self.readCache() else {
+                if self.hasNoCacheFile() {
+                    // A secure per-device file plus enabled preferences is an explicit installer opt-in.
+                    // Wait for the real workspace before collecting or publishing any numeric records.
+                    self.issue = nil
+                    self.status = "Connecting to your Tailscale hub for the first time."
+                } else {
+                    self.hubConnection = nil
+                    self.issue = "The saved hub history could not be validated. Import the connection file again."
+                }
+                return
+            }
+            guard cache.localDeviceID == connection.deviceID,
+                  cache.deviceBinding == self.deviceBinding,
+                  cache.accountFingerprint == self.accountFingerprint,
+                  connection.workspaceID == cache.workspace.id
+            else {
+                self.hubConnection = nil
+                self.issue = "Import this device’s connection file again to restore your hub connection."
+                return
+            }
+            self.workspace = cache.workspace
+            self.restoreCache(expected: cache.workspace)
+            self.issue = nil
+            self.status = "Showing last received usage. Waiting to reach your Tailscale hub."
+        } catch {
+            self.hubConnection = nil
+            self.issue = "The private hub connection file is unavailable. Import it again to reconnect."
+        }
+    }
+
+    private func hasNoCacheFile() -> Bool {
+        guard let url = self.cacheURL else { return false }
+        var metadata = stat()
+        return Darwin.lstat(url.path, &metadata) != 0 && errno == ENOENT
+    }
+
+    private func prepareHubWorkspaceIfNeeded() async -> Bool {
+        guard self.transport == .tailscaleHub, self.workspace == nil,
+              let connection = self.hubConnection else { return true }
+        let generation = self.generation
+        self.isSyncing = true
+        self.status = "Connecting to your Tailscale hub for the first time…"
+        defer { if self.generation == generation { self.isSyncing = false } }
+        do {
+            let selected = try await self.hubWorkspaceLoader(connection)
+            try selected.validate()
+            try Task.checkCancellation()
+            guard self.generation == generation, self.isEnabled, self.hubConnection == connection,
+                  self.identityStillMatches() else { return false }
+            guard connection.workspaceID == nil || connection.workspaceID == selected.id else {
+                throw MidasUsageSyncError.wrongWorkspace
+            }
+            guard self.hasNoCacheFile() else {
+                self.hubConnection = nil
+                self.issue = "Saved hub history appeared during setup. Import the connection file again to reconnect."
+                return false
+            }
+            let pinned = MidasUsageHubConnection(
+                endpoint: connection.endpoint,
+                deviceID: connection.deviceID,
+                deviceName: connection.deviceName,
+                credential: connection.credential,
+                workspaceID: selected.id)
+            try LocalPersistence.write(JSONEncoder().encode(pinned), to: self.hubConnectionURL)
+            self.hubConnection = pinned
+            self.workspace = selected
+            self.accountFingerprint = Self.hubFingerprint(pinned)
+            self.deviceName = pinned.deviceName
+            try self.persistCache()
+            self.issue = nil
+            return true
+        } catch {
+            guard self.generation == generation else { return false }
+            if case MidasUsageSyncError.wrongWorkspace = error {
+                self.invalidateConnection(message: self.message(error))
+            } else if !(error is CancellationError) {
+                self.issue = self.message(error)
+                self.status = "Waiting for your hub to finish first-time setup. Midas will retry automatically."
+            }
+            return false
+        }
+    }
+
+    private static func hubFingerprint(_ connection: MidasUsageHubConnection) -> String {
+        let values = [connection.endpoint.absoluteString, connection.deviceID.uuidString, connection.credential]
+        let data = (try? JSONEncoder().encode(values)) ?? Data()
+        return "tailscale-hub:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private static var defaultPersistenceURL: URL {
@@ -588,7 +889,28 @@ final class MidasUsageSyncCoordinator {
         return bounded.isEmpty ? "Mac" : bounded
     }
 
-    private static func message(_ error: Error) -> String {
+    private func message(_ error: Error) -> String {
+        if self.transport == .tailscaleHub {
+            if case MidasUsageSyncError.wrongWorkspace = error {
+                return "The hub’s workspace changed. Import a new connection file to reconnect."
+            }
+            if let hubError = error as? MidasUsageHubError {
+                switch hubError {
+                case .unauthorized:
+                    return "This device’s hub access was rejected. Import a new connection file. " +
+                        "Last received usage is retained."
+                case .invalidConnection, .unsafeConnectionFile:
+                    return "This connection file is invalid or is not private. Import the file created for this Mac."
+                case .rejectedSnapshot:
+                    return "This device’s history changed on the hub. Local changes are saved and will retry."
+                case .invalidResponse, .responseTooLarge:
+                    return "Usage from the hub could not be validated. Last received usage is retained."
+                case .unavailable: break
+                }
+            }
+            return "Your Tailscale hub is unavailable. Check Tailscale and that the Mac mini is awake. " +
+                "Last received usage is retained and new usage will retry."
+        }
         if let error = error as? MidasUsageSyncError { return error.localizedDescription }
         return "The shared folder is unavailable. Check access and retry."
     }

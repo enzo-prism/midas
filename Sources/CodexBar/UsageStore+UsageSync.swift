@@ -38,15 +38,15 @@ extension UsageStore {
 
     var midasDisplayTimeZone: TimeZone {
         self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
-            && (self.midasUsageSync.folderURL != nil || !self.midasUsageSync.snapshots.isEmpty)
+            && (self.midasUsageSync.hasConnection || !self.midasUsageSync.snapshots.isEmpty)
             ? MidasSpendPeriod.utc : .current
     }
 
-    static let midasSyncProviders: Set<UsageProvider> = [.codex, .claude, .cursor, .meta]
+    static let midasSyncProviders: Set<UsageProvider> = [.codex, .claude, .cursor, .meta, .localInference]
 
     func usesSyncedUsage(for provider: UsageProvider) -> Bool {
         self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
-            && (self.midasUsageSync.folderURL != nil || !self.midasUsageSync.snapshots.isEmpty)
+            && (self.midasUsageSync.hasConnection || !self.midasUsageSync.snapshots.isEmpty)
             && Self.midasSyncProviders.contains(provider)
     }
 
@@ -65,6 +65,16 @@ extension UsageStore {
         return local + remote.filter { !local.contains($0) }.sorted { $0.rawValue < $1.rawValue }
     }
 
+    /// Combined totals have one shared source set, independent of each Mac's provider display preferences.
+    func midasProvidersForTotalDisplay() -> [UsageProvider] {
+        let combined = self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
+            && (self.midasUsageSync.hasConnection || !self.midasUsageSync.snapshots.isEmpty)
+        return MidasRecordedTokenTotal.providersForTotal(
+            local: self.enabledProvidersForDisplay(),
+            shared: Array(self.midasUsageSync.snapshots.keys),
+            combined: combined)
+    }
+
     func spendReportingTimeZone(for provider: UsageProvider, snapshot: CostUsageTokenSnapshot?) -> TimeZone {
         if self.usesSyncedUsage(for: provider) { return MidasSpendPeriod.utc }
         return MidasMonthlySpend.reportingTimeZone(
@@ -74,7 +84,7 @@ extension UsageStore {
     }
 
     func makeMidasSyncUsage(workspace: MidasUsageSyncWorkspace, now: Date) async throws -> MidasUsageSyncLocalUsage {
-        // This closure runs only after the user opts in and chooses a folder.
+        // Sync opt-in covers the supported numeric logs independently of provider display toggles.
         let enabled = self.enabledProvidersForBackgroundWork()
         let scope = self.tokenCostScope(for: .codex)
         let options = MidasUsageSyncExporter.Options(
@@ -83,7 +93,7 @@ extension UsageStore {
             })
         let exported = try await MidasUsageSyncExporter.export(
             workspace: workspace,
-            providers: enabled.filter { [.codex, .claude, .meta].contains($0) },
+            providers: [.codex, .claude, .meta],
             now: now,
             options: options)
         let accountDays = enabled.contains(.cursor) ? self.midasCursorSyncDays(workspace: workspace) : []

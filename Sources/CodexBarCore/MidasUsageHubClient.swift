@@ -1,0 +1,317 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+/// A per-device enrollment. The bearer credential is only for numeric usage sync, never a provider API key.
+public struct MidasUsageHubConnection: Codable, Sendable, Equatable {
+    public let endpoint: URL
+    public let deviceID: UUID
+    public let deviceName: String
+    public let credential: String
+    public let workspaceID: UUID?
+
+    public init(endpoint: URL, deviceID: UUID, deviceName: String, credential: String, workspaceID: UUID? = nil) {
+        self.endpoint = endpoint
+        self.deviceID = deviceID
+        self.deviceName = deviceName
+        self.credential = credential
+        self.workspaceID = workspaceID
+    }
+
+    public func validate() throws {
+        guard let parts = URLComponents(url: self.endpoint, resolvingAgainstBaseURL: false),
+              let host = parts.host?.lowercased(), parts.user == nil, parts.password == nil,
+              parts.query == nil, parts.fragment == nil,
+              parts.path.isEmpty || parts.path == "/",
+              parts.port == nil || (1...65535).contains(parts.port!),
+              (1...80).contains(self.deviceName.utf8.count),
+              !self.deviceName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+              (32...256).contains(self.credential.utf8.count),
+              self.credential.utf8.allSatisfy({
+                  (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45 || $0 == 95
+              })
+        else { throw MidasUsageHubError.invalidConnection }
+        let loopback = ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host)
+        let privateHTTPS = parts.scheme == "https" && host.hasSuffix(".ts.net") && host.count > ".ts.net".count
+        guard privateHTTPS || (parts.scheme == "http" && loopback) else {
+            throw MidasUsageHubError.invalidConnection
+        }
+    }
+}
+
+public struct MidasUsageHubExchange: Codable, Sendable, Equatable {
+    public let workspace: MidasUsageSyncWorkspace
+    public let publications: [MidasUsageSyncPublication]
+    public let publicationSucceeded: Bool
+    public let unavailableFiles: Int
+    public let rejectedFiles: Int
+
+    public init(
+        workspace: MidasUsageSyncWorkspace,
+        publications: [MidasUsageSyncPublication],
+        publicationSucceeded: Bool,
+        unavailableFiles: Int,
+        rejectedFiles: Int)
+    {
+        self.workspace = workspace
+        self.publications = publications
+        self.publicationSucceeded = publicationSucceeded
+        self.unavailableFiles = unavailableFiles
+        self.rejectedFiles = rejectedFiles
+    }
+}
+
+public enum MidasUsageHubError: Error, LocalizedError, Sendable, Equatable {
+    case invalidConnection
+    case unauthorized
+    case rejectedSnapshot
+    case responseTooLarge
+    case invalidResponse
+    case unavailable
+    case unsafeConnectionFile
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidConnection: "Choose a valid private Tailscale hub connection file."
+        case .unauthorized: "The hub credential was revoked or is not valid. Enroll this device again."
+        case .rejectedSnapshot: "The hub rejected an older or conflicting snapshot. Local usage is retained."
+        case .responseTooLarge: "The hub response exceeds the usage sync safety limits."
+        case .invalidResponse: "The hub returned usage that could not be validated."
+        case .unavailable: "The private usage hub is unavailable. Your last received usage is retained."
+        case .unsafeConnectionFile: "The hub connection file must be a private, owned, regular file with mode 600."
+        }
+    }
+}
+
+/// This transport moves complete snapshots. MidasUsageSyncLedger remains the only counting and merging engine.
+public enum MidasUsageHubClient {
+    public static let maximumDevices = 128
+    public static let maximumExchangeBytes = 128 * 1024 * 1024
+    public static let maximumExchangeRecords = 250_000
+
+    public static func workspace(connection: MidasUsageHubConnection) async throws -> MidasUsageSyncWorkspace {
+        let data = try await self.request(connection: connection, path: "v1/workspace", body: nil, limit: 4096)
+        let workspace: MidasUsageSyncWorkspace
+        do {
+            workspace = try JSONDecoder().decode(MidasUsageSyncWorkspace.self, from: data)
+            try workspace.validate()
+        } catch { throw MidasUsageHubError.invalidResponse }
+        if let expected = connection.workspaceID, workspace.id != expected {
+            throw MidasUsageSyncError.wrongWorkspace
+        }
+        return workspace
+    }
+
+    public static func exchange(
+        connection: MidasUsageHubConnection,
+        workspace: MidasUsageSyncWorkspace,
+        local: MidasUsageSyncPublication?,
+        now: Date = Date()) async throws -> MidasUsageHubExchange
+    {
+        try connection.validate()
+        try workspace.validate()
+        if let expected = connection.workspaceID, expected != workspace.id {
+            throw MidasUsageSyncError.wrongWorkspace
+        }
+        try local?.validate(workspaceID: workspace.id, now: now)
+        if let local, local.deviceID != connection.deviceID || local.deviceName != connection.deviceName {
+            throw MidasUsageHubError.invalidConnection
+        }
+        let body = try local.map { try JSONEncoder().encode($0) } ?? Data("null".utf8)
+        guard body.count <= MidasUsageSyncPublication.maximumFileBytes else {
+            throw MidasUsageSyncError.limitExceeded
+        }
+        let clock = ContinuousClock()
+        let started = clock.now
+        let data = try await self.request(
+            connection: connection, path: "v1/exchange", body: body, limit: self.maximumExchangeBytes)
+        let elapsed = started.duration(to: clock.now).components
+        let validationTime = now.addingTimeInterval(Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18)
+        return try self.validatedExchange(
+            data, connection: connection, workspace: workspace, local: local, now: validationTime)
+    }
+
+    static func validatedExchange(
+        _ data: Data,
+        connection: MidasUsageHubConnection,
+        workspace: MidasUsageSyncWorkspace,
+        local: MidasUsageSyncPublication?,
+        now: Date) throws -> MidasUsageHubExchange
+    {
+        guard data.count <= self.maximumExchangeBytes else { throw MidasUsageHubError.responseTooLarge }
+        let result: MidasUsageHubExchange
+        do {
+            result = try JSONDecoder().decode(MidasUsageHubExchange.self, from: data)
+        } catch {
+            throw MidasUsageHubError.invalidResponse
+        }
+        guard result.workspace == workspace else { throw MidasUsageSyncError.wrongWorkspace }
+        guard result.publications.count <= self.maximumDevices,
+              (0...self.maximumDevices).contains(result.unavailableFiles),
+              (0...self.maximumDevices).contains(result.rejectedFiles)
+        else { throw MidasUsageHubError.invalidResponse }
+        var devices = Set<UUID>()
+        var records = 0
+        for publication in result.publications {
+            try Task.checkCancellation()
+            try publication.validate(workspaceID: workspace.id, now: now)
+            guard devices.insert(publication.deviceID).inserted else { throw MidasUsageHubError.invalidResponse }
+            if publication.deviceID == connection.deviceID, publication.deviceName != connection.deviceName {
+                throw MidasUsageHubError.invalidResponse
+            }
+            guard try JSONEncoder().encode(publication).count <= MidasUsageSyncPublication.maximumFileBytes else {
+                throw MidasUsageHubError.responseTooLarge
+            }
+            records += publication.events.count + publication.accountDays.count
+            guard records <= self.maximumExchangeRecords else { throw MidasUsageHubError.responseTooLarge }
+        }
+        // An acknowledgement is only credible when the exact submitted snapshot is returned for this device.
+        if let local, result.publicationSucceeded {
+            guard result.publications.first(where: { $0.deviceID == connection.deviceID }) == local else {
+                throw MidasUsageHubError.invalidResponse
+            }
+        } else if local == nil, result.publicationSucceeded {
+            throw MidasUsageHubError.invalidResponse
+        }
+        return result
+    }
+
+    private static func request(
+        connection: MidasUsageHubConnection, path: String, body: Data?, limit: Int) async throws -> Data
+    {
+        try connection.validate()
+        try Task.checkCancellation()
+        var request = URLRequest(url: connection.endpoint.appendingPathComponent(path))
+        request.httpMethod = body == nil ? "GET" : "POST"
+        request.httpBody = body
+        request.timeoutInterval = 30
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.setValue("Bearer " + connection.credential, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+        let transfer = BoundedTransfer(limit: limit)
+        return try await withTaskCancellationHandler {
+            try await transfer.run(request)
+        } onCancel: {
+            transfer.cancel()
+        }
+    }
+
+    /// URLSession's data(for:) buffers before returning. This delegate applies the limit while bytes arrive.
+    private final class BoundedTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+        private let lock = NSLock()
+        private let limit: Int
+        private var data = Data()
+        private var session: URLSession?
+        private var task: URLSessionDataTask?
+        private var continuation: CheckedContinuation<Data, any Error>?
+        private var failure: (any Error)?
+        private var cancelled = false
+
+        init(limit: Int) {
+            self.limit = limit
+        }
+
+        func run(_ request: URLRequest) async throws -> Data {
+            try await withCheckedThrowingContinuation { continuation in
+                self.lock.withLock {
+                    if self.cancelled {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    let configuration = URLSessionConfiguration.ephemeral
+                    configuration.httpCookieStorage = nil
+                    configuration.httpShouldSetCookies = false
+                    configuration.urlCredentialStorage = nil
+                    configuration.urlCache = nil
+                    configuration.timeoutIntervalForRequest = 30
+                    configuration.timeoutIntervalForResource = 45
+                    let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+                    self.session = session
+                    self.continuation = continuation
+                    let task = session.dataTask(with: request)
+                    self.task = task
+                    task.resume()
+                }
+            }
+        }
+
+        func cancel() {
+            self.lock.withLock {
+                self.cancelled = true
+                self.task?.cancel()
+            }
+        }
+
+        func urlSession(
+            _: URLSession,
+            task _: URLSessionTask,
+            willPerformHTTPRedirection _: HTTPURLResponse,
+            newRequest _: URLRequest,
+            completionHandler: @escaping @Sendable (URLRequest?) -> Void)
+        {
+            // Never forward the credential, including to another Tailscale host.
+            completionHandler(nil)
+        }
+
+        func urlSession(
+            _: URLSession,
+            dataTask _: URLSessionDataTask,
+            didReceive response: URLResponse,
+            completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void)
+        {
+            let accepted = self.lock.withLock {
+                guard let response = response as? HTTPURLResponse else {
+                    self.failure = MidasUsageHubError.invalidResponse
+                    return false
+                }
+                guard response.statusCode == 200 else {
+                    self.failure = switch response.statusCode {
+                    case 401, 403: MidasUsageHubError.unauthorized
+                    case 409: MidasUsageHubError.rejectedSnapshot
+                    case 413: MidasUsageHubError.responseTooLarge
+                    default: MidasUsageHubError.unavailable
+                    }
+                    return false
+                }
+                guard response.expectedContentLength <= Int64(self.limit) else {
+                    self.failure = MidasUsageHubError.responseTooLarge
+                    return false
+                }
+                return true
+            }
+            completionHandler(accepted ? .allow : .cancel)
+        }
+
+        func urlSession(_: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+            let overflow = self.lock.withLock {
+                guard data.count <= self.limit - self.data.count else {
+                    self.failure = MidasUsageHubError.responseTooLarge
+                    return true
+                }
+                self.data.append(data)
+                return false
+            }
+            if overflow { dataTask.cancel() }
+        }
+
+        func urlSession(_ session: URLSession, task _: URLSessionTask, didCompleteWithError error: (any Error)?) {
+            let outcome: (CheckedContinuation<Data, any Error>?, Result<Data, any Error>) = self.lock.withLock {
+                let result: Result<Data, any Error> = switch (self.cancelled, self.failure, error) {
+                case (true, _, _): .failure(CancellationError())
+                case let (_, failure?, _): .failure(failure)
+                case (_, _, .some): .failure(MidasUsageHubError.unavailable)
+                default: .success(self.data)
+                }
+                let continuation = self.continuation
+                self.continuation = nil
+                self.task = nil
+                self.session = nil
+                return (continuation, result)
+            }
+            session.finishTasksAndInvalidate()
+            outcome.0?.resume(with: outcome.1)
+        }
+    }
+}

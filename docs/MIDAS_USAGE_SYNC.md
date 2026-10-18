@@ -6,6 +6,12 @@ read_when:
 
 # Usage across Macs
 
+The development preview also supports a private Tailscale hub. Its connection and offline cache
+are independent of iCloud identity; the numeric exporters and merge ledger are shared with the
+folder transport. See [Tailscale hub setup and coverage](MIDAS_TAILSCALE_HUB.md). Combined summary
+totals use the same synchronized provider set on every Mac. Sync opt-in collects supported local
+Codex, Claude, and Muse Code numeric logs regardless of provider display toggles.
+
 Midas can combine recorded usage from multiple Macs through a private shared folder. On Macs
 using the same Apple Account, select the same folder in iCloud Drive. A separate Midas account
 or a server holding provider credentials is unnecessary for this release.

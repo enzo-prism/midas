@@ -455,7 +455,7 @@ extension SettingsStore {
             midasCalibrationSharingEnabled: userDefaults.bool(forKey: "midasCalibrationSharingEnabled"),
             midasCodexEstimateMode: MidasCodexEstimateMode.load(from: userDefaults),
             midasCloudUSDPerMillionTokens: userDefaults.double(forKey: "midasCloudUSDPerMillionTokens"),
-            midasSpendPeriodSelection: userDefaults.string(forKey: "midasSpendPeriodSelection") ?? "currentMonth",
+            midasSpendPeriodSelection: userDefaults.string(forKey: "midasSpendPeriodSelection") ?? "rolling30Days",
             midasAccountAliases: userDefaults.dictionary(forKey: "midasAccountAliases") as? [String: String] ?? [:],
             midasTrackAllAccounts: userDefaults.bool(forKey: "midasTrackAllAccounts"),
             multiAccountMenuLayoutRaw: multiAccountMenuLayoutRaw,

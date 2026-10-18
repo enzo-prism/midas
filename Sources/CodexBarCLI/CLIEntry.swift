@@ -42,6 +42,8 @@ enum CodexBarCLI {
                 await self.runCost(invocation.parsedValues)
             case ["serve"]:
                 await self.runServe(invocation.parsedValues)
+            case ["usage-sync", "collect"]:
+                await self.runUsageSyncCollect(invocation.parsedValues)
             case ["config", "validate"]:
                 self.runConfigValidate(invocation.parsedValues)
             case ["config", "dump"]:
@@ -85,8 +87,20 @@ enum CodexBarCLI {
         let configSetAPIKeySignature = CommandSignature.describe(ConfigSetAPIKeyOptions())
         let cacheSignature = CommandSignature.describe(CacheOptions())
         let diagnoseSignature = CommandSignature.describe(DiagnoseOptions())
+        let collectorSignature = CommandSignature.describe(UsageSyncCollectorOptions())
 
         return [
+            CommandDescriptor(
+                name: "usage-sync",
+                abstract: "Collect numeric usage into a private Midas hub",
+                discussion: nil,
+                signature: CommandSignature(),
+                subcommands: [CommandDescriptor(
+                    name: "collect",
+                    abstract: "Collect and exchange usage; retain an offline outbox",
+                    discussion: nil,
+                    signature: collectorSignature)],
+                defaultSubcommandName: "collect"),
             CommandDescriptor(
                 name: "usage",
                 abstract: "Print usage as text or JSON",

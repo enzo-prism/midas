@@ -37,9 +37,16 @@ extension StatusItemController {
     {
         var result = presentation
         let period = MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
+        if result.provider == .localInference, let token {
+            let count = period.tokens(snapshot: token, timeZone: MidasSpendPeriod.utc)?.tokens
+            result.activitySummary = count.map { "\($0.formatted()) recorded tokens" }
+            result.spendUnavailableReason = "Local runtime tokens have no verified dollar estimate."
+        }
         guard let token, let original = result.spend, original.isDisplayable else {
             result.spend = nil
-            if self.store.usesSyncedUsage(for: presentation.provider) {
+            if presentation.provider == .localInference {
+                result.spendUnavailableReason = "Local runtime tokens have no verified dollar estimate."
+            } else if self.store.usesSyncedUsage(for: presentation.provider) {
                 result.spendUnavailableReason = "Shared history pending"
             } else if presentation.provider == .codex, self.settings.midasCloudUsageEnabled {
                 result.spendUnavailableReason = self.settings.midasCodexEstimateMode == .tokensOnly

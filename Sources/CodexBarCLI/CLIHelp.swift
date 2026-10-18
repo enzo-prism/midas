@@ -2,6 +2,27 @@ import CodexBarCore
 import Foundation
 
 extension CodexBarCLI {
+    static func usageSyncHelp(version: String) -> String {
+        """
+        Midas \(version)
+
+        Usage:
+          midas usage-sync collect --config <private-connection.json> [--once] [--interval 180]
+                                  [--state-root <private-directory>] [--providers codex,claude,meta]
+                                  [--codex-root <directory>] [--codex-additional-root <directory>]
+                                  [--claude-root <directory>] [--meta-root <directory>]
+                                  [--trace-database <file>] [--refresh]
+
+        Collects supported local numeric logs with Midas's existing parser and pricing.
+        Writes its private outbox before sending, retains history during outages, and retries.
+        The config contains one revocable device credential; use owner-only permissions (0600).
+        Defaults to a continuous 180-second loop; --once runs one cycle and emits safe JSON.
+        Source overrides support repeatable fixture checks without reading real provider data.
+        Missing logs and unsupported local/mobile usage are unknown, never inferred as zero.
+        See docs/MIDAS_TAILSCALE_HUB.md for per-user service installation and verification.
+        """
+    }
+
     static func usageHelp(version: String) -> String {
         """
         CodexBar \(version)
@@ -223,6 +244,7 @@ extension CodexBarCLI {
           codexbar config set-api-key --provider <name> (--api-key <key>|--stdin)
           codexbar cache clear <--cookies|--cost|--all> [--provider <name>]
           codexbar diagnose --provider <name|all> --format json [--pretty]
+          midas usage-sync collect --config <private-connection.json> [--once] [--interval 180]
 
         Global flags:
           -h, --help      Show help

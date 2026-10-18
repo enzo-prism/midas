@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MidasTotalSpendView: View {
     let presentations: [MidasProviderPresentation]
+    var tokenTotal: MidasRecordedTokenTotal?
     var periodLabel: String?
     var periodControl: AnyView?
     @State private var showsCoverage = false
@@ -13,11 +14,11 @@ struct MidasTotalSpendView: View {
     var body: some View {
         let total = self.total
         VStack(alignment: .leading, spacing: 10) {
-            Text("Estimated inference spend")
+            Text("Estimated AI token value")
                 .font(.callout).foregroundStyle(MidasTheme.secondaryText)
             if total.totals.isEmpty {
                 Text("—").font(.system(size: 44, weight: .semibold))
-                    .accessibilityLabel("Estimated inference spend unavailable")
+                    .accessibilityLabel("Estimated AI token value unavailable")
             } else {
                 ForEach(total.totals) { currency in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -30,6 +31,15 @@ struct MidasTotalSpendView: View {
                         }
                     }
                 }
+            }
+            if let tokenTotal {
+                Text(tokenTotal.label)
+                    .font(.system(.title3, design: .rounded).weight(.medium))
+                    .monospacedDigit()
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("midas-recorded-token-total")
+                    .help("Input, output, and cache tokens from recorded usage in the selected period. "
+                        + "Missing records and provider quota percentages are excluded.")
             }
             HStack(alignment: .firstTextBaseline) {
                 if let periodControl {
@@ -55,7 +65,7 @@ struct MidasTotalSpendView: View {
     }
 
     private var isPartial: Bool {
-        self.total.hasIncompleteCoverage
+        self.total.hasIncompleteCoverage || self.tokenTotal?.isPartial == true
     }
 
     private var coverageLabel: String {

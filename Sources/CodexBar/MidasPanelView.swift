@@ -77,7 +77,8 @@ struct MidasPanelView: View {
         VStack(alignment: .leading, spacing: 24) {
             MidasSyncStatusView(coordinator: self.store.midasUsageSync)
             MidasTotalSpendView(
-                presentations: self.providers.map(self.presentation),
+                presentations: self.store.midasProvidersForTotalDisplay().map(self.presentation),
+                tokenTotal: self.store.midasRecordedTokenTotal(providers: self.store.midasProvidersForTotalDisplay()),
                 periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
                     .label(reportingTimeZone: self.store.midasDisplayTimeZone),
                 periodControl: AnyView(MidasSpendPeriodControl(settings: self.settings, store: self.store)))

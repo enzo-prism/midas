@@ -212,7 +212,7 @@ public struct MidasUsageSyncPublication: Codable, Sendable, Equatable {
         guard days.allSatisfy(Self.isDay), days.allSatisfy({ $0 <= Self.day(self.publishedAt.addingTimeInterval(300)) })
         else { throw MidasUsageSyncError.invalidRecord }
         for event in self.events {
-            guard [.codex, .claude, .meta].contains(event.provider), Self.isOpaqueID(event.id),
+            guard [.codex, .claude, .meta, .localInference].contains(event.provider), Self.isOpaqueID(event.id),
                   Self.validObservation(event.observedAt, publishedAt: self.publishedAt),
                   event.day == Self.day(event.observedAt)
             else { throw MidasUsageSyncError.invalidRecord }

@@ -1117,6 +1117,7 @@ extension UsageStore {
                     let source = resolution?.source.rawValue ?? "none"
                     return "WARP_API_KEY=\(hasAny ? "present" : "missing") source=\(source)"
                 case .meta: return Self.debugMetaLog()
+                case .localInference: return "Local runtime usage comes from private numeric collector records."
                 case .deepseek:
                     return Self.apiKeyDebugLine(
                         label: "DEEPSEEK_API_KEY",

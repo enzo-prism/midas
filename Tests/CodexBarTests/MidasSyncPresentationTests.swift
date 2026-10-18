@@ -44,6 +44,24 @@ struct MidasSyncPresentationTests {
         #expect(presentation.sharingSummary == "Usage received from 2 other Macs.")
     }
 
+    @Test func hubIncludesNonMacDevicesAndExplainsSetup() {
+        let waiting = MidasSyncPresentation(
+            isEnabled: true,
+            includesSyncedUsage: true,
+            hasConnection: false,
+            otherDeviceCount: 0,
+            transport: .tailscaleHub)
+        #expect(waiting.title == "Connect your Tailscale hub")
+        let combined = MidasSyncPresentation(
+            isEnabled: true,
+            includesSyncedUsage: true,
+            hasConnection: true,
+            otherDeviceCount: 2,
+            transport: .tailscaleHub)
+        #expect(combined.symbol == "network")
+        #expect(combined.sharingSummary == "Usage received from 2 other devices.")
+    }
+
     @Test @MainActor func syncTabIsAnIndependentSettingsDestination() throws {
         #expect(PreferencesTab.allCases.contains(.sync))
         #expect(PreferencesTab.sync.title == "Sync")

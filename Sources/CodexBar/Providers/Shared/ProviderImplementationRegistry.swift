@@ -64,6 +64,7 @@ enum ProviderImplementationRegistry {
         case .llmproxy: LLMProxyProviderImplementation()
         case .deepgram: DeepgramProviderImplementation()
         case .meta: MetaProviderImplementation()
+        case .localInference: LocalInferenceProviderImplementation()
         }
     }
 

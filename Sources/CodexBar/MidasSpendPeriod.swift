@@ -35,6 +35,12 @@ enum MidasSpendPeriod: Equatable, Sendable {
         let isPartial: Bool
     }
 
+    struct TokenAmount: Equatable, Sendable {
+        let tokens: Int?
+        let range: Range
+        let isPartial: Bool
+    }
+
     static let utc = TimeZone(secondsFromGMT: 0)!
 
     func range(now: Date = Date(), timeZone: TimeZone = .current) -> Range? {
@@ -106,6 +112,33 @@ enum MidasSpendPeriod: Equatable, Sendable {
         }
         let amount = pricedRows > 0 || !partial ? sum : nil
         return Amount(dollars: amount, range: range, isPartial: partial)
+    }
+
+    /// Count recorded tokens independently of pricing. Missing or corrupt counts never become zero.
+    func tokens(
+        snapshot: CostUsageTokenSnapshot,
+        sourceCoverage: Range? = nil,
+        timeZone: TimeZone = .current,
+        now: Date = Date()) -> TokenAmount?
+    {
+        guard let range = self.range(now: now, timeZone: timeZone) else { return nil }
+        var partial = sourceCoverage?.contains(range) != true
+        var seen = Set<String>()
+        var total = 0
+        var reported = 0
+        for row in snapshot.daily {
+            guard Self.isValidDay(row.date) else { partial = true; continue }
+            guard range.contains(row.date) else { continue }
+            guard seen.insert(row.date).inserted else {
+                return TokenAmount(tokens: nil, range: range, isPartial: true)
+            }
+            guard let count = row.totalTokens, count >= 0 else { partial = true; continue }
+            let next = total.addingReportingOverflow(count)
+            guard !next.overflow else { return TokenAmount(tokens: nil, range: range, isPartial: true) }
+            total = next.partialValue
+            reported += 1
+        }
+        return TokenAmount(tokens: reported > 0 || !partial ? total : nil, range: range, isPartial: partial)
     }
 
     private static func calendar(_ timeZone: TimeZone) -> Calendar {

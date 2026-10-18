@@ -54,6 +54,7 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case llmproxy
     case deepgram
     case meta
+    case localInference
 }
 
 // swiftformat:enable sortDeclarations

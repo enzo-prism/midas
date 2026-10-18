@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add private Tailscale hub sync with per-device revocable credentials, offline retry, and shared history independent of iCloud.
+- Show recorded token totals alongside estimated AI token value; use the same shared source set on both Macs and default new setups to the last 30 days.
+- Add a cross-platform coding-log collector and a separate, unpriced local vLLM runtime collector with explicit coverage gaps.
+
 ## Midas 0.46.2 — October 15, 2026
 
 - Fix the largest memory spike: the Meta (Muse) session-log scanner loaded whole log files (hundreds of MB each on heavy Muse machines) and fully parsed every line on each refresh. It now streams line by line with a byte-level prefilter, dropping the startup footprint peak on a 1.7 GB-log machine from ~3.6 GB to ~129 MB and steady footprint to ~50 MB.

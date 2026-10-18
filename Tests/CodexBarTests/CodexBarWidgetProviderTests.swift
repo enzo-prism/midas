@@ -29,6 +29,14 @@ struct CodexBarWidgetProviderTests {
     }
 
     @Test
+    func `local runtime records are not offered as account quota`() {
+        #expect(ProviderChoice(provider: .localInference) == nil)
+        let snapshot = WidgetSnapshot(
+            entries: [], enabledProviders: [.codex, .localInference, .claude], generatedAt: Date())
+        #expect(CodexBarSwitcherTimelineProvider.supportedProviders(from: snapshot) == [.codex, .claude])
+    }
+
+    @Test
     func `supported providers fall back to codex when snapshot is empty`() {
         let snapshot = WidgetSnapshot(entries: [], enabledProviders: [], generatedAt: Date())
 

@@ -314,6 +314,7 @@ private struct ProviderSwitchChip: View {
         case .llmproxy: "LLM Proxy"
         case .deepgram: "Deepgram"
         case .meta: "Meta"
+        case .localInference: "Local"
         }
     }
 }
@@ -750,6 +751,8 @@ enum WidgetColors {
             Color(red: 10 / 255, green: 18 / 255, blue: 27 / 255)
         case .meta:
             Color(red: 0 / 255, green: 100 / 255, blue: 255 / 255)
+        case .localInference:
+            Color.secondary
         }
     }
 }
