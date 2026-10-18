@@ -46,6 +46,9 @@ struct MidasDGXSparkCard: View {
                     .accessibilityLabel("API-equivalent value")
                     .accessibilityValue(self.model.preciseValueText ?? "Unavailable")
             }
+            Text(self.model.pricingCoverageText)
+                .font(.caption2).foregroundStyle(MidasTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
             Divider()
             VStack(alignment: .leading, spacing: 6) {
                 Text(self.model.modelText).font(.caption.weight(.medium)).lineLimit(2)
@@ -89,6 +92,7 @@ struct MidasDGXSparkDetailView: View {
             .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 14))
             VStack(alignment: .leading, spacing: 10) {
                 Text("How value is estimated").font(.headline)
+                Text(self.model.pricingCoverageText)
                 if self.model.hasVerifiedModel {
                     Text("The recorded model is compared with \(DGXSparkPricing.hostedProviderName)’s "
                         + "\(DGXSparkPricing.modelDisplayName) API prices.")

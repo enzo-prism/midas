@@ -8,6 +8,7 @@ struct MidasDGXSparkPresentation {
     let cachedInputTokens: Int?
     let outputTokens: Int?
     let amount: Double?
+    let pricedTokens: Int?
     let range: MidasSpendPeriod.Range?
     let modelNames: [String]
     let hasVerifiedModel: Bool
@@ -41,6 +42,13 @@ struct MidasDGXSparkPresentation {
             ? "Partial history · some tokens unpriced" : "Partial history · recorded usage only"
     }
 
+    var pricingCoverageText: String {
+        guard let tokens = self.tokens, let pricedTokens = self.pricedTokens else {
+            return "Pricing coverage unavailable"
+        }
+        return "\(pricedTokens.formatted()) of \(tokens.formatted()) tokens priced"
+    }
+
     var freshnessText: String {
         guard let updatedAt else { return "Waiting for Spark’s first sync" }
         return "\(self.isStale ? "Last received" : "Updated") "
@@ -64,12 +72,46 @@ struct MidasDGXSparkPresentation {
             cachedInputTokens: Self.completeSum(rows, \.cacheReadTokens),
             outputTokens: Self.completeSum(rows, \.outputTokens),
             amount: amount,
+            pricedTokens: Self.pricedTokens(rows, total: tokens),
             range: range,
             modelNames: models,
             hasVerifiedModel: models.contains(where: DGXSparkPricing.isKnownModel),
             hasUnpricedUsage: unpriced,
             updatedAt: snapshot?.updatedAt,
             isStale: snapshot.map { now.timeIntervalSince($0.updatedAt) > 15 * 60 } ?? false)
+    }
+
+    /// Only tokens represented by the valid priced subtotal count toward its coverage.
+    private static func pricedTokens(_ rows: [CostUsageDailyReport.Entry], total: Int?) -> Int? {
+        guard let total else { return nil }
+        var priced = 0
+        for row in rows {
+            guard let cost = row.costUSD, cost.isFinite, cost >= 0,
+                  let rowTotal = row.totalTokens, rowTotal >= 0
+            else { continue }
+            let models = row.modelBreakdowns ?? []
+            guard Set(models.map(\.modelName)).count == models.count else { return nil }
+            var rowPriced = 0
+            for model in models {
+                guard let cost = model.costUSD, cost.isFinite, cost >= 0,
+                      let count = model.totalTokens, count >= 0,
+                      DGXSparkPricing.estimate(
+                          model: model.modelName,
+                          input: model.inputTokens,
+                          cachedInput: model.cacheReadTokens,
+                          output: model.outputTokens,
+                          total: count) != nil
+                else { continue }
+                let next = rowPriced.addingReportingOverflow(count)
+                guard !next.overflow else { return nil }
+                rowPriced = next.partialValue
+            }
+            guard rowPriced <= rowTotal else { return nil }
+            let next = priced.addingReportingOverflow(rowPriced)
+            guard !next.overflow else { return nil }
+            priced = next.partialValue
+        }
+        return priced <= total ? priced : nil
     }
 
     /// An incomplete breakdown is unavailable rather than a misleading subtotal or invented zero.

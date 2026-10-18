@@ -50,6 +50,7 @@ struct MidasDGXSparkPresentationTests {
         #expect(model.inputTokens == 210)
         #expect(model.cachedInputTokens == 60)
         #expect(model.outputTokens == 90)
+        #expect(model.pricedTokens == 300)
         #expect(model.hasVerifiedModel)
         #expect(!model.hasUnpricedUsage)
         #expect(try abs(#require(model.amount) - 0.000078) < 0.000000001)
@@ -94,6 +95,49 @@ struct MidasDGXSparkPresentationTests {
         #expect(!model.hasVerifiedModel)
         #expect(model.modelText == "Model not verified")
         #expect(model.inputTokens == nil)
+        #expect(model.pricedTokens == 0)
+        #expect(model.pricingCoverageText == "0 of 8 tokens priced")
+    }
+
+    @Test(arguments: [false, true])
+    func pricingCoverageNamesOnlyTheValuedTokenSubset(sameDay: Bool) throws {
+        let known = self.day("2026-10-18", input: 80000, cached: 60000, output: 3000)
+        let unknown = CostUsageDailyReport.Entry(
+            date: "2026-10-17",
+            inputTokens: nil,
+            outputTokens: nil,
+            totalTokens: 1_317_000,
+            costUSD: nil,
+            modelsUsed: ["local-runtime"],
+            modelBreakdowns: [.init(modelName: "local-runtime", costUSD: nil, totalTokens: 1_317_000)])
+        let rows: [CostUsageDailyReport.Entry] = if sameDay {
+            [.init(
+                date: "2026-10-18",
+                inputTokens: nil,
+                outputTokens: nil,
+                totalTokens: 1_400_000,
+                costUSD: nil,
+                modelsUsed: [DGXSparkPricing.modelID, "local-runtime"],
+                modelBreakdowns: (known.modelBreakdowns ?? []) + (unknown.modelBreakdowns ?? []))]
+        } else {
+            [unknown, known]
+        }
+        let valued = DGXSparkPricing.project(snapshot: self.snapshot(rows), now: self.now)
+        let model = MidasDGXSparkPresentation.make(snapshot: valued, now: self.now)
+        #expect(model.tokens == 1_400_000)
+        #expect(model.pricedTokens == 83000)
+        #expect(model.pricingCoverageText == "\(83000.formatted()) of \(1_400_000.formatted()) tokens priced")
+        #expect(model.hasUnpricedUsage)
+        #expect(try abs(#require(model.amount) - 0.0085) < 0.000000001)
+    }
+
+    @Test func conflictingDailyTotalsDoNotClaimAPricedTokenCount() {
+        let row = self.day("2026-10-18", input: 7, cached: 0, output: 1)
+        let valued = DGXSparkPricing.project(snapshot: self.snapshot([row, row]), now: self.now)
+        let model = MidasDGXSparkPresentation.make(snapshot: valued, now: self.now)
+        #expect(model.tokens == nil)
+        #expect(model.pricedTokens == nil)
+        #expect(model.pricingCoverageText == "Pricing coverage unavailable")
     }
 
     @Test func localAPIEquivalentValuePreservesCentsAboveOneDollar() throws {
@@ -117,6 +161,7 @@ struct MidasDGXSparkPresentationTests {
         #expect(absent.tokenText == "—")
         #expect(absent.amount == nil)
         #expect(absent.updatedAt == nil)
+        #expect(absent.pricedTokens == nil)
         let zero = MidasDGXSparkPresentation.make(
             snapshot: DGXSparkPricing.project(
                 snapshot: self.snapshot([self.day("2026-10-18", input: 0, cached: 0, output: 0)]),
@@ -124,6 +169,7 @@ struct MidasDGXSparkPresentationTests {
             now: self.now)
         #expect(zero.tokens == 0)
         #expect(zero.amount == 0)
+        #expect(zero.pricedTokens == 0)
         #expect(!zero.valueText.hasPrefix("<"))
     }
 
@@ -153,6 +199,7 @@ struct MidasDGXSparkPresentationTests {
             now: self.now)
         #expect(overflow.tokens == nil)
         #expect(overflow.inputTokens == nil)
+        #expect(overflow.pricedTokens == nil)
     }
 
     @Test func sparkMenuBarDescriptionHasActivityAndNoCloudQuotaLanguage() {

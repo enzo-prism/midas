@@ -92,9 +92,9 @@ Source, collector fixtures, native render fixtures, signed artifacts, notarizati
 and website deployment are separate release gates. Record publication evidence only after each
 gate succeeds.
 
-The release candidate passed 4,534 Swift tests in 512 suites, all 82 Python collector/hub tests,
-and `make check`. Eight native synthetic fixtures cover the Spark card and detail in light and
-dark appearances, including waiting, unpriced, and stale states. Live Spark records were received
+The release candidate passed 4,536 Swift tests in 512 suites, all 82 Python collector/hub tests,
+and `make check`. Ten native synthetic fixtures cover the Spark card and detail in light and
+dark appearances, including waiting, unpriced, stale, and mixed price-coverage states. Live Spark records were received
 by the private hub with the verified public model and separate input/output/cache deltas; retained
 unclassified history stayed unpriced. These checks do not by themselves prove binary publication
 or an update on another Mac.

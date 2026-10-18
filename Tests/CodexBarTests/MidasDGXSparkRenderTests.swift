@@ -41,6 +41,9 @@ struct MidasDGXSparkRenderTests {
         #expect(try abs(#require(priced.amount) - 1.25) < 0.000001)
         let actions = MidasActions(
             refresh: {}, settings: {}, accounts: { _ in }, openUsage: { _ in }, legacyMenu: {}, quit: {})
+        let partial = self.partialPricingModel(day: day, now: now)
+        #expect(partial.tokens == 1_400_000)
+        #expect(partial.pricedTokens == 83000)
         for scheme in [ColorScheme.light, .dark] {
             try self.export(
                 MidasDGXSparkCard(model: priced, showsNavigation: true),
@@ -83,7 +86,43 @@ struct MidasDGXSparkRenderTests {
                 size: NSSize(width: 290, height: 440),
                 scheme: scheme,
                 output: output)
+            try self.export(
+                MidasDGXSparkCard(model: partial),
+                name: "partial-pricing",
+                size: NSSize(width: 352, height: 480),
+                scheme: scheme,
+                output: output)
         }
+    }
+
+    private func partialPricingModel(day: String, now: Date) -> MidasDGXSparkPresentation {
+        let row = CostUsageDailyReport.Entry(
+            date: day,
+            inputTokens: nil,
+            outputTokens: nil,
+            totalTokens: 1_400_000,
+            costUSD: nil,
+            modelsUsed: [DGXSparkPricing.modelID, "local-runtime"],
+            modelBreakdowns: [
+                .init(
+                    modelName: DGXSparkPricing.modelID,
+                    costUSD: nil,
+                    totalTokens: 83000,
+                    inputTokens: 80000,
+                    outputTokens: 3000,
+                    cacheReadTokens: 60000),
+                .init(modelName: "local-runtime", costUSD: nil, totalTokens: 1_317_000),
+            ])
+        let snapshot = DGXSparkPricing.project(
+            snapshot: .init(
+                sessionTokens: nil,
+                sessionCostUSD: nil,
+                last30DaysTokens: 1_400_000,
+                last30DaysCostUSD: nil,
+                daily: [row],
+                updatedAt: now),
+            now: now)
+        return .make(snapshot: snapshot, now: now)
     }
 
     @MainActor private func export(

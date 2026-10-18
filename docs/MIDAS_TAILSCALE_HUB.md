@@ -276,7 +276,8 @@ DGX Spark uses an NVIDIA logo and a dedicated local-inference design rather than
 quota bars. Its card and detail always cover the last 30 UTC days; the combined estimate,
 menu-bar total, and history still follow the selected period. A nonzero value below one cent
 is displayed as **<$0.01**, with the precise estimate available in its detail. Legacy unclassified
-records remain in token totals and are explicitly excluded from the priced portion. Historical
+records remain in token totals and are explicitly excluded from the priced portion. The card
+and detail state exactly how many of the recorded tokens are priced. Historical
 runtime lifetime counters cannot establish when usage occurred and are not backfilled as daily
 records. Until 30 days of measurements exist, the card represents measured coverage only.
 
