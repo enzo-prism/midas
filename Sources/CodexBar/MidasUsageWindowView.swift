@@ -209,9 +209,6 @@ struct MidasUsageWindowView: View {
                 } else if item.spend?.isEstimate != true {
                     Text(item.spendUnavailableReason ?? "Estimate unavailable")
                         .font(.caption).foregroundStyle(MidasTheme.secondaryText)
-                } else if item.spend?.coverageNote != nil {
-                    Label("Partial estimate", systemImage: "exclamationmark.circle")
-                        .font(.caption).foregroundStyle(MidasTheme.warning)
                 }
             }
             .padding(16)

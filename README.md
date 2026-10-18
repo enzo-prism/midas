@@ -32,6 +32,15 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.48.1 candidate: a cleaner usage overview
+
+**0.48.1, build 127** is in preparation. The overview removes inline **Partial total** and
+**Partial estimate** notices, keeping attention on dollar values and remaining usage. Open
+**Estimate details** for source coverage, missing history, and pricing limitations. When Meta
+has recorded activity instead of observed plan limits, its overview uses a compact summary;
+the full activity breakdown remains in provider details. Accounting and missing-data rules are
+unchanged. The latest verified published version remains 0.48.0 until this candidate is released.
+
 ## Midas 0.48.0: a compact native Mac interface
 
 The native redesign is available in **0.48.0, build 126**, published as

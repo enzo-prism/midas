@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.48.0**, build **126**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.48.1**, build **127**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -32,6 +32,25 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.48.1 changes: quieter overview and compact Meta
+
+Version 0.48.1, build 127, removes the inline Partial total row and repeated partial-estimate
+badges. The compact panel moves estimate coverage to **More actions → Estimate details…**;
+Usage retains a neutral details control, and provider details keep source qualifications.
+Accounting flags, exact dollar totals, currencies, billed exclusions, and unavailable values
+are unchanged.
+
+Meta's recorded-activity fallback uses two compact columns with percentage left, a neutral bar,
+and a short busiest-day/week caption. Full token/request breakdowns remain in provider details,
+tooltips, and accessibility. Without a recorded baseline, it shows token count and No baseline
+without a capacity bar. Provider-reported Meta quota/reset readings keep their existing layout.
+The canonical package passed 4,571 Swift Testing tests and all 52 XCTest tests
+across 524 suites in 44 bounded shards, without failures or shard timeouts. Strict lint
+passed with zero violations. Sixty synthetic native fixtures cover light/dark and accessibility
+appearances, including compact Cursor/Meta rows and missing-baseline states. Native layout
+measurements verify that Meta fits the same space as two Claude limits. Publication, installation,
+and production verification are pending for this source revision.
 
 ## 0.48.0 changes: native macOS redesign
 

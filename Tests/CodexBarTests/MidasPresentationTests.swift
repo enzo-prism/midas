@@ -87,7 +87,7 @@ struct MidasPresentationTests {
     }
 
     @Test @MainActor func completeSurfaceFixturesKeepProviderLimitsAndSpendDistinct() throws {
-        let providers: [UsageProvider] = [.codex, .claude, .cursor]
+        let providers: [UsageProvider] = [.codex, .claude, .cursor, .meta]
         let models = try providers.map { try self.previewPresentation($0, state: .healthy) }
         let claude = try #require(models.first { $0.provider == .claude })
         #expect(MidasAccountQuotaLayout.overviewMetrics(claude).map(\.id) == ["primary", "secondary"])
@@ -98,8 +98,15 @@ struct MidasPresentationTests {
         let accounts = try self.previewAccounts(state: .healthy)
         #expect(accounts.map { $0.presentation.hero?.remainingPercent } == [72, 46])
         #expect(accounts.allSatisfy { $0.presentation.spend == nil })
-        let total = try #require(MidasTotalSpend(presentations: models).totals.first)
-        #expect(abs(total.amount - 189.94) < 0.001)
+        let meta = try #require(models.first { $0.provider == .meta })
+        #expect(meta.hero == nil)
+        #expect(meta.metrics.isEmpty)
+        #expect(meta.activityMetrics.map(\.id) == ["meta-activity-today", "meta-activity-week"])
+        #expect(meta.activityMetrics.map(\.remainingPercent) == [75, 70])
+        let totals = MidasTotalSpend(presentations: models)
+        #expect(totals.hasIncompleteCoverage)
+        let total = try #require(totals.totals.first)
+        #expect(abs(total.amount - 197.36) < 0.001)
     }
 
     @Test @MainActor func completeSurfaceFixturesDistinguishUnavailableFromExhausted() throws {
@@ -110,6 +117,46 @@ struct MidasPresentationTests {
         #expect(exhausted.hero?.remainingPercent == 0)
         #expect(exhausted.isStale)
         #expect(exhausted.spend?.isDisplayable == true)
+    }
+
+    @Test @MainActor func metaActivityFitsTheSameCompactSpaceAsTwoClaudeLimits() throws {
+        let meta = try self.previewPresentation(.meta, state: .healthy)
+        let claude = try self.previewPresentation(.claude, state: .healthy)
+        let known = try #require(meta.activityMetrics.first)
+        let noBaselineMeta = try self.previewPresentation(.meta, state: .metaNoBaseline)
+        let noBaseline = try #require(noBaselineMeta.activityMetrics.first)
+        #expect(!noBaseline.hasBaseline)
+        #expect(noBaseline.tokens == 0)
+        #expect(!noBaseline.valueText.contains("%"))
+        for scheme in [ColorScheme.light, .dark] {
+            let metaSize = self.compactFittingSize(MidasCompactOverviewMetrics(item: meta), scheme: scheme)
+            let claudeSize = self.compactFittingSize(MidasCompactOverviewMetrics(item: claude), scheme: scheme)
+            #expect(abs(metaSize.width - 328) < 1)
+            #expect(metaSize.height > 20)
+            #expect(claudeSize.height > 20)
+            #expect(metaSize.height <= claudeSize.height + 16)
+            let noBaselineMetaSize = self.compactFittingSize(
+                MidasCompactOverviewMetrics(item: noBaselineMeta), scheme: scheme)
+            #expect(noBaselineMetaSize.height <= metaSize.height + 1)
+            let knownSize = self.compactFittingSize(MidasCompactActivityMetric(metric: known), scheme: scheme)
+            let noBaselineSize = self.compactFittingSize(
+                MidasCompactActivityMetric(metric: noBaseline), scheme: scheme)
+            #expect(noBaselineSize.height > 20)
+            #expect(noBaselineSize.height <= knownSize.height + 1)
+        }
+    }
+
+    @Test @MainActor func metaSurfaceFixturesPreserveMissingAndLastKnownActivity() throws {
+        let missing = try self.previewPresentation(.meta, state: .unavailable)
+        #expect(missing.activityMetrics.isEmpty)
+        #expect(missing.hero == nil)
+        #expect(missing.spend == nil)
+        let stale = try self.previewPresentation(.meta, state: .staleExhausted)
+        #expect(stale.isStale)
+        #expect(stale.hero == nil)
+        #expect(stale.activityMetrics.map(\.remainingPercent) == [0, 0])
+        #expect(stale.activityMetrics.map(\.hasBaseline) == [true, true])
+        #expect(MidasCompactAccessibility.summary(stale).contains("no reported plan limit"))
     }
 
     /// Opt-in export uses synthetic data only; it never initializes stores or probes credentials.
@@ -170,7 +217,7 @@ struct MidasPresentationTests {
         settings.statusChecksEnabled = false
         settings.costUsageEnabled = false
         settings.midasSpendPeriodSelection = "rolling30Days"
-        let providers: [UsageProvider] = [.codex, .claude, .cursor]
+        let providers: [UsageProvider] = [.codex, .claude, .cursor, .meta]
         settings.mergedOverviewSelectedProviders = providers
         let store = UsageStore(
             fetcher: UsageFetcher(environment: [:]),
@@ -230,6 +277,20 @@ struct MidasPresentationTests {
                         size: NSSize(width: MidasPanelLayout.width, height: MidasPanelLayout.maximumHeight))
                 }
                 navigation.provider = nil
+                do {
+                    let visible: [UsageProvider] = [.cursor, .meta]
+                    self.configurePreviewProviders(visible, settings: settings)
+                    defer { self.configurePreviewProviders(providers, settings: settings) }
+                    #expect(Set(store.midasProvidersForUsageDisplay()) == Set(visible))
+                    try self.export(
+                        panel,
+                        name: "overview-cursor-meta",
+                        appearance: appearance,
+                        output: output,
+                        size: NSSize(width: MidasPanelLayout.width, height: MidasPanelLayout.height(
+                            providerCount: visible.count, availableHeight: 900)))
+                }
+                #expect(Set(store.midasProvidersForUsageDisplay()) == Set(providers))
                 let usage = MidasUsageWindowView(
                     store: store,
                     settings: settings,
@@ -274,7 +335,7 @@ struct MidasPresentationTests {
         settings.statusChecksEnabled = false
         settings.costUsageEnabled = false
         settings.midasSpendPeriodSelection = "rolling30Days"
-        let providers: [UsageProvider] = [.codex, .claude, .cursor]
+        let providers: [UsageProvider] = [.codex, .claude, .cursor, .meta]
         settings.mergedOverviewSelectedProviders = providers
         self.configurePreviewProviders(providers, settings: settings)
         let store = UsageStore(
@@ -393,7 +454,7 @@ struct MidasPresentationTests {
     }
 
     private enum PreviewState: String, CaseIterable {
-        case healthy, unavailable, staleExhausted = "stale-exhausted", empty
+        case healthy, unavailable, staleExhausted = "stale-exhausted", metaNoBaseline = "meta-no-baseline", empty
     }
 
     private struct PreviewAppearance {
@@ -432,6 +493,26 @@ struct MidasPresentationTests {
         }
     }
 
+    @MainActor private func compactFittingSize(_ view: some View, scheme: ColorScheme) -> NSSize {
+        _ = NSApplication.shared
+        let content = view.frame(width: 328).fixedSize(horizontal: false, vertical: true)
+            .environment(\.colorScheme, scheme)
+        let hosting = NSHostingView(rootView: content)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 328, height: 200),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false)
+        window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        window.contentView = hosting
+        defer { window.contentView = nil }
+        hosting.frame = NSRect(x: 0, y: 0, width: 328, height: 200)
+        hosting.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        hosting.layoutSubtreeIfNeeded()
+        return hosting.fittingSize
+    }
+
     private func previewSnapshot(
         _ provider: UsageProvider,
         state: PreviewState,
@@ -439,6 +520,21 @@ struct MidasPresentationTests {
     {
         guard state != .unavailable else { return nil }
         let exhausted = state == .staleExhausted
+        if provider == .meta {
+            let noBaseline = state == .metaNoBaseline
+            return UsageSnapshot(
+                primary: nil,
+                secondary: nil,
+                metaActivity: MetaActivitySnapshot(
+                    todayTokens: noBaseline ? 0 : (exhausted ? 4000 : 1000),
+                    todayRequests: noBaseline ? 0 : 3,
+                    last7DaysTokens: noBaseline ? 1000 : (exhausted ? 10000 : 3000),
+                    last7DaysRequests: 30,
+                    last30DaysTokens: 18000,
+                    busiestDayTokens: noBaseline ? 0 : 4000,
+                    busiestWeekTokens: noBaseline ? 1000 : 10000),
+                updatedAt: Date(timeIntervalSince1970: 1_792_238_400))
+        }
         func metric(_ used: Double, _ minutes: Int, _ reset: String) -> RateWindow {
             RateWindow(usedPercent: used, windowMinutes: minutes, resetsAt: nil, resetDescription: reset)
         }
@@ -476,11 +572,17 @@ struct MidasPresentationTests {
     {
         let now = Date(timeIntervalSince1970: 1_792_238_400)
         let snapshot = self.previewSnapshot(provider, state: state, accountIndex: accountIndex)
+        let amount = switch provider {
+        case .codex: 128.42
+        case .claude: 42.80
+        case .meta: 7.42
+        default: 18.72
+        }
         let cost: CostUsageTokenSnapshot? = state == .unavailable || !includesSpend ? nil : .init(
             sessionTokens: 12000,
             sessionCostUSD: 1.25,
             last30DaysTokens: 820_000,
-            last30DaysCostUSD: provider == .codex ? 128.42 : provider == .claude ? 42.80 : 18.72,
+            last30DaysCostUSD: amount,
             costProvenance: .listPriceEstimate,
             daily: [],
             updatedAt: now)
@@ -503,13 +605,18 @@ struct MidasPresentationTests {
             showOptionalCreditsAndExtraUsage: true,
             hidePersonalInfo: true,
             now: now))
-        return .make(
+        var result = MidasProviderPresentation.make(
             provider: provider,
             card: card,
             snapshot: snapshot,
             tokenSnapshot: cost,
             isRefreshing: false,
             isStale: state == .staleExhausted)
+        if provider == .meta {
+            // Preserve incomplete source coverage while the overview omits prominent warning badges.
+            result.spend?.coverageNote = "Recorded history only; complete date coverage is not established."
+        }
+        return result
     }
 
     @MainActor private func previewAccounts(state: PreviewState) throws -> [MidasAccountPresentation] {

@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.48.1 — October 18, 2026
+
+- Remove the inline Partial total row and repeated partial-estimate badges. Estimate coverage remains available through More actions → Estimate details and provider details.
+- Show Meta's recorded-activity fallback in two compact columns, with percentage left and a short busiest-day/week baseline caption. Token/request breakdowns move to details and tooltips; real plan limits and reset times remain unchanged.
+- Preserve exact provider and total dollar amounts, recorded-token totals, accounting coverage, unavailable values, and separate billed charges.
+
+Build 127. See GitHub Releases for signed binary availability.
+
 ## Midas 0.48.0 — October 17, 2026
 
 - Replace the large menu-bar panel with a compact, content-sized 360-point panel, capped at 540 points. Keep the total and actions fixed while provider rows scroll.

@@ -49,8 +49,7 @@ struct MidasPanelView: View {
                     periodLabel: MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
                         .label(reportingTimeZone: self.store.midasDisplayTimeZone),
                     periodControl: AnyView(MidasSpendPeriodControl(settings: self.settings, store: self.store)),
-                    compact: true,
-                    coverageAction: { self.infoPage = .coverage })
+                    compact: true)
                     .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 12)
                 Divider()
                 ScrollView {
@@ -116,6 +115,8 @@ struct MidasPanelView: View {
 
     private var moreActions: some View {
         Menu {
+            Button("Estimate details…") { self.infoPage = .coverage }
+            Divider()
             Menu("Menu-bar provider") {
                 Picker("Menu-bar provider", selection: Binding(
                     get: { self.settings.midasMenuBarFocusProvider },
@@ -244,8 +245,6 @@ struct MidasPanelView: View {
                 } else if item.spend?.isEstimate != true {
                     Text(item.spendUnavailableReason ?? "Estimate unavailable")
                         .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
-                } else if item.spend?.coverageNote != nil {
-                    Text("Partial estimate").font(.system(size: 11)).foregroundStyle(MidasTheme.warning)
                 }
             }
             .padding(.vertical, 10)
@@ -275,11 +274,7 @@ struct MidasOverviewMetrics: View {
             } else if self.accounts.count > 1 {
                 MidasAccountOverviewBars(accounts: self.accounts)
             } else if !self.item.activityMetrics.isEmpty {
-                ForEach(self.item.activityMetrics) { metric in
-                    MidasActivityBar(metric: metric)
-                }
-                Text("Left estimated vs busiest recorded day/week · Meta reports no plan limit")
-                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                MidasCompactOverviewMetrics(item: self.item)
                 if self.item.isStale || self.item.error != nil {
                     Text("Stale").font(.caption).foregroundStyle(MidasTheme.warning)
                 }

@@ -116,26 +116,44 @@ struct MidasCompactOverviewMetrics: View {
         if !metrics.isEmpty {
             ForEach(metrics) { metric in MidasCompactQuotaMetric(metric: metric) }
         } else if !item.activityMetrics.isEmpty {
-            ForEach(item.activityMetrics) { metric in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(metric.title)
-                        Spacer(minLength: 4)
-                        Text(metric.valueText).monospacedDigit()
-                    }
-                    .font(.system(size: 12))
-                    MidasRemainingBar(percent: metric.remainingPercent, warningWhenLow: false)
-                    Text(metric.detailText).font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
-                }
+            LazyVGrid(columns: self.columns, alignment: .leading, spacing: 8) {
+                ForEach(item.activityMetrics) { metric in MidasCompactActivityMetric(metric: metric) }
             }
-            Text("Estimated left vs busiest recorded window; no reported plan limit")
-                .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
         } else {
             Label(
                 item.error != nil ? "Usage unavailable · needs attention" : "Limit unavailable",
                 systemImage: item.error != nil ? "exclamationmark.circle" : "minus.circle")
                 .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
         }
+    }
+}
+
+/// Historical activity keeps the same compact rhythm as quotas without implying a plan limit.
+struct MidasCompactActivityMetric: View {
+    let metric: MidasActivityMetric
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(self.metric.title)
+                    .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 0)
+                Text(self.metric.valueText)
+                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                    .lineLimit(1).fixedSize()
+            }
+            if self.metric.hasBaseline {
+                MidasRemainingBar(percent: self.metric.remainingPercent, warningWhenLow: false)
+            }
+            Text(self.metric.hasBaseline ? "vs \(self.metric.comparisonLabel)" : "No baseline")
+                .font(.system(size: 11)).foregroundStyle(MidasTheme.secondaryText)
+                .lineLimit(1).truncationMode(.middle)
+        }
+        .help("\(self.metric.detailText). Historical activity baseline; no reported plan limit.")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(self.metric.title)
+        .accessibilityValue("\(self.metric.valueText), \(self.metric.detailText), no reported plan limit")
     }
 }
 

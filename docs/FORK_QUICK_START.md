@@ -23,6 +23,10 @@ multi-account Codex tracking, automatic estimates, and coverage limitations.
 
 ## Current features
 
+The **0.48.1, build 127 candidate** removes inline partial-estimate notices and condenses Meta's
+recorded-activity fallback in the overview. **Estimate details** retains full coverage and pricing
+disclosures, and provider details retain the activity breakdown. Publication is pending.
+
 **0.48.0, build 126** adds a compact native panel, SF Pro/SF Symbols, adaptive
 system colors, and a macOS 26 Liquid Glass navigation capsule with an older-system/accessibility
 fallback. Usage and Settings have native selectable sidebars. The signed, notarized release is
@@ -30,8 +34,9 @@ fallback. Usage and Settings have native selectable sidebars. The signed, notari
 
 The overview keeps estimated AI token value, recorded tokens, per-provider dollars, remaining
 capacity, and reset times visible. Local totals include enabled providers outside Favorites;
-combined totals use the same shared source set on every Mac. Missing estimates and partial
-coverage stay explicit. Different currencies stay separate; estimates are not billed charges.
+combined totals use the same shared source set on every Mac. Missing estimates stay unavailable;
+coverage details explain incomplete history and unpriced usage. Different currencies stay
+separate; estimates are not billed charges.
 Anthropic billed spend stays separate to avoid counting activity twice.
 
 Orbit shows total token spend beside one favorite provider’s capacity ring. Codex uses weekly
@@ -114,6 +119,7 @@ selected provider.
 
 | Surface | Current |
 | --- | --- |
+| Overview refinement candidate | **0.48.1**, build **127**, publication pending |
 | Last verified source on `main` | **0.48.0**, build **126** |
 | Last verified GitHub latest / signed Sparkle feed | **0.48.0**, tag `v0.48.0-midas.1` |
 | Last verified marketing-site download (`midas-ai.dev`) | **0.48.0**, tag `v0.48.0-midas.1` |

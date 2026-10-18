@@ -6,6 +6,7 @@ settings, and legacy menu-bar icon preferences intact. macOS 14 remains the mini
 
 The compact native redesign is published as **0.48.0, build 126**:
 [v0.48.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.0-midas.1).
+The **0.48.1, build 127 candidate** refines that overview; publication and validation are pending.
 
 ## Current onboarding and account coverage
 
@@ -24,6 +25,10 @@ a nested `.popover` or `.focusable()` key-view loop inside the status-item `NSPo
 `MidasAccountUsageView` keeps account capacity and reset times separate.
 `UsageStore+CloudUsage` combines available Codex account history, `MidasCodexEstimate` provides
 blended pricing, and `MidasCalibrationExchange` shares optional derived samples.
+
+The 0.48.1 candidate removes inline **Partial total** and **Partial estimate** notices. The
+neutral **Estimate details** action still opens complete coverage information, including missing
+sources and unpriced history. No estimate, subtotal, exclusion, or unavailable state changes.
 
 ## Everyday surfaces
 
@@ -95,7 +100,7 @@ period, excludes billed organization history that can overlap coding logs, and p
 partial, conflicting, and overflow states. Token totals are activity, not remaining quota.
 
 Claude contributes its local Claude Code transcript value at Anthropic API rates (`CostProvenance.listPriceEstimate`,
-see [Claude](claude.md#cost-usage-local-log-scan)); days with unpriced models mark the Claude row partial.
+see [Claude](claude.md#cost-usage-local-log-scan)); unpriced models remain disclosed in estimate coverage.
 `MidasTotalSpend` sums primary, finite, nonnegative estimates from the selected source set.
 It deduplicates providers, keeps currencies separate without conversion, and
 reports coverage and reporting periods. A missing estimate is excluded rather than converted to
@@ -118,12 +123,12 @@ Codex keeps weekly remaining separate from session constraints, and its single m
 never substitutes session data when weekly data is missing. Cursor model spend shares are not
 quota; actual request counts and independent usage pools remain separate. Meta can show local
 history when cost collection is disabled, without fabricating remaining capacity. Meta's
-overview and detail show Claude-style usage bars instead: Current usage and Weekly
-limit as percent left with provider-reported reset times, read from Meta's provider
-through the Muse host. When no plan reading is available they fall back to Today
-and Last 7 days of recorded Muse tokens as percent left against the busiest recorded
-windows. The legacy menu card shows the same rows and follows the show-used
-preference. Neither form drives Orbit or other quota rings.
+observed Current usage and Weekly limit remain percent-left readings with provider-reported
+reset times, read through the Muse host. When no plan reading is available, the 0.48.1 overview
+uses a short recorded-activity summary. Provider details retain Today and Last 7 days of recorded
+Muse tokens and the explicitly named busiest-window baseline; these are not reported plan
+allowances. The legacy menu card retains its existing rows and show-used preference.
+Neither observed Meta windows nor the activity fallback drive Orbit or other quota rings.
 
 The menu bar defaults to **Orbit**: total token spend (API rates), followed by a ring around one
 favorite provider’s logo. Use **More actions → Menu-bar provider**, or
@@ -189,7 +194,7 @@ MIDAS_PREVIEW_OUTPUT="$MIDAS_PREVIEW_OUTPUT" \
 
 Initial design exploration used CLT-only SDK/macro workarounds and an isolated validation
 manifest that excluded XCTest-only files. Those historical results are not a full-suite pass.
-Release validation used full Xcode and the canonical `Package.swift`: all 4,569 Swift Testing
+The 0.48.0 release validation used full Xcode and the canonical `Package.swift`: all 4,569 Swift Testing
 tests plus 52 XCTest tests passed across 524 suites and 44 shards, with zero lint violations.
 The Python suites ran 82 tests with 9 existing skips. The published archive, both update feeds, Sparkle archive
 signatures, notarization ticket, and embedded widget build 126 were verified. Installation and

@@ -173,15 +173,9 @@ struct MidasProviderDetailView: View {
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
                 .textSelection(.enabled)
             if let spend = self.presentation.spend {
-                HStack(spacing: 8) {
-                    Text(spend.period)
-                    if spend.coverageNote != nil {
-                        Label("Partial", systemImage: "exclamationmark.circle")
-                            .foregroundStyle(MidasTheme.warning)
-                    }
-                }
-                .font(.caption).foregroundStyle(MidasTheme.secondaryText)
-                .help("Spend data updated \(spend.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                Text(spend.period)
+                    .font(.caption).foregroundStyle(MidasTheme.secondaryText)
+                    .help("Spend data updated \(spend.updatedAt.formatted(date: .abbreviated, time: .shortened))")
             } else {
                 Text(self.presentation.spendUnavailableReason ?? "Estimate unavailable")
                     .font(.caption).foregroundStyle(MidasTheme.secondaryText)
