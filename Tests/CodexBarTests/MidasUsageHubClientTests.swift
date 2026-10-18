@@ -156,6 +156,53 @@ struct MidasUsageHubClientTests {
         }
     }
 
+    @Test func compactPeerWireJSONStillEnforcesTheCanonicalPublicationByteLimit() throws {
+        let connection = self.connection()
+        let workspace = MidasUsageSyncWorkspace(createdAt: self.now)
+        let empty = self.publication(workspace: workspace, connection: connection)
+        let row = MidasUsageSyncEvent(
+            id: String(repeating: "0", count: 64),
+            provider: .codex,
+            day: MidasUsageSyncPublication.day(self.now),
+            observedAt: self.now,
+            values: .init(tokens: nil, costUSD: nil, provenance: .unknown, model: String(repeating: "/", count: 160)))
+        let canonicalRow = try JSONEncoder().encode(row)
+        let canonicalText = try #require(String(bytes: canonicalRow, encoding: .utf8))
+        let compactRow = Data(canonicalText.replacingOccurrences(of: #"\/"#, with: "/").utf8)
+        #expect(compactRow.count < canonicalRow.count)
+        let count = MidasUsageSyncPublication.maximumFileBytes / (canonicalRow.count + 1) + 1
+        #expect(count <= MidasUsageSyncPublication.maximumRecords)
+
+        let response = MidasUsageHubExchange(
+            workspace: workspace,
+            publications: [empty],
+            publicationSucceeded: false,
+            unavailableFiles: 0,
+            rejectedFiles: 0)
+        let header = try #require(String(bytes: JSONEncoder().encode(response), encoding: .utf8))
+        let insertion = try #require(header.range(of: #""events":[]"#))
+        var wire = Data(header[..<insertion.lowerBound].utf8)
+        wire.reserveCapacity(header.utf8.count + count * (compactRow.count + 1))
+        wire.append(contentsOf: #""events":["#.utf8)
+        for index in 0..<count {
+            if index > 0 { wire.append(44) }
+            wire.append(compactRow)
+        }
+        wire.append(93)
+        wire.append(contentsOf: header[insertion.upperBound...].utf8)
+        // Even the full envelope is below the per-publication wire limit. The
+        // rejection must come from canonical peer sizing, not the input codec.
+        #expect(wire.count < MidasUsageSyncPublication.maximumFileBytes)
+        #expect(throws: MidasUsageHubError.responseTooLarge) {
+            try MidasUsageHubClient.validatedExchange(
+                wire,
+                connection: connection,
+                workspace: workspace,
+                local: nil,
+                now: self.now)
+        }
+    }
+
     private func connection(endpoint: String = "https://mini.tail123.ts.net") -> MidasUsageHubConnection {
         MidasUsageHubConnection(
             endpoint: URL(string: endpoint)!,

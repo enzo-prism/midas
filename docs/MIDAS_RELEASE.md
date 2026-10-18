@@ -45,7 +45,8 @@ The coordinator restores one decoded cache and moves recurring merge/encode/atom
 write work to a serial worker with cancellation and generation checks. An unchanged
 Codex scan skips the full cache rewrite, and cache freshness is bound to file
 identity. Codec/scan autorelease pools and bounded network buffer ownership reduce
-transient allocation. See [memory footprint](MIDAS_MEMORY.md) for profiling details
+transient allocation. Bounded envelope/publication encoding and size-only byte counting
+avoid whole-history encoder graphs on saves, uploads, and peer validation. See [memory footprint](MIDAS_MEMORY.md) for profiling details
 and invariants. Source selection is not binary publication evidence; the latest
 published binary remains listed above until the signed release is verified.
 

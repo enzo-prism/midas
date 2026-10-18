@@ -55,7 +55,7 @@ struct MidasIdentityTests {
 struct MidasIdentityMigrationTests {
     @Test func `adopts legacy defaults without overwriting current values or migration flags`() throws {
         let suite = "MidasIdentityMigrationTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
+        let defaults = try #require(MigrationDomainTestDefaults(testSuiteName: suite))
         let legacyDomain = "\(suite).legacy"
         let currentDomain = "\(suite).current"
         defer {
@@ -120,7 +120,7 @@ struct MidasIdentityMigrationTests {
 
     @Test func `runs once per bundle and skips unbundled or foreign identities`() throws {
         let suite = "MidasIdentityMigrationTests-run-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
+        let defaults = try #require(MigrationDomainTestDefaults(testSuiteName: suite))
         let domains = (current: "\(suite).current", legacy: "\(suite).legacy")
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -159,5 +159,38 @@ struct MidasIdentityMigrationTests {
             libraryDirectory: empty,
             defaultsDomainsOverride: domains)
         #expect(second.status == .alreadyCompleted)
+    }
+}
+
+/// UserDefaults persistent-domain APIs address global domains, even on a suite-backed
+/// instance. Keep migration source/target domains in memory so a mistaken bundle-ID
+/// argument can never read, replace, or remove an installed application's preferences.
+private final class MigrationDomainTestDefaults: UserDefaults, @unchecked Sendable {
+    private let testSuiteName: String
+    private let domainLock = NSLock()
+    private var domains: [String: [String: Any]] = [:]
+
+    init?(testSuiteName: String) {
+        guard testSuiteName.hasPrefix("MidasIdentityMigrationTests-") else { return nil }
+        self.testSuiteName = testSuiteName
+        super.init(suiteName: testSuiteName)
+    }
+
+    override func persistentDomain(forName domainName: String) -> [String: Any]? {
+        self.domainLock.withLock { self.domains[domainName] }
+    }
+
+    override func setPersistentDomain(_ domain: [String: Any], forName domainName: String) {
+        self.domainLock.withLock { self.domains[domainName] = domain }
+    }
+
+    override func removePersistentDomain(forName domainName: String) {
+        if domainName == self.testSuiteName {
+            // Migration-version flags use the isolated suite's ordinary key API.
+            // Only this constructor-pinned test suite may reach CFPreferences.
+            super.removePersistentDomain(forName: self.testSuiteName)
+        } else {
+            _ = self.domainLock.withLock { self.domains.removeValue(forKey: domainName) }
+        }
     }
 }

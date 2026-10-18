@@ -964,6 +964,27 @@ extension MidasUsageSyncCoordinator {
         let pendingLocal: MidasUsageSyncPublication?
         let lastPublishedAt: Date?
         let lastReceivedAt: Date?
+
+        /// Keep synthesized optional omission semantics without visiting the bulk arrays.
+        struct Metadata: Encodable {
+            let schemaVersion: Int
+            let localDeviceID: UUID
+            let deviceBinding: String?
+            let accountFingerprint: String
+            let workspace: MidasUsageSyncWorkspace
+            let lastPublishedAt: Date?
+            let lastReceivedAt: Date?
+
+            init(_ cache: Cache) {
+                self.schemaVersion = cache.schemaVersion
+                self.localDeviceID = cache.localDeviceID
+                self.deviceBinding = cache.deviceBinding
+                self.accountFingerprint = cache.accountFingerprint
+                self.workspace = cache.workspace
+                self.lastPublishedAt = cache.lastPublishedAt
+                self.lastReceivedAt = cache.lastReceivedAt
+            }
+        }
     }
 
     /// Serializes large transient graphs and disk writes away from the UI executor.
@@ -1001,7 +1022,9 @@ extension MidasUsageSyncCoordinator {
         func persist(_ cache: Cache, to url: URL) throws {
             try Task.checkCancellation()
             try autoreleasepool {
-                let data = try JSONEncoder().encode(cache)
+                let metadata = try JSONEncoder().encode(Cache.Metadata(cache))
+                let data = try MidasUsageSyncEncoding.encodeEnvelope(
+                    metadata: metadata, publications: cache.publications, pendingLocal: cache.pendingLocal)
                 try Task.checkCancellation()
                 try self.write(data, url)
             }

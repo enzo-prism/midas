@@ -118,7 +118,7 @@ public enum MidasUsageHubClient {
         if let local, local.deviceID != connection.deviceID || local.deviceName != connection.deviceName {
             throw MidasUsageHubError.invalidConnection
         }
-        let body = try autoreleasepool { try local.map { try JSONEncoder().encode($0) } ?? Data("null".utf8) }
+        let body = try local.map { try MidasUsageSyncEncoding.encodePublication($0) } ?? Data("null".utf8)
         guard body.count <= MidasUsageSyncPublication.maximumFileBytes else {
             throw MidasUsageSyncError.limitExceeded
         }
@@ -169,7 +169,14 @@ public enum MidasUsageHubClient {
             if publication.deviceID == connection.deviceID, publication.deviceName != connection.deviceName {
                 throw MidasUsageHubError.invalidResponse
             }
-            let encodedBytes = try autoreleasepool { try JSONEncoder().encode(publication).count }
+            let encodedBytes: Int
+            do {
+                encodedBytes = try MidasUsageSyncEncoding.encodedPublicationSize(publication)
+            } catch MidasUsageSyncError.limitExceeded {
+                // A valid wire representation can expand under canonical JSON escaping.
+                // Preserve the received-publication size error used before bounded encoding.
+                throw MidasUsageHubError.responseTooLarge
+            }
             guard encodedBytes <= MidasUsageSyncPublication.maximumFileBytes else {
                 throw MidasUsageHubError.responseTooLarge
             }

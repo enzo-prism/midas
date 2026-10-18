@@ -25,6 +25,10 @@ offline outbox, and pricing coverage:
   keys, and individual rows are capped at 64 KiB, including unknown extension
   fields; oversized extensions are rejected. This avoids a whole-history
   Foundation JSON index while preserving normal generated snapshots and outboxes.
+- Saved envelopes, uploads, and canonical publication-size validation use a bounded
+  encoder and a shared byte-emission path. Size-only validation counts bytes
+  without constructing a full publication buffer; escaping and size limits remain
+  compatible with Foundation JSONEncoder.
 - Recurring history retention, ledger aggregation, and atomic cache writes run on
   one worker actor, with cancellation and connection-generation checks before
   applying results. Startup restoration still performs one synchronous decode
@@ -55,6 +59,58 @@ identities are not included in public profiling artifacts.
 For future checks, compare physical footprint and its high-water mark across
 several complete collection/exchange cycles. RSS alone omits compressed pages,
 and a smaller live heap alone does not prove the allocator released its pages.
+
+### Initial fixed-corpus comparison
+
+Before the final bounded-encoding pass, three fresh-process runs of each release
+build (candidate source `7359f7fe6`) used the same fixed numeric
+corpus and observation time. The probe decodes shared history, merges the
+ledger, retains an unchanged local publication, and encodes that publication.
+Both versions produced the same golden snapshot SHA-256 and encoded publication
+size in every run. No source logs, account identities, or credentials are needed
+in the published results.
+
+The following are medians. Memory is physical footprint in MiB (1,048,576 bytes),
+not RSS. Phase samples are taken after that phase's autorelease pool drains;
+the complete-process high-water mark also includes result verification.
+
+| Physical footprint | 0.47.0 | 0.47.1 |
+| --- | ---: | ---: |
+| Complete-process peak | 626.8 MiB | 416.7 MiB |
+| After decode | 528.5 MiB | 167.7 MiB |
+| After merge | 163.1 MiB | 258.8 MiB |
+| After unchanged-history retention | 283.1 MiB | 290.7 MiB |
+| Final process sample | 208.5 MiB | 169.6 MiB |
+
+| Elapsed time | 0.47.0 | 0.47.1 |
+| --- | ---: | ---: |
+| Decode | 1.00 s | 1.53 s |
+| Merge | 0.51 s | 0.32 s |
+| Retain unchanged local history | 1.35 s | 0.47 s |
+| Encode publication | 0.32 s | 0.34 s |
+| Sum of the four measured phases | 3.17 s | 2.66 s |
+
+The bounded decoder trades extra structural scanning and batch work for a much
+smaller decode allocation spike: decoding takes longer in this comparison.
+Merge and retention are faster, while publication encoding is slightly slower.
+Intermediate samples after merge and retention are higher even though the
+complete-process peak and final footprint are lower. The timing total is the
+median of each run's phase sum; these are elapsed timings, not CPU-time samples.
+
+This probe excludes raw session-log scans, provider polling, network exchanges,
+UI/widgets, and cache fsync. It does not establish a whole-app memory budget,
+long-uptime behavior, or a speedup for every workload. The retained numeric
+history still consumes memory; bounded decoding controls temporary indexing
+rather than removing history.
+
+### Test isolation
+
+The full serial Swift Testing run passed 4,558 tests across 515 suites. Repeated
+suite-heavy runs on the same signed-in user exhausted directory descriptors in
+that user's `cfprefsd`, temporarily making existing preferences unreadable. The
+on-disk settings remained intact; restarting only the affected user's daemon
+restored access. Prefer a dedicated test user or VM for full-suite repetition,
+and hermetic or in-memory defaults in test fixtures.
 
 ## Earlier scanner profiles
 
@@ -168,8 +224,9 @@ Regression gates live in `Tests/CodexBarTests/CostUsageRetainedWindowTests.swift
 - Any loop over session files drains an autoreleasepool per file.
 - Session logs are streamed (`CostUsageJsonl.scan`) with a byte-level prefilter before
   any JSON parsing; never `readToEnd()` a session log — files reach hundreds of MB.
-- Cache reads/writes are whole-file JSON today; keep them rare (dirty-tracked) or
-  replace with a mapped/binary format before adding new per-refresh cache passes.
+- Numeric cost-cache reads/writes still use whole-file JSON; keep them rare
+  (dirty-tracked). Shared-history publications use bounded row decoding; do not
+  reintroduce a whole-history Foundation index on that path.
 - New retained caches need a hard entry cap and an eviction path on memory pressure.
 - `malloc_zone_pressure_relief` is best-effort cosmetics, not a budget tool. If
   footprint matters, measure `phys_footprint` high-water during the work itself.

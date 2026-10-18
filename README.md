@@ -34,7 +34,7 @@ on first launch, without touching an upstream CodexBar install on the same Mac. 
 
 ## Midas 0.47.1: shared-history performance
 
-Large shared histories now use less repeated allocation and encoding. Recurring sync
+Large shared histories now decode and encode in bounded batches. Recurring sync
 merges and saves run away from the UI thread, duplicate records skip canonical JSON,
 and unchanged Codex scans avoid whole-cache rewrites. Token totals, account scope,
 offline history, and estimated pricing coverage keep the same counting rules. See

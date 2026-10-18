@@ -835,6 +835,98 @@ struct MidasUsageSyncCoordinatorTests {
 }
 
 extension MidasUsageSyncCoordinatorTests {
+    @Test func chunkedCacheEncodingPreservesSchemaTwoMetadataAndTheOfflineOutbox() async throws {
+        let first = try Fixture()
+        let second = try Fixture()
+        defer { first.cleanup(); second.cleanup() }
+        let identity = MidasUsageSyncEnvironmentIdentity(
+            deviceBinding: "synthetic-mini", cloudAccountFingerprint: "synthetic-account")
+        let folder = try first.sharedFolder()
+        let mini = first.coordinator(identity: identity)
+        let notebook = second.coordinator(identity: .init(
+            deviceBinding: "synthetic-notebook", cloudAccountFingerprint: "synthetic-account"))
+        self.collect(on: mini, event: "mini", tokens: 100)
+        self.collect(on: notebook, event: "notebook", tokens: 200)
+        try await mini.connect(folder: folder)
+        try await notebook.connect(folder: folder)
+        await mini.syncNow()
+        await notebook.syncNow()
+        await mini.syncNow()
+        let before = try MidasUsageSyncCodec.decodeEnvelope(Data(contentsOf: first.cache))
+        let originalMetadata = try JSONDecoder().decode(MidasUsageSyncCacheMetadata.self, from: before.metadata)
+        #expect(originalMetadata.schemaVersion == 2)
+        #expect(originalMetadata.localDeviceID.uuidString == first.defaults.string(forKey: "midasUsageSyncDeviceID"))
+        #expect(originalMetadata.deviceBinding == identity.deviceBinding)
+        #expect(originalMetadata.accountFingerprint == identity.cloudAccountFingerprint)
+        #expect(originalMetadata.lastPublishedAt == Self.now)
+        #expect(originalMetadata.lastReceivedAt == Self.now)
+
+        let offline = first.coordinator(restore: true, identity: identity, exchange: { _, _, _, _ in
+            throw MidasUsageSyncError.folderUnavailable
+        })
+        self.collect(on: offline, event: "pending", tokens: 50)
+        await offline.syncNow()
+        let saved = try MidasUsageSyncCodec.decodeEnvelope(Data(contentsOf: first.cache))
+        let savedMetadata = try JSONDecoder().decode(MidasUsageSyncCacheMetadata.self, from: saved.metadata)
+        #expect(savedMetadata == originalMetadata)
+        #expect(saved.publications == before.publications)
+        let pending = try #require(saved.pendingLocal)
+        #expect(pending.workspaceID == originalMetadata.workspace.id)
+        #expect(pending.deviceID == originalMetadata.localDeviceID)
+        #expect(pending.events.reduce(0) { $0 + ($1.values.tokens ?? 0) } == 150)
+
+        let restarted = first.coordinator(restore: true, identity: identity)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 300)
+        #expect(restarted.lastPublishedAt == originalMetadata.lastPublishedAt)
+        #expect(restarted.lastReceivedAt == originalMetadata.lastReceivedAt)
+        self.collect(on: restarted, event: nil, tokens: 0)
+        await restarted.syncNow()
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 350)
+    }
+
+    @Test func chunkedCacheEncodingPreservesNilMetadataAndEmptyHistory() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let folder = try fixture.sharedFolder()
+        let coordinator = fixture.coordinator(exchange: { _, _, _, _ in
+            throw MidasUsageSyncError.folderUnavailable
+        })
+        try await coordinator.connect(folder: folder)
+        self.collect(on: coordinator, event: nil, tokens: 0)
+        await coordinator.syncNow()
+        let data = try Data(contentsOf: fixture.cache)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["deviceBinding"] == nil)
+        #expect(object["lastPublishedAt"] == nil)
+        #expect(object["lastReceivedAt"] == nil)
+        let saved = try MidasUsageSyncCodec.decodeEnvelope(data)
+        #expect(saved.publications.isEmpty)
+        let pending = try #require(saved.pendingLocal)
+        #expect(pending.events.isEmpty)
+        #expect(pending.accountDays.isEmpty)
+        let metadata = try JSONDecoder().decode(MidasUsageSyncCacheMetadata.self, from: saved.metadata)
+        #expect(metadata.schemaVersion == 2)
+        #expect(metadata.deviceBinding == nil)
+        #expect(metadata.lastPublishedAt == nil)
+        #expect(metadata.lastReceivedAt == nil)
+        #expect(metadata.workspace.id == pending.workspaceID)
+
+        let restarted = fixture.coordinator(restore: true)
+        #expect(restarted.isEnabled)
+        #expect(restarted.snapshots.isEmpty)
+        self.collect(on: restarted, event: nil, tokens: 0)
+        await restarted.syncNow()
+        let acknowledgedData = try Data(contentsOf: fixture.cache)
+        let acknowledgedObject = try #require(
+            JSONSerialization.jsonObject(with: acknowledgedData) as? [String: Any])
+        #expect(acknowledgedObject["pendingLocal"] == nil)
+        let acknowledged = try MidasUsageSyncCodec.decodeEnvelope(acknowledgedData)
+        #expect(acknowledged.pendingLocal == nil)
+        #expect(acknowledged.publications.count == 1)
+        #expect(acknowledged.publications.first?.events.isEmpty == true)
+        #expect(acknowledged.publications.first?.accountDays.isEmpty == true)
+    }
+
     @Test func explicitLegacyReconnectionPreservesRolledOffHistoryAndRebindsTheCache() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
@@ -990,4 +1082,14 @@ private final class MidasUsageSyncWriteGate: @unchecked Sendable {
         self.condition.broadcast()
         self.condition.unlock()
     }
+}
+
+private struct MidasUsageSyncCacheMetadata: Decodable, Equatable {
+    let schemaVersion: Int
+    let localDeviceID: UUID
+    let deviceBinding: String?
+    let accountFingerprint: String
+    let workspace: MidasUsageSyncWorkspace
+    let lastPublishedAt: Date?
+    let lastReceivedAt: Date?
 }
