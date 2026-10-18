@@ -14,6 +14,8 @@ struct MidasProviderLogoTests {
             MidasProviderLogoLoader.resourceName(for: .cursor, dark: true))
         #expect(MidasProviderLogoLoader.resourceName(for: .claude, dark: false) ==
             MidasProviderLogoLoader.resourceName(for: .claude, dark: true))
+        #expect(MidasProviderLogoLoader.resourceName(for: .localInference, dark: false) == "MidasLogo-nvidia_light")
+        #expect(MidasProviderLogoLoader.resourceName(for: .localInference, dark: true) == "MidasLogo-nvidia_dark")
     }
 
     @Test
@@ -75,7 +77,7 @@ struct MidasProviderLogoTests {
     }
 
     @Test func renderedMarksHaveTransparentSafeEdges() throws {
-        for provider in [UsageProvider.codex, .cursor, .meta, .claude, .copilot] {
+        for provider in [UsageProvider.codex, .cursor, .meta, .claude, .copilot, .localInference] {
             for dark in [false, true] {
                 let image = try #require(MidasProviderLogoLoader.image(for: provider, size: 64, dark: dark))
                 let data = try #require(image.tiffRepresentation)

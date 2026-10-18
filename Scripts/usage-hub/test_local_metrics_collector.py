@@ -75,6 +75,85 @@ class LocalMetricsCollectorTests(unittest.TestCase):
         hub.validate_publication(state["pending"], self.workspace["id"], self.config["deviceID"],
                                  self.config["deviceName"], now=self.now + 360)
 
+    def cached_metrics(self, prompt=100, output=20, requests=2, cached=50):
+        text = self.metrics(prompt, output, requests)
+        if cached is not None:
+            text += f'vllm:prompt_tokens_cached_total{{model_name="PRIVATE_MODEL",engine="0"}} {cached}\n'
+        # This older metric counts cache lookup hits, not billed cached tokens. It must be ignored.
+        return text + 'vllm:prefix_cache_hits_total{model_name="PRIVATE_MODEL",engine="0"} 999999\n'
+
+    def cached_sample(self, state, prompt, output, requests, cached, at,
+                      public_model="Qwen/Qwen3.8-Flash-Next", alias="PRIVATE_MODEL"):
+        collector.sample(state, self.workspace, self.config,
+                         collector.parse_metrics(self.cached_metrics(prompt, output, requests, cached),
+                                                 alias, public_model), at)
+
+    def test_verified_model_and_cached_subset_are_published_without_raw_runtime_labels(self):
+        state = self.state()
+        self.cached_sample(state, 100, 20, 2, 50, self.now)
+        self.cached_sample(state, 200, 40, 3, 120, self.now + 180)
+        values = state["events"][0]["values"]
+        self.assertEqual(values["model"], "Qwen/Qwen3.8-Flash-Next")
+        self.assertEqual(values["tokens"], 120)
+        self.assertEqual(values["tokenMix"], {"inputTokens": 100, "outputTokens": 20, "cacheReadTokens": 70})
+        self.assertEqual(values["provenance"], "unknown")
+        self.assertNotIn("costUSD", values)
+        self.assertNotIn("PRIVATE_MODEL", json.dumps(state))
+        self.assertNotIn("999999", json.dumps(state))
+        collector.validate_state(state, self.config, self.now + 180)
+        self.cached_sample(state, 200, 40, 3, 120, self.now + 360)
+        self.assertEqual(state["events"][0]["values"], values)
+
+    def test_legacy_history_is_retained_and_mapping_upgrade_establishes_a_new_baseline(self):
+        state = self.state()
+        self.sample(state, 100, 20, 2, self.now)
+        self.sample(state, 107, 21, 3, self.now + 180)
+        legacy = copy.deepcopy(state["events"][0])
+        self.cached_sample(state, 117, 23, 4, 50, self.now + 360)
+        self.assertEqual(state["events"], [legacy])
+        self.cached_sample(state, 137, 25, 5, 60, self.now + 540)
+        self.assertEqual(len(state["events"]), 2)
+        self.assertIn(legacy, state["events"])
+        known = next(e for e in state["events"] if e["values"].get("model"))
+        self.assertEqual(known["values"]["tokens"], 22)
+        self.assertEqual(known["values"]["tokenMix"]["cacheReadTokens"], 10)
+        self.assertNotEqual(legacy["id"], known["id"])
+
+    def test_cache_reset_missing_or_excess_delta_preserves_tokens_without_assumed_price(self):
+        for cached in [10, None, 1000]:
+            with self.subTest(cached=cached):
+                state = self.state()
+                self.cached_sample(state, 100, 20, 2, 50, self.now)
+                self.cached_sample(state, 110, 22, 3, cached, self.now + 180)
+                values = state["events"][0]["values"]
+                self.assertEqual(values["tokens"], 12)
+                self.assertNotIn("model", values)
+                self.assertNotIn("cacheReadTokens", values["tokenMix"])
+                self.cached_sample(state, 120, 24, 4, 15 if cached == 10 else 1005, self.now + 360)
+                collector.validate_state(state, self.config, self.now + 360)
+
+    def test_unknown_alias_is_unpriced_and_public_identity_changes_rebaseline(self):
+        state = self.state()
+        self.cached_sample(state, 100, 20, 2, 50, self.now, alias="different-alias")
+        self.cached_sample(state, 110, 22, 3, 55, self.now + 180, alias="different-alias")
+        self.assertNotIn("model", state["events"][0]["values"])
+        self.cached_sample(state, 120, 24, 4, 60, self.now + 360)
+        self.assertEqual(len(state["events"]), 1)
+        self.assertEqual(state["excludedRecords"], 1)
+        self.cached_sample(state, 130, 26, 5, 65, self.now + 540)
+        self.assertEqual(len(state["events"]), 2)
+
+    def test_cache_counter_duplicate_series_and_invalid_mapping_are_rejected(self):
+        cached = self.cached_metrics()
+        line = next(line for line in cached.splitlines() if "prompt_tokens_cached_total" in line)
+        with self.assertRaises(ValueError):
+            collector.parse_metrics(cached + line + "\n")
+        for alias, model in [("PRIVATE_MODEL", None), (None, "Qwen/Qwen3.8-Flash-Next"),
+                             ("PRIVATE_MODEL", "/private/model/path"),
+                             ("bad\nalias", "Qwen/Qwen3.8-Flash-Next")]:
+            with self.subTest(alias=alias, model=model), self.assertRaises(ValueError):
+                collector.parse_metrics(cached, alias, model)
+
     def test_resets_higher_restart_long_gap_midnight_and_clock_reversal_rebaseline(self):
         variants = [
             (10, 2, 1, self.now + 180, self.now - 1000),

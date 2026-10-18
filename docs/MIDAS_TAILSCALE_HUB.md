@@ -212,11 +212,13 @@ explicitly intended.
 ## Spark local runtime metrics
 
 `Scripts/usage-hub/local_metrics_collector.py` adds prospective vLLM token usage without reading
-requests, prompts, transcripts, model labels, or provider credentials. It reads only loopback
+requests, prompts, transcripts, arbitrary model labels, or provider credentials. It reads only loopback
 `/metrics`, requires `process_start_time_seconds`, and recognizes the verified numeric
 `vllm:prompt_tokens_total`, `vllm:generation_tokens_total`, and optional
-`vllm:request_success_total` counters. It publishes the separate `localInference` namespace with
-unknown prices. These tokens contribute to token totals; they do not add a fabricated dollar value.
+`vllm:request_success_total` counters. `vllm:prompt_tokens_cached_total` provides the optional cached
+subset of input. It publishes the separate `localInference` namespace as raw, unpriced numeric
+records. Midas applies a trusted reference price locally; the hub rejects uploaded dollar amounts
+for this namespace.
 
 Ship `local_metrics_collector.py` together with `midas_usage_hub.py`, which supplies shared wire
 validation. Both use Python 3.10+ and the standard library. Enroll a distinct device such as
@@ -227,7 +229,8 @@ its complete own snapshot. Keep both the unique connection and state directory p
 python3 Scripts/usage-hub/local_metrics_collector.py \
   --config "$HOME/.config/midas/spark-runtime-connection.json" \
   --state-dir "$HOME/.local/share/midas/local-runtime-usage" \
-  --metrics-url http://127.0.0.1:11434/metrics --interval 180 --once
+  --metrics-url http://127.0.0.1:11434/metrics --interval 180 \
+  --model-alias qwen3.8-flash-next --public-model Qwen/Qwen3.8-Flash-Next --once
 ```
 
 Remove `--once` for a continuous collector. Its numeric state and outbox are atomically flushed
@@ -246,6 +249,36 @@ not assign an outage's lifetime-counter difference to the latest day. This can o
 those gaps and the interval around midnight; the 30-day total remains the measured portion.
 Missing request counters stay unknown. Polling bounds timing precision to the sample interval.
 Exact historical attribution would require per-request numeric events from the runtime.
+
+### DGX Spark model and reference pricing
+
+Pass `--model-alias` and `--public-model` together only after verifying the running runtime's
+served alias and model files. With no mapping, records remain anonymous and unpriced. A changed
+mapping establishes a new baseline; it never renames or prices previously collected unknown
+records. Updating the collector preserves its existing state, event identities, and durable outbox.
+
+The supported mapping above identifies **NVIDIA Qwen3.8-Flash-Next NVFP4**, served locally as
+`qwen3.8-flash-next`, with public base model `Qwen/Qwen3.8-Flash-Next`. Midas compares it with
+[Lyceum's hosted Qwen3.8-Flash-Next](https://lyceum.technology/models/qwen/qwen3.8-flash-next/),
+checked October 17, 2026: USD **$0.20 / million uncached input tokens**, **$0.05 / million cached
+input tokens**, and **$0.50 / million output tokens**. The local NVFP4 variant can differ from
+the hosted implementation. The card names this comparison and links the source. Rates are a
+versioned reference, not a live quote, bill, hardware cost, or measured savings.
+
+Input already includes cached input. Total tokens are `input + output`; reference value is
+`((input - cachedInput) × 0.20 + cachedInput × 0.05 + output × 0.50) / 1,000,000`.
+The collector uses `prompt_tokens_cached_total`, not the prefix-cache hit counter. Midas values
+only known model rows with complete, consistent input/output/cache measurements. Missing,
+reset, or impossible cache deltas preserve token totals but leave the affected records unpriced.
+Mixing complete and incomplete records never fabricates complete price coverage.
+
+DGX Spark uses an NVIDIA logo and a dedicated local-inference design rather than subscription
+quota bars. Its card and detail always cover the last 30 UTC days; the combined estimate,
+menu-bar total, and history still follow the selected period. A nonzero value below one cent
+is displayed as **<$0.01**, with the precise estimate available in its detail. Legacy unclassified
+records remain in token totals and are explicitly excluded from the priced portion. Historical
+runtime lifetime counters cannot establish when usage occurred and are not backfilled as daily
+records. Until 30 days of measurements exist, the card represents measured coverage only.
 
 ## Verify completion
 

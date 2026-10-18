@@ -37,15 +37,10 @@ extension StatusItemController {
     {
         var result = presentation
         let period = MidasSpendPeriod(selection: self.settings.midasSpendPeriodSelection)
-        if result.provider == .localInference, let token {
-            let count = period.tokens(snapshot: token, timeZone: MidasSpendPeriod.utc)?.tokens
-            result.activitySummary = count.map { "\($0.formatted()) recorded tokens" }
-            result.spendUnavailableReason = "Local runtime tokens have no verified dollar estimate."
-        }
         guard let token, let original = result.spend, original.isDisplayable else {
             result.spend = nil
             if presentation.provider == .localInference {
-                result.spendUnavailableReason = "Local runtime tokens have no verified dollar estimate."
+                result.spendUnavailableReason = "No verified API-equivalent value for this period"
             } else if self.store.usesSyncedUsage(for: presentation.provider) {
                 result.spendUnavailableReason = "Shared history pending"
             } else if presentation.provider == .codex, self.settings.midasCloudUsageEnabled {
@@ -80,8 +75,12 @@ extension StatusItemController {
         }
         let coverage = "Recorded history only; complete account and date coverage is not established."
         result.spend = MidasSpendPresentation(
-            title: original.isBilled ? "Billed API spend" : "Estimated inference spend",
-            value: amount.formatted(.currency(code: original.currency)),
+            title: result.provider == .localInference ? "API-equivalent value" :
+                (original.isBilled ? "Billed API spend" : "Estimated inference spend"),
+            value: result.provider == .localInference ? MidasCostPresentation.money(
+                amount,
+                currency: original.currency) :
+                amount.formatted(.currency(code: original.currency)),
             period: period.label(reportingTimeZone: timeZone),
             detail: original.detail + "\n\(scope). \(calendarNote) \(coverage)",
             updatedAt: original.updatedAt,

@@ -39,7 +39,7 @@ MAX_DEVICES = 128
 OPAQUE_ID = re.compile(r"[0-9a-f]{64}\Z")
 PUBLIC_MODEL = re.compile(
     r"(?:gpt-[0-9][a-z0-9.\-]*|o[1-9][a-z0-9.\-]*|claude-[a-z0-9.\-]+|"
-    r"muse-spark-[0-9.]+(?:-contributor)?)\Z"
+    r"muse-spark-[0-9.]+(?:-contributor)?|Qwen/Qwen3\.8-Flash-Next)\Z"
 )
 PROVENANCES = {"listPriceEstimate", "vendorMetered", "mixed", "vendorBilled", "unknown"}
 

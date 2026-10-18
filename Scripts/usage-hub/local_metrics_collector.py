@@ -3,7 +3,8 @@
 
 The first sample is a baseline, not historical usage. Counter resets and missed
 intervals remain partial coverage. Timing is sampled, within the polling interval.
-Local runtime tokens have no assumed dollar price and are never cloud quota.
+Local runtime records remain unpriced and are never cloud quota. An explicitly
+verified public model mapping and cached-input deltas support display-time valuation.
 """
 
 import argparse
@@ -29,7 +30,7 @@ import midas_usage_hub as schema
 REFERENCE_EPOCH = 978307200
 MAX_BYTES = 32 * 1024 * 1024
 MAX_COUNTER = 1_000_000_000_000
-METRIC = re.compile(r'^(vllm:(?:prompt_tokens|generation_tokens|request_success)_total)(\{[^\n]*\})?\s+([^\s]+)(?:\s+\d+)?$')
+METRIC = re.compile(r'^(vllm:(?:prompt_tokens|prompt_tokens_cached|generation_tokens|request_success)_total)(\{[^\n]*\})?\s+([^\s]+)(?:\s+\d+)?$')
 LABEL = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"')
 
 
@@ -91,7 +92,19 @@ def ensure_directory(directory):
         raise ValueError("private directory must be owner-only")
 
 
-def parse_metrics(text):
+def validate_model_mapping(model_alias=None, public_model=None):
+    if model_alias is None and public_model is None:
+        return
+    if not model_alias or not public_model:
+        raise ValueError("model alias and public model must be configured together")
+    if len(model_alias.encode()) > 160 or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in model_alias):
+        raise ValueError("invalid runtime model alias")
+    if len(public_model.encode()) > 160 or schema.PUBLIC_MODEL.fullmatch(public_model) is None:
+        raise ValueError("invalid public model identity")
+
+
+def parse_metrics(text, model_alias=None, public_model=None):
+    validate_model_mapping(model_alias, public_model)
     groups = {}
     seen = set()
     process_start = None
@@ -131,6 +144,9 @@ def parse_metrics(text):
         labels.pop("finished_reason", None)
         identity = hashlib.sha256(json.dumps(labels, sort_keys=True).encode()).hexdigest()
         row = groups.setdefault(identity, {})
+        # Never publish arbitrary runtime labels or filesystem model paths.
+        if model_alias is not None and labels.get("model_name") == model_alias:
+            row["public_model"] = public_model
         name = metric.removeprefix("vllm:").removesuffix("_total")
         if name == "request_success":
             row[name] = row.get(name, 0) + int(value)
@@ -168,17 +184,32 @@ def sample(state, workspace, config, counters, now, maximum_gap=360):
     same_process = state.get("processStartTime") == process_start
     for source, row in sorted(counters.items()):
         old = previous.get(source)
-        reset = old is not None and any(row[k] < old.get(k, 0) for k in ["prompt_tokens", "generation_tokens"])
+        reset = old is not None and (
+            any(row[k] < old.get(k, 0) for k in ["prompt_tokens", "generation_tokens"])
+            or row.get("public_model") != old.get("public_model"))
         if old is not None and (reset or not continuous or not same_day or not same_process):
             excluded += 1
         if old is not None and not reset and continuous and same_day and same_process:
             prompt = row["prompt_tokens"] - old["prompt_tokens"]
             output = row["generation_tokens"] - old["generation_tokens"]
+            cached = None
+            if "prompt_tokens_cached" in row and "prompt_tokens_cached" in old:
+                cache_delta = row["prompt_tokens_cached"] - old["prompt_tokens_cached"]
+                if 0 <= cache_delta <= prompt:
+                    cached = cache_delta
+                else:
+                    # Preserve the valid token delta but do not guess its API-equivalent value.
+                    excluded += 1
+            public_model = row.get("public_model") if cached is not None else None
             requests = None
             if "request_success" in row and "request_success" in old and row["request_success"] >= old["request_success"]:
                 requests = row["request_success"] - old["request_success"]
             if prompt or output or requests:
-                identity = json.dumps([workspace["identitySalt"], "localInference", config["deviceID"], source, day], separators=(",", ":"))
+                components = [workspace["identitySalt"], "localInference", config["deviceID"], source, day]
+                # A new cache-aware record never reclassifies legacy unpriced history.
+                if public_model is not None:
+                    components += [public_model, "cached-input-v1"]
+                identity = json.dumps(components, separators=(",", ":"))
                 event_id = hashlib.sha256(identity.encode()).hexdigest()
                 existing = events.get(event_id, {}).get("values", {})
                 old_mix = existing.get("tokenMix", {})
@@ -189,6 +220,9 @@ def sample(state, workspace, config, counters, now, maximum_gap=360):
                           "tokenMix": {"inputTokens": input_total, "outputTokens": output_total},
                           "provenance": "unknown", "unpricedRequests": max(1, request_total or 0),
                           "estimatedRequests": 0}
+                if public_model is not None:
+                    values["model"] = public_model
+                    values["tokenMix"]["cacheReadTokens"] = old_mix.get("cacheReadTokens", 0) + cached
                 if request_total is not None:
                     values["requests"] = request_total
                 if any(values.get(k, 0) > MAX_COUNTER for k in ["tokens", "requests", "unpricedRequests"]):
@@ -270,9 +304,14 @@ def validate_state(state, config, now):
     for source, row in counters.items():
         if not re.fullmatch(r"[0-9a-f]{64}", source) or type(row) is not dict:
             raise ValueError("invalid numeric source identity")
-        if not {"prompt_tokens", "generation_tokens"} <= row.keys() <= {"prompt_tokens", "generation_tokens", "request_success"}:
+        if not {"prompt_tokens", "generation_tokens"} <= row.keys() <= {
+                "prompt_tokens", "generation_tokens", "prompt_tokens_cached", "request_success", "public_model"}:
             raise ValueError("invalid numeric source counters")
-        for value in row.values():
+        if "public_model" in row:
+            validate_model_mapping("verified-runtime-alias", row["public_model"])
+        for key, value in row.items():
+            if key == "public_model":
+                continue
             if type(value) is not int or not 0 <= value <= MAX_COUNTER:
                 raise ValueError("invalid numeric source counter")
     if "lastSampleAt" in state and (type(state["lastSampleAt"]) not in (float, int)
@@ -280,9 +319,10 @@ def validate_state(state, config, now):
         raise ValueError("invalid numeric sample clock")
 
 
-def collect_once(config, state_path, metrics_url, interval=180):
+def collect_once(config, state_path, metrics_url, interval=180, model_alias=None, public_model=None):
     validate_config(config)
     validate_endpoint(metrics_url, metrics=True)
+    validate_model_mapping(model_alias, public_model)
     state = read_private(state_path) if state_path.exists() else None
     workspace = request_json(config, "/v1/workspace") if state is None else state["workspace"]
     if config.get("workspaceID") and workspace["id"].lower() != config["workspaceID"].lower():
@@ -306,7 +346,8 @@ def collect_once(config, state_path, metrics_url, interval=180):
         if len(raw) > 1024 * 1024:
             raise ValueError("runtime metrics exceed their safety limit")
         candidate = copy.deepcopy(state)
-        sample(candidate, workspace, config, parse_metrics(raw.decode()), time.time(), maximum_gap=2 * interval)
+        sample(candidate, workspace, config, parse_metrics(raw.decode(), model_alias, public_model),
+               time.time(), maximum_gap=2 * interval)
         save_private(state_path, candidate)  # durable outbox before upload or counter advancement
         state = candidate
         sampled = True
@@ -332,11 +373,14 @@ def main():
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--metrics-url", default="http://127.0.0.1:11434/metrics")
     parser.add_argument("--interval", type=int, default=180)
+    parser.add_argument("--model-alias", help="Verified served model_name label; never sent to the hub")
+    parser.add_argument("--public-model", help="Verified canonical public model ID for that alias")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     config = read_private(args.config)
     validate_config(config)
     validate_endpoint(args.metrics_url, metrics=True)
+    validate_model_mapping(args.model_alias, args.public_model)
     if not 30 <= args.interval <= 86400:
         parser.error("interval must be between 30 and 86400 seconds")
     directory = Path(args.state_dir).absolute()
@@ -350,7 +394,8 @@ def main():
         while True:
             try:
                 config = read_private(args.config)
-                result = collect_once(config, directory / "numeric-state.json", args.metrics_url, interval=args.interval)
+                result = collect_once(config, directory / "numeric-state.json", args.metrics_url, interval=args.interval,
+                                      model_alias=args.model_alias, public_model=args.public_model)
                 print(json.dumps(result, separators=(",", ":")), flush=True)
                 if args.once and not result["sampleSucceeded"]:
                     return 2

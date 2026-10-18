@@ -455,6 +455,54 @@ struct MidasUsageSyncLedgerTests {
         #expect(snapshot.last30DaysTokens == 40)
     }
 
+    @Test func otherDevicePublicationsDoNotMakeAnOfflineProviderAppearFresh() throws {
+        let old = self.now.addingTimeInterval(-3600)
+        let spark = self.publication(at: old, events: [self.event(
+            "spark", provider: .localInference, at: old, values: .init(tokens: 8, costUSD: nil, unpricedRequests: 1))])
+        let mac = self.publication(device: self.second, events: [self.event("mac")])
+        let stale = try self.ledger([spark, mac])
+        #expect(stale.snapshots[.localInference]?.updatedAt == old)
+        #expect(stale.snapshots[.codex]?.updatedAt == self.now)
+        let refreshedSpark = self.publication(events: spark.events)
+        #expect(try self.ledger([refreshedSpark, mac]).snapshots[.localInference]?.updatedAt == self.now)
+    }
+
+    @Test func localModelCacheMixMustBeCompleteAcrossEveryRecord() throws {
+        let complete = self.event("cache-known", provider: .localInference, values: .init(
+            tokens: 100,
+            costUSD: nil,
+            tokenMix: .init(inputTokens: 80, outputTokens: 20, cacheReadTokens: 40),
+            model: DGXSparkPricing.modelID,
+            unpricedRequests: 1))
+        let incomplete = self.event("cache-unknown", provider: .localInference, values: .init(
+            tokens: 100,
+            costUSD: nil,
+            tokenMix: .init(inputTokens: 80, outputTokens: 20),
+            model: DGXSparkPricing.modelID,
+            unpricedRequests: 1))
+        let raw = try #require(self.ledger([self.publication(events: [complete, incomplete])])
+            .snapshots[.localInference])
+        #expect(raw.daily.first?.modelBreakdowns?.first?.cacheReadTokens == nil)
+        #expect(raw.daily.first?.cacheReadTokens == nil)
+        #expect(raw.last30DaysTokens == 200)
+        #expect(DGXSparkPricing.project(snapshot: raw, now: self.now).last30DaysCostUSD == nil)
+        let knownOnly = try #require(self.ledger([self.publication(events: [complete])])
+            .snapshots[.localInference])
+        #expect(knownOnly.daily.first?.modelBreakdowns?.first?.cacheReadTokens == 40)
+        #expect(DGXSparkPricing.project(snapshot: knownOnly, now: self.now).last30DaysCostUSD != nil)
+        let invalidCache = self.event("cache-invalid", provider: .localInference, values: .init(
+            tokens: 100,
+            costUSD: nil,
+            tokenMix: .init(inputTokens: 80, outputTokens: 20, cacheReadTokens: 81),
+            model: DGXSparkPricing.modelID,
+            unpricedRequests: 1))
+        let invalid = try #require(self.ledger([self.publication(events: [complete, invalidCache])])
+            .snapshots[.localInference])
+        #expect(invalid.daily.first?.modelBreakdowns?.first?.cacheReadTokens == nil)
+        #expect(invalid.daily.first?.cacheReadTokens == nil)
+        #expect(DGXSparkPricing.project(snapshot: invalid, now: self.now).last30DaysCostUSD == nil)
+    }
+
     private func ledger(_ publications: [MidasUsageSyncPublication], now: Date? = nil) throws -> MidasUsageSyncLedger {
         try MidasUsageSyncLedger(publications: publications, workspaceID: self.workspace.id, now: now ?? self.now)
     }

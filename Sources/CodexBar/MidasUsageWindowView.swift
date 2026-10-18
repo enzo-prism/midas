@@ -167,7 +167,20 @@ struct MidasUsageWindowView: View {
         }
     }
 
+    @ViewBuilder
     private func overviewCard(_ item: MidasProviderPresentation) -> some View {
+        if let spark = item.dgxSpark {
+            Button { self.navigation.provider = item.provider } label: {
+                MidasDGXSparkCard(model: spark, isRefreshing: item.isRefreshing, showsNavigation: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Show DGX Spark token breakdown and API pricing basis")
+        } else {
+            self.cloudOverviewCard(item)
+        }
+    }
+
+    private func cloudOverviewCard(_ item: MidasProviderPresentation) -> some View {
         Button {
             self.navigation.provider = item.provider
         } label: {
@@ -208,7 +221,8 @@ struct MidasUsageWindowView: View {
     private func providerContent(_ provider: UsageProvider) -> some View {
         VStack(alignment: .leading, spacing: 28) {
             HStack {
-                Text(self.showsCosts ? self.presentation(provider).name : "Spend & usage")
+                Text(provider == .localInference ? "DGX Spark" :
+                    (self.showsCosts ? self.presentation(provider).name : "Spend & usage"))
                     .font(.system(size: 28, weight: .semibold))
                 Spacer()
                 Picker("View", selection: self.$showsCosts) {
@@ -218,7 +232,7 @@ struct MidasUsageWindowView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 170)
             }
-            if !self.showsCosts {
+            if provider == .localInference || !self.showsCosts {
                 MidasProviderDetailView(
                     presentation: self.presentation(provider), actions: self.actions, showsOpenUsage: false)
                 Divider()

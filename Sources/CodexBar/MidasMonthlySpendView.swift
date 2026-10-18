@@ -232,7 +232,7 @@ struct MidasMonthlySpendView: View {
 
     private func formatted(_ value: Double?) -> String {
         guard let value else { return "Unavailable" }
-        return self.showsCosts ? value.formatted(.currency(code: self.model.currency))
+        return self.showsCosts ? MidasCostPresentation.money(value, currency: self.model.currency)
             : value.formatted(.number.precision(.fractionLength(0)))
     }
 

@@ -112,14 +112,11 @@ struct MidasMenuBarPresentation: Equatable {
                     : prefix + Self.compactMoney(total.totals[0].amount, currency: total.totals[0].currency)
             }
         case .focus:
-            let item = displayed.first
-            let quota = item.flatMap(Self.quota)
-            let remaining = quota.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—"
-            self.title = "\(Self.initial(focusProvider)) \(remaining)"
+            let reading = displayed.first.map(Self.reading) ?? "—"
+            self.title = "\(Self.initial(focusProvider)) \(reading)"
         case .constellation:
             self.title = displayed.isEmpty ? "—" : displayed.map { item in
-                let quota = Self.quota(item).map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—"
-                return "\(Self.initial(item.provider)) \(quota)"
+                "\(Self.initial(item.provider)) \(Self.reading(item))"
             }.joined(separator: "  ")
         case .legacy:
             self.title = ""
@@ -163,6 +160,13 @@ struct MidasMenuBarPresentation: Equatable {
         return quota
     }
 
+    private static func reading(_ item: MidasProviderPresentation) -> String {
+        if let spark = item.dgxSpark {
+            return spark.tokens.map(UsageFormatter.tokenCountString) ?? "—"
+        }
+        return Self.quota(item).map { "\(Int($0.remainingPercent.rounded()))%" } ?? "—"
+    }
+
     private static func quota(_ item: MidasProviderPresentation) -> MidasQuotaMetric? {
         if item.provider == .claude {
             // The outer ring represents the all-models weekly allowance, never session or model quotas.
@@ -188,6 +192,12 @@ struct MidasMenuBarPresentation: Equatable {
         now: Date,
         weeklyOnly: Bool) -> String
     {
+        if let spark = item.dgxSpark {
+            var text = "DGX Spark: \(spark.tokenText) recorded tokens, last 30 days (UTC)"
+            if !hideSpend { text += "; API-equivalent value: \(spark.preciseValueText ?? "unavailable") USD" }
+            text += "; \(spark.coverageText); \(spark.freshnessText)"
+            return text
+        }
         var text = item.name + ": "
         if let quota = weeklyOnly ? Self.orbitQuota(item) : Self.quota(item) {
             text += "\(quota.remainingPercent.formatted()) percent remaining, \(quota.title)"

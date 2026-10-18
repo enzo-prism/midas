@@ -23,7 +23,7 @@ extension StatusItemController {
             isStale: self.store.isStale(provider: provider)
                 || (self.settings.midasMenuBarMode != .orbit && self.store.tokenErrors[provider] != nil))
         let usesSyncedUsage = self.store.usesSyncedUsage(for: provider)
-        if usesSyncedUsage {
+        if usesSyncedUsage, provider != .localInference {
             result.spend?.detail = provider == .cursor
                 ? "Shared Cursor history, counted once per account and UTC day. An API-rate estimate, not a bill."
                 : "Combined recorded session history across Macs, counted once. An API-rate estimate, not a bill."

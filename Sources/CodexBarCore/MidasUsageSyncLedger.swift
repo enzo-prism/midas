@@ -99,10 +99,17 @@ public struct MidasUsageSyncLedger: Sendable {
             guard let row = accounts[key] else { continue }
             values[row.provider, default: [:]][row.day, default: []].append(row.values)
         }
-        let updatedAt = self.publications.map(\.publishedAt).max() ?? now
-        self.snapshots = values.mapValues { days in
-            Self.snapshot(days: days, updatedAt: updatedAt, now: now)
+        var providerUpdatedAt: [UsageProvider: Date] = [:]
+        for publication in self.publications {
+            let providers = Set(publication.events.map(\.provider) + publication.accountDays.map(\.provider))
+            for provider in providers {
+                providerUpdatedAt[provider] = max(providerUpdatedAt[provider] ?? .distantPast, publication.publishedAt)
+            }
         }
+        self.snapshots = Dictionary(uniqueKeysWithValues: values.map { provider, days in
+            (provider, Self.snapshot(
+                provider: provider, days: days, updatedAt: providerUpdatedAt[provider] ?? now, now: now))
+        })
     }
 
     /// Merge complete records, never independently maximize monetary and token fields.
@@ -132,7 +139,8 @@ public struct MidasUsageSyncLedger: Sendable {
     }
 
     private static func snapshot(
-        days: [String: [MidasUsageSyncValues]], updatedAt: Date, now: Date) -> CostUsageTokenSnapshot
+        provider: UsageProvider, days: [String: [MidasUsageSyncValues]], updatedAt: Date, now: Date)
+        -> CostUsageTokenSnapshot
     {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -140,7 +148,7 @@ public struct MidasUsageSyncLedger: Sendable {
         let start = calendar.date(byAdding: .day, value: -364, to: now) ?? now
         let firstDay = MidasUsageSyncPublication.day(start)
         let keys = days.keys.filter { $0 >= firstDay && $0 <= today }.sorted()
-        let daily = keys.map { self.entry(day: $0, values: days[$0] ?? []) }
+        let daily = keys.map { self.entry(provider: provider, day: $0, values: days[$0] ?? []) }
         let todayRows = daily.filter { $0.date == today }
         let provenance = self.provenance(keys.flatMap { days[$0] ?? [] }.map(\.provenance))
         let totalCost = self.sumDoubles(daily.map(\.costUSD))
@@ -160,12 +168,21 @@ public struct MidasUsageSyncLedger: Sendable {
             updatedAt: updatedAt)
     }
 
-    private static func entry(day: String, values: [MidasUsageSyncValues]) -> CostUsageDailyReport.Entry {
+    private static func entry(
+        provider: UsageProvider, day: String, values: [MidasUsageSyncValues]) -> CostUsageDailyReport.Entry
+    {
         let models = Dictionary(grouping: values.compactMap { value -> (String, MidasUsageSyncValues)? in
             value.model.map { ($0, value) }
         }, by: { $0.0 })
         let breakdowns = models.keys.sorted().map { model in
             let rows = (models[model] ?? []).map(\.1)
+            let completeLocalMix = provider != .localInference || rows.allSatisfy { value in
+                guard let input = value.tokenMix.inputTokens, let output = value.tokenMix.outputTokens,
+                      let cached = value.tokenMix.cacheReadTokens, let total = value.tokens,
+                      cached <= input else { return false }
+                let sum = input.addingReportingOverflow(output)
+                return !sum.overflow && sum.partialValue == total
+            }
             return CostUsageDailyReport.ModelBreakdown(
                 modelName: model,
                 costUSD: self.sumDoubles(rows.map(\.costUSD)),
@@ -173,15 +190,22 @@ public struct MidasUsageSyncLedger: Sendable {
                 requestCount: self.sumIntegers(rows.map(\.requests)),
                 inputTokens: self.sumIntegers(rows.map(\.tokenMix.inputTokens)),
                 outputTokens: self.sumIntegers(rows.map(\.tokenMix.outputTokens)),
-                cacheReadTokens: self.sumIntegers(rows.map(\.tokenMix.cacheReadTokens)),
+                // A cached-input subtotal cannot establish the missing mix of another local model record.
+                cacheReadTokens: completeLocalMix ? self.sumIntegers(rows.map(\.tokenMix.cacheReadTokens)) : nil,
                 cacheCreationTokens: self.sumIntegers(rows.map(\.tokenMix.cacheCreationTokens)),
                 reasoningTokens: self.sumIntegers(rows.map(\.tokenMix.reasoningTokens)))
+        }
+        let completeLocalCache = provider != .localInference || values.allSatisfy { value in
+            guard let input = value.tokenMix.inputTokens, let cached = value.tokenMix.cacheReadTokens else {
+                return false
+            }
+            return cached <= input
         }
         return CostUsageDailyReport.Entry(
             date: day,
             inputTokens: self.sumIntegers(values.map(\.tokenMix.inputTokens)),
             outputTokens: self.sumIntegers(values.map(\.tokenMix.outputTokens)),
-            cacheReadTokens: self.sumIntegers(values.map(\.tokenMix.cacheReadTokens)),
+            cacheReadTokens: completeLocalCache ? self.sumIntegers(values.map(\.tokenMix.cacheReadTokens)) : nil,
             cacheCreationTokens: self.sumIntegers(values.map(\.tokenMix.cacheCreationTokens)),
             reasoningTokens: self.sumIntegers(values.map(\.tokenMix.reasoningTokens)),
             totalTokens: self.sumIntegers(values.map(\.tokens)),

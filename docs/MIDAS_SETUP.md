@@ -71,12 +71,24 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
 - **Meta:** Midas reads Muse Code terminal logs. They describe this Mac unless usage Sync is enabled.
   Meta AI / the Muse consumer app currently has no verified numeric usage source; its usage stays
   unavailable. Midas does not invent a remaining quota when the provider does not report one.
+- **DGX Spark:** connect the private usage hub and install its prospective vLLM collector. The
+  NVIDIA-branded card always shows recorded tokens for the last 30 UTC days. Its cloud API
+  equivalent uses the verified model's published hosted rates, including cached input as a subset
+  of input. It is an estimate, not a bill, electricity cost, or measured savings. Unknown models
+  and incomplete measurements remain unpriced; collector gaps are disclosed. The combined total
+  still follows your chosen spend period. See [Spark runtime setup](MIDAS_TAILSCALE_HUB.md#spark-local-runtime-metrics).
 
 The period selector offers calendar periods and a rolling 30-day view. The total includes only
 available estimates for the selected period. Missing data is excluded and disclosed as partial;
 it is never treated as zero. Different currencies are not silently converted.
 
 ## Combine usage across Macs
+
+For Macs and Linux machines connected through Tailscale, select **Tailscale hub** in
+**Settings → Sync** and use the enrolled device's private connection file. This transport does
+not depend on iCloud identity. Each device keeps its own revocable usage credential; prompts
+and provider sign-in credentials stay local. See [private hub setup](MIDAS_TAILSCALE_HUB.md).
+For shared-folder sync, use these steps:
 
 1. Create a private folder such as **iCloud Drive/Midas Usage**. On Macs signed into the same Apple
    Account, iCloud Drive can deliver that folder to both Macs.

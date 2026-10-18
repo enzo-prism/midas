@@ -108,7 +108,20 @@ struct MidasPanelView: View {
         }
     }
 
+    @ViewBuilder
     private func providerRow(_ item: MidasProviderPresentation) -> some View {
+        if let spark = item.dgxSpark {
+            Button { self.navigation.provider = item.provider } label: {
+                MidasDGXSparkCard(model: spark, isRefreshing: item.isRefreshing, showsNavigation: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Show DGX Spark token breakdown and API pricing basis")
+        } else {
+            self.cloudProviderRow(item)
+        }
+    }
+
+    private func cloudProviderRow(_ item: MidasProviderPresentation) -> some View {
         Button { self.navigation.provider = item.provider } label: {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
@@ -152,7 +165,11 @@ struct MidasOverviewMetrics: View {
     var body: some View {
         let metrics = MidasAccountQuotaLayout.overviewMetrics(self.item)
         VStack(alignment: .leading, spacing: 10) {
-            if self.accounts.count > 1 {
+            if let spark = self.item.dgxSpark {
+                Text("\(spark.tokenText) recorded tokens · Last 30 days")
+                    .font(.callout).monospacedDigit()
+                Text(spark.coverageText).font(.caption).foregroundStyle(MidasTheme.secondaryText)
+            } else if self.accounts.count > 1 {
                 MidasAccountOverviewBars(accounts: self.accounts)
             } else if !self.item.activityMetrics.isEmpty {
                 ForEach(self.item.activityMetrics) { metric in
@@ -175,7 +192,7 @@ struct MidasOverviewMetrics: View {
                     .font(.caption)
                     .foregroundStyle(self.item.error != nil ? MidasTheme.warning : MidasTheme.secondaryText)
             }
-            if self.accounts.count <= 1 {
+            if self.item.dgxSpark == nil, self.accounts.count <= 1 {
                 MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.item)
             }
         }

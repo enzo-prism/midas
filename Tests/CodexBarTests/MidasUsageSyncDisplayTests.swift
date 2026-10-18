@@ -36,6 +36,46 @@ struct MidasUsageSyncDisplayTests {
         #expect(store.displayTokenSnapshot(for: .codex) == nil)
     }
 
+    @Test func sharedSparkMeasurementsReceiveTrustedDisplayValueWithoutMutatingLedger() throws {
+        let fixture = Fixture()
+        defer { fixture.cleanup() }
+        let store = fixture.store
+        let raw = CostUsageTokenSnapshot(
+            sessionTokens: 100,
+            sessionCostUSD: nil,
+            last30DaysTokens: 100,
+            last30DaysCostUSD: nil,
+            daily: [CostUsageDailyReport.Entry(
+                date: "2026-10-15",
+                inputTokens: 80,
+                outputTokens: 20,
+                cacheReadTokens: 40,
+                totalTokens: 100,
+                requestCount: 1,
+                costUSD: nil,
+                modelsUsed: [DGXSparkPricing.modelID],
+                modelBreakdowns: [CostUsageDailyReport.ModelBreakdown(
+                    modelName: DGXSparkPricing.modelID,
+                    costUSD: nil,
+                    totalTokens: 100,
+                    requestCount: 1,
+                    inputTokens: 80,
+                    outputTokens: 20,
+                    cacheReadTokens: 40)],
+                unpricedRequestCount: 1)],
+            updatedAt: Date())
+        store.midasUsageSync.snapshots[.localInference] = raw
+        store.midasUsageSync.folderURL = URL(fileURLWithPath: "/synthetic-shared-folder")
+        store.midasUsageSync.isEnabled = true
+        let display = try #require(store.displayTokenSnapshot(for: .localInference))
+        #expect(display.last30DaysCostUSD == 0.00002)
+        #expect(display.last30DaysAPIEquivalentCostUSD == nil)
+        #expect(display.daily.first?.apiEquivalentCostUSD == nil)
+        #expect(display.costProvenance == .listPriceEstimate)
+        #expect(store.midasUsageSync.snapshots[.localInference] == raw)
+        #expect(store.displayTokenSnapshot(for: .localInference) == display)
+    }
+
     @Test func cursorHistoryRequiresVerifiedOwnerAndSharesOpaqueAccount() throws {
         let fixture = Fixture()
         defer { fixture.cleanup() }

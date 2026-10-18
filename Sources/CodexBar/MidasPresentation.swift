@@ -170,8 +170,12 @@ struct MidasSpendPresentation {
         var detail: String
         switch provenance {
         case .listPriceEstimate:
-            title = "Token spend (API rates)"
+            title = provider == .localInference ? "API-equivalent value" : "Token spend (API rates)"
             detail = switch provider {
+            case .localInference:
+                "Recorded DGX Spark inference at \(DGXSparkPricing.hostedProviderName) API rates "
+                    + "for the verified model. "
+                    + "A hosted-value comparison, not a bill or hardware operating cost."
             case .meta:
                 "Model-tier price estimate from local Muse activity; not a bill."
             case .claude:
@@ -212,7 +216,8 @@ struct MidasSpendPresentation {
             ? "Last \(snapshot.historyDays) days" : "Reported period")
         return Self(
             title: title,
-            value: amount.formatted(.currency(code: snapshot.currencyCode)),
+            value: provider == .localInference ? MidasCostPresentation.money(amount, currency: snapshot.currencyCode) :
+                amount.formatted(.currency(code: snapshot.currencyCode)),
             period: period,
             detail: detail,
             updatedAt: snapshot.updatedAt,
@@ -253,6 +258,8 @@ struct MidasProviderPresentation {
     var cloudUsage: MidasCloudUsagePresentation?
     var spend: MidasSpendPresentation?
     var spendUnavailableReason: String?
+    /// Fixed rolling-window local inference; cloud spend may follow a different selected period.
+    var dgxSpark: MidasDGXSparkPresentation?
     let isRefreshing: Bool
     let isStale: Bool
     let updatedAt: Date?
@@ -278,6 +285,9 @@ struct MidasProviderPresentation {
         isRefreshing: Bool,
         isStale: Bool) -> Self
     {
+        if provider == .localInference {
+            return self.localInference(tokenSnapshot: tokenSnapshot, isRefreshing: isRefreshing)
+        }
         // Meta's card rows are recorded activity, not quota; they surface as activityMetrics below.
         var quotaMetrics = card?.metrics
             .filter { provider != .cursor || $0.id != "cursor-models" }
@@ -399,6 +409,34 @@ struct MidasProviderPresentation {
             result.activityMetrics = Self.metaActivityMetrics(snapshot: snapshot, tokenSnapshot: tokenSnapshot)
         }
         return result
+    }
+
+    private static func localInference(
+        tokenSnapshot: CostUsageTokenSnapshot?,
+        isRefreshing: Bool) -> Self
+    {
+        let spark = MidasDGXSparkPresentation.make(snapshot: tokenSnapshot)
+        return Self(
+            provider: .localInference,
+            name: "DGX Spark",
+            account: "",
+            plan: nil,
+            hero: nil,
+            metrics: [],
+            resetCreditsText: nil,
+            resetCreditsHelp: nil,
+            freshness: spark.freshnessText,
+            error: nil,
+            placeholder: "Waiting for Spark’s first sync",
+            notes: [],
+            financialSummary: nil,
+            financialLabel: nil,
+            activitySummary: spark.tokens.map { "\($0.formatted()) recorded tokens · Last 30 days" },
+            spend: MidasSpendPresentation.make(provider: .localInference, snapshot: tokenSnapshot),
+            dgxSpark: spark,
+            isRefreshing: isRefreshing,
+            isStale: spark.isStale,
+            updatedAt: tokenSnapshot?.updatedAt)
     }
 
     /// Meta bars come from the recorded-activity snapshot when present, else from the

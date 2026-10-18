@@ -1,10 +1,15 @@
 # Changelog
 
-## Unreleased
+## Midas 0.47.0 — October 17, 2026
 
 - Add private Tailscale hub sync with per-device revocable credentials, offline retry, and shared history independent of iCloud.
 - Show recorded token totals alongside estimated AI token value; use the same shared source set on both Macs and default new setups to the last 30 days.
-- Add a cross-platform coding-log collector and a separate, unpriced local vLLM runtime collector with explicit coverage gaps.
+- Give DGX Spark its own NVIDIA-branded local inference card: recorded tokens over the last 30 UTC days, separate input/output/cache measurements, model details, and a clearly labeled hosted API-equivalent estimate.
+- Price verified Qwen3.8-Flash-Next measurements against Lyceum's published input, cached-input, and output rates. Cached input counts once; unknown models and incomplete measurements remain unpriced. This is a reference estimate, not a charge or measured savings.
+- Add cross-platform coding-log and prospective vLLM collectors with explicit coverage gaps, restart handling, and durable retry.
+- Show each connected OpenAI account's verified quota and cloud history independently, while keeping account-wide cloud history separate from deduplicated recorded totals.
+
+Build 124. See GitHub Releases for signed binary availability.
 
 ## Midas 0.46.2 — October 15, 2026
 

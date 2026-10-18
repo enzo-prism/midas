@@ -43,6 +43,20 @@ import Testing
         }
     }
 
+    @Test func dailyAndMonthlyMoneyKeepTinyValuesDistinctFromZero() {
+        let model = MidasCostPresentation(snapshot: nil, period: .all)
+        let penny = 0.01.formatted(.currency(code: "USD"))
+        #expect(model.money(0.0000019) == "<" + penny)
+        #expect(MidasCostPresentation.money(0.0000019, currency: "USD") == "<" + penny)
+        #expect(MidasCostPresentation.money(-0.0000019, currency: "USD") == "−<" + penny)
+        #expect(model.money(0) == 0.0.formatted(.currency(code: "USD")))
+        #expect(model.money(1.23) == 1.23.formatted(.currency(code: "USD")))
+        #expect(model.money(nil) == "Unavailable")
+        #expect(model.money(.nan) == "Unavailable")
+        #expect(MidasCostPresentation.money(0.0000019, currency: "EUR") ==
+            "<" + 0.01.formatted(.currency(code: "EUR")))
+    }
+
     @Test func currencyIsPreserved() {
         let model = MidasCostPresentation(
             snapshot: self.snapshot(currency: "EUR"),

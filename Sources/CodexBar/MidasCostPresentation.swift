@@ -141,8 +141,17 @@ struct MidasCostPresentation {
     }
 
     func money(_ amount: Double?) -> String {
-        guard let amount else { return "Unavailable" }
-        return amount.formatted(.currency(code: self.currency))
+        Self.money(amount, currency: self.currency)
+    }
+
+    /// Preserve normal cents while keeping a recorded sub-cent value distinct from zero.
+    static func money(_ amount: Double?, currency: String) -> String {
+        guard let amount, amount.isFinite else { return "Unavailable" }
+        if amount != 0, abs(amount) < 0.01 {
+            let sign = amount < 0 ? "−" : ""
+            return sign + "<" + 0.01.formatted(.currency(code: currency))
+        }
+        return amount.formatted(.currency(code: currency))
     }
 
     private static func valid(_ value: Double?) -> Double? {

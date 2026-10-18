@@ -11,6 +11,17 @@ struct MidasProviderDetailView: View {
     }
 
     var body: some View {
+        if let spark = self.presentation.dgxSpark {
+            MidasDGXSparkDetailView(
+                model: spark,
+                actions: self.actions,
+                isRefreshing: self.presentation.isRefreshing)
+        } else {
+            self.cloudProviderDetail
+        }
+    }
+
+    private var cloudProviderDetail: some View {
         VStack(alignment: .leading, spacing: 24) {
             self.identity
             self.spendHeadline

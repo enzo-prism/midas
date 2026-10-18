@@ -52,7 +52,10 @@ extension UsageStore {
 
     /// All spend surfaces use one scope. Never combine Codex cloud totals with local session events.
     func displayTokenSnapshot(for provider: UsageProvider) -> CostUsageTokenSnapshot? {
-        if self.usesSyncedUsage(for: provider) { return self.midasUsageSync.snapshots[provider] }
+        if self.usesSyncedUsage(for: provider) {
+            let snapshot = self.midasUsageSync.snapshots[provider]
+            return provider == .localInference ? snapshot.map { DGXSparkPricing.project(snapshot: $0) } : snapshot
+        }
         let projected = self.tokenSnapshot(fromProviderSnapshot: self.snapshot(for: provider), provider: provider)
         if Self.tokenCostRequiresProviderSnapshot(provider) { return projected }
         return projected ?? self.tokenSnapshot(for: provider)

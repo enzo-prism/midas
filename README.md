@@ -32,7 +32,7 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
-## Private network usage sync (development preview)
+## Midas 0.47.0: DGX Spark and private network usage sync
 
 Midas can combine supported numeric usage through a private Mac mini hub over Tailscale.
 The overview pairs estimated AI token value with recorded token totals for the last 30 UTC days
@@ -40,10 +40,13 @@ in combined scope. Each device has its own revocable connection, with durable of
 duplicate reconciliation, and last-sync status. Both Macs calculate totals from the same shared
 source set, independently of their local provider display preferences.
 
-A lightweight Spark collector can record new vLLM runtime tokens without reading conversations.
-Local inference remains unpriced unless a verified price is available. Missing history and
-unsupported mobile consumer-app usage remain unavailable. This feature is a local preview;
-it is not part of a published Midas release yet. See [Tailscale hub setup](docs/MIDAS_TAILSCALE_HUB.md).
+A lightweight Spark collector records new vLLM runtime tokens without reading conversations.
+DGX Spark has its own NVIDIA-branded card with recorded tokens for the last 30 UTC days and a
+cloud API-equivalent estimate for verified Qwen3.8-Flash-Next measurements. Input, cached input,
+and output use separate published reference rates. Unknown models, missing token classes, and
+older unclassified records remain unpriced. The estimate is neither a bill nor measured savings.
+Missing history and unsupported mobile consumer-app usage remain unavailable. See
+[Tailscale hub setup](docs/MIDAS_TAILSCALE_HUB.md) for collection and coverage details.
 
 ## Midas 0.46.0: Meta plan usage, for real
 

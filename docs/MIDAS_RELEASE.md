@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.46.2**, build **123**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.47.0**, build **124**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -72,6 +72,32 @@ Accepted), stapling, Sparkle archive/feed signature checks, and downloaded draft
 public asset verification (SHA-256
 `6400a0516dead43f5cbeccc4b106ec115e4512a2c9be20a12a2e8b60513356ee`). The binary
 identifies source commit `78a82258f`. It was superseded by 0.46.2 the same day.
+
+## 0.47.0 changes: DGX Spark and private hub sync
+
+Build 124 adds a dedicated NVIDIA-branded DGX Spark card with rolling 30-day UTC tokens and
+cache-aware hosted API-equivalent value for verified Qwen3.8-Flash-Next measurements. The
+versioned Lyceum comparison uses $0.20 uncached input, $0.05 cached input, and $0.50 output
+per million tokens; the local NVIDIA NVFP4 variant can differ from hosted inference. Values
+are estimates rather than charges or measured savings. Legacy or incomplete records remain
+unpriced, and runtime counters are collected prospectively without invented historical dates.
+
+Private Tailscale hub transport reuses the validated deduplication ledger, durable offline retry,
+and per-device credentials. It does not require iCloud identity. Both Macs derive totals from
+the same shared source set; each OpenAI account's verified cloud history and quota remain
+separate from recorded-event totals. Per-provider freshness cannot be refreshed by an unrelated
+device's publication. See [hub setup](MIDAS_TAILSCALE_HUB.md) for data and coverage rules.
+
+Source, collector fixtures, native render fixtures, signed artifacts, notarization, public release,
+and website deployment are separate release gates. Record publication evidence only after each
+gate succeeds.
+
+The release candidate passed 4,534 Swift tests in 512 suites, all 82 Python collector/hub tests,
+and `make check`. Eight native synthetic fixtures cover the Spark card and detail in light and
+dark appearances, including waiting, unpriced, and stale states. Live Spark records were received
+by the private hub with the verified public model and separate input/output/cache deltas; retained
+unclassified history stayed unpriced. These checks do not by themselves prove binary publication
+or an update on another Mac.
 
 ## 0.46.0 changes: Meta plan usage
 

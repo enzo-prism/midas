@@ -143,6 +143,25 @@ class HubTests(unittest.TestCase):
         with self.assertRaises(hub.HubError):
             self.exchange(self.one, publication)
 
+    def test_exact_public_spark_model_is_allowed_but_remote_prices_remain_rejected(self):
+        publication = self.publication()
+        event = publication["events"][0]
+        event["provider"] = "localInference"
+        values = event["values"]
+        values.update(provenance="unknown", costUSD=None, unpricedRequests=1, estimatedRequests=0,
+                      model="Qwen/Qwen3.8-Flash-Next")
+        self.assertEqual(self.exchange(self.one, publication)["publications"], [publication])
+        for model in ["Qwen/private-path", "Qwen/Qwen3.8-Flash-Next/private", "/private/model"]:
+            bad = copy.deepcopy(publication)
+            bad["events"][0]["values"]["model"] = model
+            with self.subTest(model=model), self.assertRaises(hub.HubError):
+                self.exchange(self.one, bad)
+        for field in ["costUSD", "apiEquivalentCostUSD"]:
+            bad = copy.deepcopy(publication)
+            bad["events"][0]["values"][field] = 0.0001
+            with self.subTest(field=field), self.assertRaises(hub.HubError):
+                self.exchange(self.one, bad)
+
     def test_duplicate_events_and_accounts_are_rejected(self):
         publication = self.publication()
         publication["events"] *= 2

@@ -54,6 +54,7 @@ enum MidasProviderLogoLoader {
         case .cursor: "MidasLogo-cursor_\(dark ? "dark" : "light")"
         case .claude: "MidasLogo-claude-ai-icon"
         case .meta: "MidasLogo-meta"
+        case .localInference: "MidasLogo-nvidia_\(dark ? "dark" : "light")"
         default: nil
         }
     }
