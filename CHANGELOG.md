@@ -4,7 +4,8 @@
 
 - Rename the menu-panel and Usage-overview heading to **AI Spend**. Keep the API-rate estimate explanation in the heading's help text.
 
-Build 128. See GitHub Releases for signed binary availability.
+Build 128. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.48.2-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.2-midas.1).
 
 ## Midas 0.48.1 — October 17, 2026
 

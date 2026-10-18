@@ -32,12 +32,13 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
-## Midas 0.48.2 candidate: AI Spend
+## Midas 0.48.2: AI Spend
 
-**0.48.2, build 128** is in preparation. The total's heading becomes **AI Spend**. Help text and
+**0.48.2, build 128** is published as
+[v0.48.2-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.2-midas.1).
+The total's heading is **AI Spend**. Help text and
 **More → Estimate details** retain its meaning as estimated value at API rates; amounts,
-coverage, missing-data handling, and separate billed spend are unchanged. The latest verified
-published release remains 0.48.1 until this candidate is released.
+coverage, missing-data handling, and separate billed spend are unchanged.
 
 ## Midas 0.48.1: a cleaner usage overview
 

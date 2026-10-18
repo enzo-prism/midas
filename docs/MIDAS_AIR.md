@@ -9,7 +9,8 @@ The compact native redesign is published as **0.48.0, build 126**:
 The **0.48.1, build 127** refinement is published as
 [v0.48.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.1-midas.1).
 
-The 0.48.2 candidate changes the shared overview heading to **AI Spend**; publication is pending.
+Version **0.48.2, build 128** changes the shared overview heading to **AI Spend** and is published as
+[v0.48.2-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.48.2-midas.1).
 
 ## Current onboarding and account coverage
 
@@ -198,6 +199,11 @@ MIDAS_PREVIEW_OUTPUT="$MIDAS_PREVIEW_OUTPUT" \
 
 Initial design exploration used CLT-only SDK/macro workarounds and an isolated validation
 manifest that excluded XCTest-only files. Those historical results are not a full-suite pass.
+The 0.48.2 label update passed the same 4,623 canonical tests, zero-violation lint, and 60 native
+render fixtures. Its signed, notarized public bundle is installed as 0.48.2 (128) on the release
+Mac; About and Sparkle confirm it. Website commit `bb8f8db` reached production Ready and all
+18 production browser checks passed. The live-page download matches the public archive.
+
 The 0.48.1 release passed all 4,571 Swift Testing tests plus 52 XCTest tests (4,623 total)
 across 524 suites and 44 shards, with no failures or timeouts and zero lint violations. Sixty
 native fixtures cover the presentation states. The public archive, signatures, notarization,

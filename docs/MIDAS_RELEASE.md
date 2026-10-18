@@ -12,8 +12,9 @@ Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` w
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.48.1**, build **127**, tagged
-`v0.48.1-midas.1`, superseding 0.48.0 (build 126, `v0.48.0-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.48.2**, build **128**, tagged
+`v0.48.2-midas.1`, superseding 0.48.1 (build 127, `v0.48.1-midas.1`),
+0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
 0.47.0 (build 124, `v0.47.0-midas.1`), and the earlier 0.46.x releases. Check GitHub releases for the current published binary; source and installed local
 builds are not publication proof. 0.36.0 (build 108) was the last CodexBar-identity build.
@@ -42,7 +43,21 @@ Unavailable-value accessibility uses the same label. Amounts, recorded tokens, i
 quotas, source coverage, and billed-charge exclusions are unchanged. The canonical package
 passed 4,623 tests across 524 suites in 44 bounded groups, with no failures or shard timeouts.
 Strict lint passed with zero violations; 60 native synthetic fixtures were rendered and the
-new heading was inspected. Publication and installation are pending for this source revision.
+new heading was inspected.
+
+The signed binary identifies source `9cd5d1298`. Apple notarization submission
+`103230b8-c8b5-4393-8bb8-8cd9c5b6f4be` was Accepted; app and dSYM share arm64 UUID
+`6F0FC0C7-98DA-3545-A65B-5DCAE87B1B0E`. Stapling, Gatekeeper, archive and both XML feed
+signatures, downloaded draft assets, anonymous public assets, and both latest feeds passed.
+Published October 18, 2026, with archive SHA-256
+`be7985471fc2430c53e12e11f915f097b9c923736dfa21215adccf095e75e8aa`.
+
+The identical public bundle is running at `/Applications/Midas.app` on the release Mac mini.
+About shows 0.48.2 (128); Sparkle reports it is newest. Five superseded 0.48.1 installer ZIPs,
+the previous installed app, and three transient current app copies were moved to recoverable
+Trash with hash readback. Source, app state, release evidence, and crash symbols remain.
+Website commit `bb8f8db` reached production Ready as `dpl_HkLpJ11WbTjXf4D9Fqw9RAae15G8`.
+All 18 production browser checks passed, and the live-page download matches the public archive.
 
 ## 0.48.1 changes: quieter overview and compact Meta
 
