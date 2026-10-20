@@ -157,7 +157,8 @@ final class MidasUsageSyncCoordinator {
         MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication?,
         Date) async throws -> MidasUsageHubExchange
     private var hubConnection: MidasUsageHubConnection?
-    private var syncDeviceID: UUID {
+    /// The identity this Mac publishes under; its day rollups are keyed to it.
+    var syncDeviceID: UUID {
         self.hubConnection?.deviceID ?? self.deviceID
     }
 

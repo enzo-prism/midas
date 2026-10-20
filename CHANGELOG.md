@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix cross-Mac sync dropping older usage from busy Macs. When a Mac's history exceeds one publication (32 MiB / 100,000 records), older provider days are now shared as per-day, per-model totals instead of being discarded; previously a heavy Mac shared only its newest ~10 days, so other Macs' 30-day totals were missing most of its usage.
+- Publication capacity no longer counts as excluded activity, so the "Some activity lacked a stable identity" notice reflects only genuinely unidentifiable records.
+
 ## Midas 0.48.3 — October 18, 2026
 
 - Add an optional local OpenAI account filter across Codex quotas, cloud history, menus, and widgets. A missing selected account never falls back to another login.

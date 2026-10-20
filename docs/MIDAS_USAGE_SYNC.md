@@ -96,6 +96,18 @@ selects a whole report per account/day. Event revisions keep the complete stream
 monetary and token fields are never independently maximized. Canonical tie-breaking and sorted
 aggregation make the same input converge independent of read order.
 
+A busy Mac can record more events than one publication holds (32 MiB, 100,000 records): heavy
+Claude Code use alone produced about 8,000 events per day. Newest days stay individual events
+while they fit. Each older provider/day is published instead as that device's **day rollups**,
+one ordinary event per model and pricing state carrying the summed tokens, requests, costs and
+coverage counts. Rollups use the existing wire format, so the hub and earlier Midas versions read
+them unchanged. Their identity includes the device, so two Macs' rollups add. A provider/day is
+never both individual events and rollups on one device. Once rolled up, a day keeps its most
+complete whole version (most tokens) across rescans and source-log removal, never a sum of
+versions. Cross-device copy detection still applies to individual-event days; copied logs on
+rolled-up days are no longer recognized as copies. Before 0.48.4, overflow was dropped from the
+publication instead, so a heavy Mac shared only its newest days.
+
 UTC is the shared reporting calendar on every Mac. The ledger retains up to 365 days of recorded
 history. Missing days remain unavailable. Last received peer history is retained when a Mac or
 its file is temporarily unavailable; source-log cleanup does not erase previously recorded local

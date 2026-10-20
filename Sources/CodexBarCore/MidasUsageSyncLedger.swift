@@ -7,59 +7,138 @@ public struct MidasUsageSyncLedger: Sendable {
     public let excludedRecords: Int
 
     /// Retain this Mac's older numeric history when source logs roll off or an offline publication must retry.
+    /// Days that no longer fit the publication as individual events are published as this device's day rollups.
     public static func retainingLocalHistory(
-        previous: MidasUsageSyncPublication?, fresh: MidasUsageSyncPublication) -> MidasUsageSyncPublication
+        previous: MidasUsageSyncPublication?,
+        fresh: MidasUsageSyncPublication,
+        maximumBytes: Int = MidasUsageSyncPublication.maximumFileBytes) -> MidasUsageSyncPublication
     {
         let previous = previous.flatMap {
             $0.workspaceID == fresh.workspaceID && $0.deviceID == fresh.deviceID ? $0 : nil
         }
+        let deviceID = fresh.deviceID
+        let cutoff = MidasUsageSyncPublication.day(fresh.publishedAt.addingTimeInterval(-364 * 86400))
         var events: [EventKey: MidasUsageSyncEvent] = [:]
         events.reserveCapacity(min(
             max(previous?.events.count ?? 0, fresh.events.count), MidasUsageSyncPublication.maximumRecords))
-        for event in [previous?.events ?? [], fresh.events].joined() {
-            let key = EventKey(event)
-            if let old = events[key], !Self.prefers(event, over: old) { continue }
-            events[key] = event
+        var previousRollups: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
+        var freshRollups: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
+        for (isFresh, source) in [(false, previous?.events ?? []), (true, fresh.events)] {
+            for event in source where event.day >= cutoff {
+                if MidasUsageSyncRollup.isRollup(event, deviceID: deviceID) {
+                    let key = MidasUsageSyncRollup.DayKey(event)
+                    if isFresh { freshRollups[key, default: []].append(event) } else {
+                        previousRollups[key, default: []].append(event)
+                    }
+                    continue
+                }
+                let key = EventKey(event)
+                if let old = events[key], !Self.prefers(event, over: old) { continue }
+                events[key] = event
+            }
         }
+        var fineDays: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
+        for event in events.values {
+            fineDays[MidasUsageSyncRollup.DayKey(event), default: []].append(event)
+        }
+        // A rolled-up provider day stays rolled up. Choose its most complete whole version, never a sum of versions.
+        var rolled: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
+        for key in Set(previousRollups.keys).union(freshRollups.keys) {
+            let candidates = [
+                freshRollups[key],
+                fineDays.removeValue(forKey: key).map { MidasUsageSyncRollup.rollUp($0, deviceID: deviceID) },
+                previousRollups[key],
+            ].compactMap(\.self)
+            rolled[key] = candidates.max { Self.tokenTotal($0) < Self.tokenTotal($1) }
+        }
+
         var accounts: [AccountKey: MidasUsageSyncAccountDay] = [:]
         for row in [previous?.accountDays ?? [], fresh.accountDays].joined() {
             let key = AccountKey(row)
             if let old = accounts[key], !Self.prefers(row, over: old) { continue }
             accounts[key] = row
         }
-        let cutoff = MidasUsageSyncPublication.day(fresh.publishedAt.addingTimeInterval(-364 * 86400))
-        var retainedEvents = events.values.filter { $0.day >= cutoff }
-        retainedEvents.sort {
-            $0.day == $1.day ? Self.eventPrecedes($0, $1) : $0.day > $1.day
-        }
         var retainedAccounts = accounts.values.filter { $0.day >= cutoff }
         retainedAccounts.sort {
             $0.day == $1.day ? $0.accountScope < $1.accountScope : $0.day > $1.day
         }
         let encoder = JSONEncoder()
+        let encodedSize: (MidasUsageSyncEvent) -> Int? = { event in
+            autoreleasepool { try? encoder.encode(event).count + 1 }
+        }
         var bytes = 4096 // Reserve the header and array punctuation before checking the whole publication.
         var keptAccounts: [MidasUsageSyncAccountDay] = []
-        var keptEvents: [MidasUsageSyncEvent] = []
         keptAccounts.reserveCapacity(min(retainedAccounts.count, MidasUsageSyncPublication.maximumRecords))
         for row in retainedAccounts {
             guard keptAccounts.count < MidasUsageSyncPublication.maximumRecords else { continue }
             let encodedBytes = autoreleasepool { try? encoder.encode(row).count }
             guard let encodedBytes,
-                  bytes + encodedBytes + 1 <= MidasUsageSyncPublication.maximumFileBytes else { continue }
+                  bytes + encodedBytes + 1 <= maximumBytes else { continue }
             keptAccounts.append(row)
             bytes += encodedBytes + 1
         }
-        keptEvents.reserveCapacity(min(
-            retainedEvents.count, MidasUsageSyncPublication.maximumRecords - keptAccounts.count))
-        for row in retainedEvents {
-            guard keptAccounts.count + keptEvents.count < MidasUsageSyncPublication.maximumRecords else { continue }
-            let encodedBytes = autoreleasepool { try? encoder.encode(row).count }
-            guard let encodedBytes,
-                  bytes + encodedBytes + 1 <= MidasUsageSyncPublication.maximumFileBytes else { continue }
-            keptEvents.append(row)
-            bytes += encodedBytes + 1
+
+        // Newest days stay individual (cross-device copy detection) while they fit. Reserve room for
+        // every remaining day's rollup first, so an older day is summarized rather than dropped.
+        let days = Set(fineDays.keys.map(\.day)).sorted(by: >)
+        var dayEvents: [String: [MidasUsageSyncEvent]] = [:]
+        for (key, values) in fineDays {
+            dayEvents[key.day, default: []] += values
         }
-        let dropped = retainedEvents.count - keptEvents.count + retainedAccounts.count - keptAccounts.count
+        var dayRollups: [String: [MidasUsageSyncEvent]] = [:]
+        var reserve = 0
+        for day in days {
+            let rollups = MidasUsageSyncRollup.rollUp(dayEvents[day] ?? [], deviceID: deviceID)
+            dayRollups[day] = rollups
+            reserve += rollups.reduce(0) { $0 + (encodedSize($1) ?? 0) }
+        }
+        let rolledBytes = rolled.values.joined().reduce(0) { $0 + (encodedSize($1) ?? 0) }
+        let rolledCount = rolled.values.reduce(0) { $0 + $1.count }
+        var keptEvents: [MidasUsageSyncEvent] = []
+        var keepingIndividualEvents = true
+        for day in days {
+            let individual = dayEvents[day] ?? []
+            let rollups = dayRollups[day] ?? []
+            reserve -= rollups.reduce(0) { $0 + (encodedSize($1) ?? 0) }
+            if keepingIndividualEvents {
+                let size = individual.reduce(0) { $0 + (encodedSize($1) ?? 0) }
+                let count = keptAccounts.count + keptEvents.count + individual.count + rolledCount
+                    + dayRollups.values.reduce(0) { $0 + $1.count } - rollups.count
+                if count <= MidasUsageSyncPublication.maximumRecords,
+                   bytes + size + reserve + rolledBytes <= maximumBytes
+                {
+                    keptEvents += individual
+                    bytes += size
+                    dayRollups[day] = []
+                    continue
+                }
+                keepingIndividualEvents = false
+            }
+            for event in rollups {
+                rolled[MidasUsageSyncRollup.DayKey(event), default: []].append(event)
+            }
+            dayRollups[day] = []
+        }
+
+        // Summaries are tiny; only a pathological history can still exceed the limits here.
+        var summaries = Array(rolled.values.joined())
+        summaries.sort { $0.day == $1.day ? Self.eventPrecedes($0, $1) : $0.day > $1.day }
+        var dropped = 0
+        for event in summaries {
+            guard keptAccounts.count + keptEvents.count < MidasUsageSyncPublication.maximumRecords,
+                  let size = encodedSize(event),
+                  bytes + size <= maximumBytes
+            else {
+                dropped += 1
+                continue
+            }
+            keptEvents.append(event)
+            bytes += size
+        }
+        keptEvents.sort {
+            $0.day == $1.day ? Self.eventPrecedes($0, $1) : $0.day > $1.day
+        }
+        dropped += retainedAccounts.count - keptAccounts.count
         return MidasUsageSyncPublication(
             workspaceID: fresh.workspaceID,
             deviceID: fresh.deviceID,
@@ -69,6 +148,13 @@ public struct MidasUsageSyncLedger: Sendable {
             accountDays: keptAccounts,
             excludedRecords: fresh.excludedRecords.addingReportingOverflow(dropped).overflow
                 ? Int.max : fresh.excludedRecords + dropped)
+    }
+
+    private static func tokenTotal(_ events: [MidasUsageSyncEvent]) -> Int {
+        events.reduce(0) { total, event in
+            let next = total.addingReportingOverflow(event.values.tokens ?? 0)
+            return next.overflow ? Int.max : next.partialValue
+        }
     }
 
     public init(publications: [MidasUsageSyncPublication], workspaceID: UUID, now: Date = Date()) throws {

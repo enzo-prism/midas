@@ -103,7 +103,8 @@ extension UsageStore {
         // Sync opt-in covers the supported numeric logs independently of provider display toggles.
         let enabled = self.enabledProvidersForBackgroundWork()
         let options = MidasUsageSyncExporter.Options(
-            codexAdditionalSessionsRoots: self.midasCodexSyncAdditionalSessionsRoots)
+            codexAdditionalSessionsRoots: self.midasCodexSyncAdditionalSessionsRoots,
+            deviceID: self.midasUsageSync.syncDeviceID)
         let exported = try await MidasUsageSyncExporter.export(
             workspace: workspace,
             providers: [.codex, .claude, .meta],

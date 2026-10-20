@@ -12,6 +12,8 @@ public enum MidasUsageSyncExporter {
         public var codexTraceDatabaseURL: URL?
         public var historyDays: Int
         public var forceRescan: Bool
+        /// Publishing device. Older events beyond the publication budget become this device's day rollups.
+        public var deviceID: UUID?
         /// Leave room for provider-account history and publication metadata.
         var maximumEventBytes = MidasUsageSyncPublication.maximumFileBytes - 4 * 1024 * 1024
 
@@ -23,7 +25,8 @@ public enum MidasUsageSyncExporter {
             cacheRoot: URL? = nil,
             codexTraceDatabaseURL: URL? = nil,
             historyDays: Int = 365,
-            forceRescan: Bool = false)
+            forceRescan: Bool = false,
+            deviceID: UUID? = nil)
         {
             self.codexSessionsRoot = codexSessionsRoot
             self.codexAdditionalSessionsRoots = codexAdditionalSessionsRoots
@@ -33,12 +36,14 @@ public enum MidasUsageSyncExporter {
             self.codexTraceDatabaseURL = codexTraceDatabaseURL
             self.historyDays = historyDays
             self.forceRescan = forceRescan
+            self.deviceID = deviceID
         }
     }
 
     public struct ExportResult: Sendable {
+        /// Individual events, plus day rollups for older provider days beyond the publication limit.
         public let events: [MidasUsageSyncEvent]
-        /// Usage records with unsafe/missing identity, missing time, or outside the publication limit.
+        /// Usage records with unsafe/missing identity or missing time.
         public let excludedRecords: Int
     }
 
@@ -121,6 +126,10 @@ public enum MidasUsageSyncExporter {
         private var entries: [String: Entry] = [:]
         private var heap: [String] = []
         private let encoder = JSONEncoder()
+        /// Provider days that no longer fit as individual events. Each is published only as rollups.
+        private var rolledDays: Set<MidasUsageSyncRollup.DayKey> = []
+        private var rolledIDs: Set<String> = []
+        private var rollups = MidasUsageSyncRollup.Builder()
 
         init(maximumBytes: Int) {
             self.maximumBytes = min(
@@ -128,8 +137,18 @@ public enum MidasUsageSyncExporter {
                 MidasUsageSyncPublication.maximumFileBytes - 4 * 1024 * 1024)
         }
 
-        func sortedEvents() -> [MidasUsageSyncEvent] {
-            var events = self.entries.values.map(\.event)
+        func sortedEvents(deviceID: UUID?) -> [MidasUsageSyncEvent] {
+            var rollups = self.rollups
+            var events: [MidasUsageSyncEvent] = []
+            events.reserveCapacity(self.entries.count)
+            for entry in self.entries.values {
+                if self.rolledDays.contains(MidasUsageSyncRollup.DayKey(entry.event)) {
+                    rollups.add(entry.event)
+                } else {
+                    events.append(entry.event)
+                }
+            }
+            events += rollups.events(deviceID: deviceID)
             events.sort { $0.id < $1.id }
             return events
         }
@@ -137,6 +156,12 @@ public enum MidasUsageSyncExporter {
         mutating func add(_ event: MidasUsageSyncEvent) {
             guard (try? event.values.validate()) != nil else {
                 self.excludedRecords += 1
+                return
+            }
+            if self.rolledDays.contains(MidasUsageSyncRollup.DayKey(event)), self.entries[event.id] == nil {
+                // A later copy of an already rolled-up event must not be added to its day twice.
+                guard self.rolledIDs.insert(event.id).inserted else { return }
+                self.rollups.add(event)
                 return
             }
             let existing = self.entries[event.id]
@@ -168,11 +193,14 @@ public enum MidasUsageSyncExporter {
             }
             // One dictionary owns each event, size and heap position instead of three full hash tables.
             // Heap pruning bounds both memory and work, independent of provider/file scan order.
+            // Older events become day totals instead of disappearing from shared history.
             while self.entries.count > MidasUsageSyncPublication.maximumRecords - 4096
                 || self.bytes > self.maximumBytes
             {
-                self.removeOldest()
-                self.excludedRecords += 1
+                guard let oldest = self.removeOldest() else { break }
+                self.rolledDays.insert(MidasUsageSyncRollup.DayKey(oldest))
+                self.rolledIDs.insert(oldest.id)
+                self.rollups.add(oldest)
             }
         }
 
@@ -210,12 +238,14 @@ public enum MidasUsageSyncExporter {
             }
         }
 
-        private mutating func removeOldest() {
-            guard let first = self.heap.first else { return }
+        private mutating func removeOldest() -> MidasUsageSyncEvent? {
+            guard let first = self.heap.first else { return nil }
             if self.heap.count > 1 { self.swap(0, self.heap.count - 1) }
             self.heap.removeLast()
-            self.bytes -= self.entries.removeValue(forKey: first)?.byteCount ?? 0
+            let removed = self.entries.removeValue(forKey: first)
+            self.bytes -= removed?.byteCount ?? 0
             if !self.heap.isEmpty { self.siftDown(0) }
+            return removed?.event
         }
     }
 
@@ -293,7 +323,7 @@ public enum MidasUsageSyncExporter {
             }
         }
         return ExportResult(
-            events: output.sortedEvents(),
+            events: output.sortedEvents(deviceID: options.deviceID),
             excludedRecords: output.excludedRecords)
     }
 

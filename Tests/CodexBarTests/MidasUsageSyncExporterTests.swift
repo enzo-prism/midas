@@ -481,7 +481,7 @@ struct MidasUsageSyncExporterTests {
     }
 
     @Test
-    func `Byte cap preserves newest complete events and reports excluded older records`() async throws {
+    func `Byte cap rolls the older provider day into totals instead of excluding records`() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let newestTimestamp = 1_792_051_200_000_000
@@ -504,15 +504,17 @@ struct MidasUsageSyncExporterTests {
             providers: [.meta],
             now: Self.now,
             options: options)
+        // All three share one UTC day, so the whole day is published as one rollup with the same totals.
         #expect(limited.events.count == 1)
+        #expect(limited.events.allSatisfy { MidasUsageSyncRollup.isRollup($0, deviceID: nil) })
         #expect(limited.events.first?.observedAt == Date(timeIntervalSince1970: Double(newestTimestamp) / 1_000_000))
-        #expect(limited.excludedRecords == 2)
-        let encodedBytes = try limited.events.reduce(0) { try $0 + JSONEncoder().encode($1).count + 1 }
-        #expect(encodedBytes <= options.maximumEventBytes)
+        #expect(limited.events.first?.values.tokens == full.events.reduce(0) { $0 + ($1.values.tokens ?? 0) })
+        #expect(limited.events.first?.values.requests == full.events.reduce(0) { $0 + ($1.values.requests ?? 0) })
+        #expect(limited.excludedRecords == 0)
     }
 
     @Test
-    func `Byte cap reorders an updated event and ignores its later copied prefix`() async throws {
+    func `Byte cap keeps an updated event complete and ignores its later copied prefix`() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let timestamp = 1_792_051_200_000_000
@@ -538,15 +540,10 @@ struct MidasUsageSyncExporterTests {
         options.maximumEventBytes = sizes.suffix(2).reduce(0, +) + 8
         let limited = try await MidasUsageSyncExporter.export(
             workspace: workspace, providers: [.meta], now: Self.now, options: options)
-        #expect(limited.events.count == 2)
-        #expect(limited.events.map(\.observedAt).sorted() == [
-            Date(timeIntervalSince1970: Double(timestamp - 1800 * 1_000_000) / 1_000_000),
-            Date(timeIntervalSince1970: Double(timestamp) / 1_000_000),
-        ])
-        #expect(limited.events.reduce(0) { $0 + ($1.values.tokens ?? 0) } == 430)
-        #expect(limited.excludedRecords == 1)
-        #expect(try limited.events.reduce(0) { try $0 + JSONEncoder().encode($1).count + 1 }
-            <= options.maximumEventBytes)
+        #expect(limited.events.allSatisfy { MidasUsageSyncRollup.isRollup($0, deviceID: nil) })
+        #expect(limited.events.reduce(0) { $0 + ($1.values.tokens ?? 0) }
+            == full.events.reduce(0) { $0 + ($1.values.tokens ?? 0) })
+        #expect(limited.excludedRecords == 0)
     }
 
     @Test

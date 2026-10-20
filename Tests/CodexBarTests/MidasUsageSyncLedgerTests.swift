@@ -289,6 +289,111 @@ struct MidasUsageSyncLedgerTests {
         #expect(merged.excludedRecords == 2)
     }
 
+    @Test func oversizedHistoryRollsOlderDaysIntoDeviceTotalsWithoutChangingTheLedger() throws {
+        let day: TimeInterval = 86400
+        var events: [MidasUsageSyncEvent] = []
+        for offset in 0..<6 {
+            for index in 0..<20 {
+                let model = index.isMultiple(of: 2) ? "gpt-5.5" : nil
+                let cost: Double? = index.isMultiple(of: 3) ? nil : Double(index) / 10
+                events.append(self.event(
+                    "event-\(offset)-\(index)",
+                    provider: index.isMultiple(of: 5) ? .claude : .codex,
+                    at: self.now.addingTimeInterval(-Double(offset) * day - Double(index)),
+                    values: .init(
+                        tokens: 100 + index,
+                        requests: index.isMultiple(of: 4) ? nil : 1,
+                        costUSD: cost,
+                        tokenMix: .init(inputTokens: 60 + index, outputTokens: 40, cacheReadTokens: 10),
+                        provenance: cost == nil ? .unknown : .listPriceEstimate,
+                        model: model,
+                        unpricedRequests: cost == nil ? 1 : 0,
+                        estimatedRequests: cost == nil ? 0 : 1)))
+            }
+        }
+        let fresh = self.publication(events: events)
+        let full = MidasUsageSyncLedger.retainingLocalHistory(previous: nil, fresh: fresh)
+        #expect(full.events.count == events.count)
+        let todayBytes = try events.filter { $0.day == MidasUsageSyncPublication.day(self.now) }
+            .reduce(0) { try $0 + JSONEncoder().encode($1).count + 1 }
+        // Room for today's events and every day's rollups, but not a second day of individual events.
+        let rollupBytes = try MidasUsageSyncRollup.rollUp(events, deviceID: self.first)
+            .reduce(0) { try $0 + JSONEncoder().encode($1).count + 1 }
+        let budget = 4096 + todayBytes + rollupBytes + 256
+        let limited = MidasUsageSyncLedger.retainingLocalHistory(
+            previous: nil, fresh: fresh, maximumBytes: budget)
+        #expect(limited.events.count < events.count)
+        #expect(limited.excludedRecords == 0)
+        let rollups = limited.events.filter { MidasUsageSyncRollup.isRollup($0, deviceID: self.first) }
+        #expect(!rollups.isEmpty)
+        // Every provider day is either individual events or rollups, and newer days stay individual.
+        let rolledDays = Set(rollups.map(\.day))
+        let individualDays = Set(limited.events.filter { !rollups.contains($0) }.map(\.day))
+        #expect(rolledDays.isDisjoint(with: individualDays))
+        #expect(individualDays.contains(MidasUsageSyncPublication.day(self.now)))
+        #expect((rolledDays.max() ?? "") < (individualDays.min() ?? ""))
+        try limited.validate(workspaceID: self.workspace.id, now: self.now)
+        let expected = try self.ledger([full]).snapshots
+        let actual = try self.ledger([limited]).snapshots
+        for provider in [UsageProvider.codex, .claude] {
+            let lhs = try #require(expected[provider])
+            let rhs = try #require(actual[provider])
+            #expect(lhs.last30DaysTokens == rhs.last30DaysTokens)
+            #expect(lhs.last30DaysRequests == rhs.last30DaysRequests)
+            #expect(abs((lhs.last30DaysCostUSD ?? 0) - (rhs.last30DaysCostUSD ?? 0)) < 0.000001)
+            #expect(lhs.daily.map(\.date) == rhs.daily.map(\.date))
+            #expect(lhs.daily.map(\.unpricedRequestCount) == rhs.daily.map(\.unpricedRequestCount))
+            #expect(lhs.daily.map(\.estimatedRequestCount) == rhs.daily.map(\.estimatedRequestCount))
+            #expect(lhs.daily.map(\.totalTokens) == rhs.daily.map(\.totalTokens))
+            #expect(lhs.daily.map { $0.modelBreakdowns?.map(\.totalTokens) }
+                == rhs.daily.map { $0.modelBreakdowns?.map(\.totalTokens) })
+        }
+
+        // A later sync whose source logs still contain the old day keeps it rolled up, counted once.
+        let next = self.publication(at: self.now.addingTimeInterval(60), events: events)
+        let again = MidasUsageSyncLedger.retainingLocalHistory(
+            previous: limited, fresh: next, maximumBytes: budget)
+        #expect(try self.ledger([again], now: self.now.addingTimeInterval(60)).snapshots[.codex]?.last30DaysTokens
+            == expected[.codex]?.last30DaysTokens)
+        // After those logs roll off, the retained rollups still carry the old days.
+        let today = events.filter { $0.day == MidasUsageSyncPublication.day(self.now) }
+        let rolledOff = MidasUsageSyncLedger.retainingLocalHistory(
+            previous: again,
+            fresh: self.publication(at: self.now.addingTimeInterval(120), events: today),
+            maximumBytes: budget)
+        #expect(try self.ledger([rolledOff], now: self.now.addingTimeInterval(120)).snapshots[.codex]?
+            .last30DaysTokens == expected[.codex]?.last30DaysTokens)
+    }
+
+    @Test func rollupsFromTwoDevicesAddInsteadOfReplacingEachOther() throws {
+        let values = MidasUsageSyncValues(tokens: 500, requests: 5, costUSD: 2, model: "gpt-5.5")
+        let firstRollup = MidasUsageSyncRollup.rollUp([self.event("a", values: values)], deviceID: self.first)
+        let secondRollup = MidasUsageSyncRollup.rollUp([self.event("b", values: values)], deviceID: self.second)
+        #expect(firstRollup.map(\.id) != secondRollup.map(\.id))
+        let ledger = try self.ledger([
+            self.publication(events: firstRollup),
+            self.publication(device: self.second, events: secondRollup),
+        ])
+        #expect(ledger.snapshots[.codex]?.last30DaysTokens == 1000)
+        #expect(ledger.snapshots[.codex]?.last30DaysRequests == 10)
+    }
+
+    @Test func rolledDayKeepsItsMostCompleteVersionInsteadOfAddingVersions() {
+        let complete = MidasUsageSyncRollup.rollUp(
+            [self.event("a"), self.event("b"), self.event("c")], deviceID: self.first)
+        let partial = [self.event("a")]
+        let previous = self.publication(at: self.now.addingTimeInterval(-60), events: complete)
+        let merged = MidasUsageSyncLedger.retainingLocalHistory(
+            previous: previous, fresh: self.publication(events: partial))
+        #expect(merged.events == complete)
+        let grown = [self.event("a"), self.event("b"), self.event("c"), self.event("d")]
+        let regrown = MidasUsageSyncLedger.retainingLocalHistory(
+            previous: previous, fresh: self.publication(events: grown))
+        #expect(regrown.events.count == 1)
+        #expect(regrown.events.first?.values.tokens == 400)
+        #expect(MidasUsageSyncRollup.isRollup(regrown.events[0], deviceID: self.first))
+    }
+
     @Test func retainedHistoryDoesNotLeakBetweenDevicesOrWorkspaces() {
         let fresh = self.publication(events: [self.event("new")])
         let otherDevice = self.publication(device: self.second, events: [self.event("other")])

@@ -107,8 +107,10 @@ struct MidasUsageCollector: Sendable {
                 lastSuccessfulExchangeAt: received?.lastSuccessfulExchangeAt),
             name: "received.json",
             maximumBytes: 128 * 1024 * 1024)
+        var exportOptions = self.options.export
+        exportOptions.deviceID = connection.deviceID
         let exported = try await MidasUsageSyncExporter.export(
-            workspace: workspace, providers: self.options.providers, now: now, options: self.options.export)
+            workspace: workspace, providers: self.options.providers, now: now, options: exportOptions)
         let cachedOwn = cached.first { $0.deviceID == connection.deviceID }
         let ownHistory = previous.map {
             MidasUsageSyncLedger.retainingLocalHistory(previous: cachedOwn, fresh: $0)
