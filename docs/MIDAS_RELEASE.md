@@ -36,6 +36,19 @@ Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
 
+## 0.48.4 changes: complete cross-Mac sync history
+
+Version 0.48.4, build 130, fixes busy Macs sharing only their newest days. A publication holds
+32 MiB / 100,000 records; heavy Claude Code use exceeded it, so the exporter and retention step
+discarded older events (a MacBook Pro shared only ~10 days, 74,128 records excluded). Older
+provider days now publish as device-scoped day rollups in the unchanged wire format. See
+[usage sync](MIDAS_USAGE_SYNC.md#merge-and-recovery).
+
+Sync ledger/exporter/coordinator/hub/collector suites (150 tests) and strict lint passed. A real
+76,329-event publication reduced to 19,798 events (7.8 MB) with identical per-provider tokens,
+costs, and daily series. On the Mac mini hub, the installed build's publication was accepted and
+excluded records fell from 3,892 to 69.
+
 ## 0.48.3 changes: selected OpenAI account
 
 Version 0.48.3, build 129, adds an optional local Codex account filter. Quotas, cloud
