@@ -6,14 +6,14 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.48.3**, build **129**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.48.4**, build **130**. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.48.3**, build **129**, tagged
-`v0.48.3-midas.1`, superseding 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.48.4**, build **130**, tagged
+`v0.48.4-midas.1`, superseding 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
@@ -48,6 +48,16 @@ Sync ledger/exporter/coordinator/hub/collector suites (150 tests) and strict lin
 76,329-event publication reduced to 19,798 events (7.8 MB) with identical per-provider tokens,
 costs, and daily series. On the Mac mini hub, the installed build's publication was accepted and
 excluded records fell from 3,892 to 69.
+
+Apple notarization submission `f5ec4b4e-a63f-4697-a51d-0c66bd897f8c` was Accepted.
+App and dSYM share arm64 UUID `BA9AC796-555A-3148-9467-EEFA58871323`; source commit `536ddeadf`.
+Stapling, Gatekeeper, archive verification against the embedded Sparkle public key,
+both signed XML feeds, downloaded draft assets, anonymous public downloads, and both latest
+feed URLs passed. Published October 20, 2026; archive SHA-256:
+`10744a28fb001c002cf678f3afbab4028635fed28f38fa3802da57ddc32cb920`.
+The Mac mini runs the verified public bundle. Website commit `fa26077` is live on
+midas-ai.dev; all 18 production browser checks passed and the download link resolves to the
+verified archive. MacBook Pro receipt through Sparkle is verified separately from its hub publication.
 
 ## 0.48.3 changes: selected OpenAI account
 
