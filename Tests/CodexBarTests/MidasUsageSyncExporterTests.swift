@@ -529,7 +529,7 @@ struct MidasUsageSyncExporterTests {
         event["usage"] = usage
         payload["event"] = event
         complete["payload"] = payload
-        try fixture.write([prefix, middle, complete, newer, prefix], at: fixture.meta.appendingPathComponent(
+        try fixture.write([prefix, middle, newer, complete, prefix], at: fixture.meta.appendingPathComponent(
             "one/session.jsonl"))
         let workspace = MidasUsageSyncWorkspace()
         let full = try await MidasUsageSyncExporter.export(
@@ -537,7 +537,7 @@ struct MidasUsageSyncExporterTests {
         #expect(full.events.count == 3)
         let sizes = try full.events.map { try JSONEncoder().encode($0).count + 1 }.sorted()
         var options = fixture.options
-        options.maximumEventBytes = (sizes.last ?? 0) + 8
+        options.maximumEventBytes = sizes.suffix(2).reduce(0, +) + 8
         let limited = try await MidasUsageSyncExporter.export(
             workspace: workspace, providers: [.meta], now: Self.now, options: options)
         #expect(limited.events.allSatisfy { MidasUsageSyncRollup.isRollup($0, deviceID: nil) })
