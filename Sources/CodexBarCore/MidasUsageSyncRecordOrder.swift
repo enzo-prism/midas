@@ -50,8 +50,10 @@ public enum MidasUsageSyncRecordOrder {
     }
 
     private static func canonical(_ value: some Encodable) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        autoreleasepool {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        }
     }
 }
