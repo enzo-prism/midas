@@ -56,7 +56,8 @@ jobs:
           python-version: "3.12"
 
       - name: Real Swift and Python usage sync integration
-        timeout-minutes: 15
+        # This step includes the clean Swift build on the hosted Intel runner.
+        timeout-minutes: 30
         env:
           MIDAS_RUN_HUB_INTEGRATION: "1"
         run: swift test --filter MidasUsageHubIntegrationTests

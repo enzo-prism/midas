@@ -541,8 +541,9 @@ struct MidasUsageSyncExporterTests {
         let limited = try await MidasUsageSyncExporter.export(
             workspace: workspace, providers: [.meta], now: Self.now, options: options)
         #expect(limited.events.allSatisfy { MidasUsageSyncRollup.isRollup($0, deviceID: nil) })
-        #expect(limited.events.reduce(0) { $0 + ($1.values.tokens ?? 0) }
-            == full.events.reduce(0) { $0 + ($1.values.tokens ?? 0) })
+        let limitedTokens: Int = limited.events.reduce(0) { $0 + ($1.values.tokens ?? 0) }
+        let fullTokens: Int = full.events.reduce(0) { $0 + ($1.values.tokens ?? 0) }
+        #expect(limitedTokens == fullTokens)
         #expect(limited.excludedRecords == 0)
     }
 
