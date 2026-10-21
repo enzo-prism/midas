@@ -1,0 +1,398 @@
+"""Isolated lifecycle and doctor fixtures. No real launchd, accounts, or network devices."""
+import copy
+import contextlib
+import json
+import os
+from pathlib import Path
+import plistlib
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import types
+import unittest
+import uuid
+from unittest import mock
+
+import midas_sync_manage as manage
+import midas_usage_hub as hub
+
+
+class FakeLaunchd:
+    """A private launchd state machine; no real process or domain is changed."""
+    def __init__(self, plist, *, ghost_polls=0, old_transients=0, fail_new=False, no_gui=False, mismatch=False):
+        self.plist = plist
+        self.domain = "gui/" + str(os.getuid())
+        self.target = self.domain + "/" + manage.LABEL
+        self.current = plistlib.loads(plist.read_bytes())["ProgramArguments"]
+        self.ghost_polls = ghost_polls
+        self.remaining_ghosts = 0
+        self.unloading = False
+        self.old_transients = old_transients
+        self.fail_new = fail_new
+        self.no_gui = no_gui
+        self.mismatch = mismatch
+        self.now = 0
+        self.calls = []
+        self.attempts = {True: 0, False: 0}
+        self.real_run = subprocess.run
+
+    def run(self, args, **kwargs):
+        if args[0] != "/bin/launchctl":
+            return self.real_run(args, **kwargs)
+        self.calls.append(args)
+        action, value = args[1:3]
+        status, output, error = 0, "", ""
+        if action == "print" and value == self.domain:
+            if self.no_gui:
+                status, error = 125, "Could not find domain: PRIVATE-FIXTURE-SECRET"
+        elif action == "print" and value == self.target:
+            if self.unloading:
+                if self.remaining_ghosts:
+                    self.remaining_ghosts -= 1
+                else:
+                    self.current = None
+                    self.unloading = False
+            if self.current is None:
+                status, error = 113, "Could not find service"
+            else:
+                output = "arguments = {\n" + "\n".join(self.current) + "\n}\n"
+        elif action == "bootout":
+            assert value == self.target
+            self.unloading = True
+            self.remaining_ghosts = self.ghost_polls
+        elif action == "bootstrap":
+            assert value == self.domain and len(args) == 4 and args[3] == str(self.plist)
+            desired = plistlib.loads(self.plist.read_bytes())["ProgramArguments"]
+            is_new = "/runtimes/" in desired[0]
+            self.attempts[is_new] += 1
+            if (is_new and self.fail_new) or (not is_new and self.attempts[is_new] <= self.old_transients):
+                status, error = 5, "Bootstrap failed: 5: Input/output error PRIVATE-FIXTURE-SECRET"
+            else:
+                self.current = ["unexpected"] if self.mismatch else desired
+        else:
+            raise AssertionError("Unexpected launchctl command")
+        return subprocess.CompletedProcess(args, status, output, error)
+
+    def sleep(self, interval):
+        self.now += interval
+
+    @contextlib.contextmanager
+    def installed(self):
+        with mock.patch.object(manage.sys, "platform", "darwin"), \
+                mock.patch.object(manage.subprocess, "run", side_effect=self.run), \
+                mock.patch.object(manage.time, "monotonic", side_effect=lambda: self.now), \
+                mock.patch.object(manage.time, "sleep", side_effect=self.sleep):
+            yield self
+
+
+class ManagerTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="midas-manager-tests-")
+        self.root = Path(self.temp.name).resolve()
+        self.root.chmod(0o700)
+        self.support = self.root / "Midas"
+        self.support.mkdir(mode=0o700)
+        sync = self.support / "usage-sync"
+        sync.mkdir(mode=0o700)
+        self.device = str(uuid.uuid4()).upper()
+        self.peer = str(uuid.uuid4()).upper()
+        self.workspace = str(uuid.uuid4()).upper()
+        self.connection = {"endpoint": "http://127.0.0.1:8766", "deviceID": self.device,
+                           "deviceName": "Private fixture label", "workspaceID": self.workspace,
+                           "credential": "PRIVATE-FIXTURE-" + "a" * 48}
+        self.write_json(sync / "hub-connection.json", self.connection)
+        self.remote = {"protocolVersion": 2, "hubVersion": "fixture", "workspace": {"id": self.workspace},
+                       "checkedAt": manage.now(),
+                       "devices": [{"deviceID": self.device, "revision": 4, "eventCount": 8, "accountDayCount": 0, "supportsReceipts": True},
+                                   {"deviceID": self.peer, "revision": 3, "eventCount": 9, "accountDayCount": 0, "supportsReceipts": True}],
+                       "receipts": [{"deviceID": self.device, "checkedAt": manage.now(), "appliedRevisions": {self.device: 4, self.peer: 3}}, {"deviceID": self.peer, "checkedAt": manage.now(),
+                                     "appliedRevisions": {self.device: 4, self.peer: 3}}]}
+        self.app = self.root / "Midas.app"
+        (self.app / "Contents").mkdir(parents=True)
+        (self.app / "Contents/Info.plist").write_bytes(plistlib.dumps({
+            "CFBundleIdentifier": "com.designprism.midas", "CFBundleShortVersionString": "fixture", "CFBundleVersion": "131"}))
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    @staticmethod
+    def write_json(path, value):
+        path.write_bytes(manage.canonical(value))
+        path.chmod(0o600)
+
+    def receipt(self, **overrides):
+        result = {"outboxPending": False, "lastPublishedAt": manage.now(), "lastReceivedAt": manage.now(),
+                  "syncState": {"checkedAt": manage.now(), "acceptedLocalRevision": 4,
+                                "appliedRevisions": {self.device: 4, self.peer: 3}}}
+        result.update(overrides)
+        self.write_json(self.support / "usage-sync/sync-receipt.json", result)
+
+    def doctor(self):
+        with mock.patch.object(manage, "manifest", return_value=(self.remote, 2)):
+            return manage.doctor(self.support, app_path=self.app)
+
+    def test_cached_device_names_do_not_prove_sync(self):
+        self.write_json(self.support / "usage-sync/hub-state.json", {"publications": [{"deviceName": x} for x in ["Mac mini", "MacBook Pro", "Spark local runtime"]]})
+        report = self.doctor()
+        self.assertEqual(report["status"], "pending")
+        self.assertEqual(report["code"], "receipt_unavailable")
+        rendered = json.dumps(report)
+        self.assertNotIn(self.connection["credential"], rendered)
+        self.assertNotIn(self.connection["deviceName"], rendered)
+
+    def test_fresh_durable_checkpoint_is_healthy_and_production_identity(self):
+        self.receipt()
+        report = self.doctor()
+        self.assertEqual(report["status"], "healthy")
+        self.assertEqual(report["appVersion"], "fixture")
+        self.assertTrue(report["allReceiptCapableDevicesCaughtUp"])
+
+    def test_stale_pending_or_incomplete_receipts_are_not_healthy(self):
+        self.receipt(outboxPending=True)
+        self.assertEqual(self.doctor()["code"], "upload_pending")
+        self.receipt(syncState={"checkedAt": manage.now() - 900, "acceptedLocalRevision": 4,
+                                "appliedRevisions": {self.device: 4, self.peer: 3}})
+        self.assertEqual(self.doctor()["code"], "local_receipt_stale")
+        self.receipt(syncState={"checkedAt": manage.now(), "acceptedLocalRevision": 4,
+                                "appliedRevisions": {self.device: 4, self.peer: 2}})
+        self.assertEqual(self.doctor()["code"], "checkpoint_pending")
+
+    def test_first_missing_peer_receipt_is_not_caught_up(self):
+        self.receipt()
+        self.remote["receipts"] = self.remote["receipts"][:1]
+        self.assertFalse(self.doctor()["allReceiptCapableDevicesCaughtUp"])
+        with mock.patch.object(manage, "manifest", return_value=(self.remote, 2)):
+            report = manage.doctor(self.support, app_path=self.app, required_device_ids=[self.device, self.peer])
+        self.assertFalse(report["requiredDevicesCaughtUp"])
+
+    def test_stale_peer_heartbeat_does_not_prove_current_sync(self):
+        self.receipt()
+        self.remote["receipts"][1]["checkedAt"] = manage.now() - 900
+        self.assertFalse(self.doctor()["allReceiptCapableDevicesCaughtUp"])
+        with mock.patch.object(manage, "manifest", return_value=(self.remote, 2)):
+            report = manage.doctor(self.support, app_path=self.app, required_device_ids=[self.device, self.peer])
+        self.assertFalse(report["requiredDevicesCaughtUp"])
+
+    def test_small_clock_skew_is_tolerated_but_future_receipts_are_not(self):
+        self.receipt(syncState={"checkedAt": manage.now() + 5, "acceptedLocalRevision": 4,
+                                "appliedRevisions": {self.device: 4, self.peer: 3}})
+        self.remote["receipts"][1]["checkedAt"] = manage.now() + 5
+        self.assertTrue(self.doctor()["allReceiptCapableDevicesCaughtUp"])
+        self.assertEqual(self.doctor()["status"], "healthy")
+        self.remote["receipts"][1]["checkedAt"] = manage.now() + 900
+        self.assertFalse(self.doctor()["allReceiptCapableDevicesCaughtUp"])
+
+    def test_partial_resource_copy_is_rejected(self):
+        resources = self.root / "resources"
+        resources.mkdir()
+        for name in ("midas_usage_hub.py", "midas_sync_manage.py"):
+            (resources / name).write_text("pass\n")
+        self.write_json(resources / "resource-manifest.json", {"schemaVersion": 1, "sources": {}})
+        with self.assertRaises(manage.ManageError) as caught:
+            manage.verify_resources(resources)
+        self.assertEqual(caught.exception.code, "resource_verification_failed")
+
+    def test_arbitrary_remote_identifiers_cannot_enter_redacted_report(self):
+        self.receipt()
+        self.remote["devices"][0]["deviceID"] = self.connection["credential"]
+        with self.assertRaises(manage.ManageError) as caught:
+            self.doctor()
+        self.assertEqual(caught.exception.code, "invalid_operational_metadata")
+
+    def test_offline_report_never_claims_health(self):
+        self.receipt()
+        with mock.patch.object(manage, "manifest", side_effect=AssertionError("network called")):
+            self.assertEqual(manage.doctor(self.support, online=False, app_path=self.app)["status"], "unchecked")
+
+    def test_missing_production_app_does_not_report_healthy(self):
+        self.receipt()
+        (self.app / "Contents/Info.plist").unlink()
+        with self.assertRaises(manage.ManageError) as caught:
+            self.doctor()
+        self.assertEqual(caught.exception.code, "app_unavailable")
+
+    def test_wrong_app_and_unsafe_connection_fail_closed(self):
+        info = self.app / "Contents/Info.plist"
+        info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.example.wrong"}))
+        with self.assertRaises(manage.ManageError) as caught:
+            self.doctor()
+        self.assertEqual(caught.exception.code, "wrong_app_identity")
+        path = self.support / "usage-sync/hub-connection.json"
+        path.chmod(0o644)
+        with self.assertRaises(manage.ManageError):
+            manage.validated_connection(path)
+
+    def test_redirect_never_forwards_credentials(self):
+        with self.assertRaises(manage.ManageError) as caught:
+            manage.NoRedirect().redirect_request(None, None, 302, "redirect", {}, "https://other.ts.net/")
+        self.assertEqual(caught.exception.code, "redirect_rejected")
+
+    def prepare_hub(self):
+        root = self.support / "usage-hub"
+        root.mkdir(mode=0o700)
+        (root / "bin").mkdir(mode=0o700)
+        store = hub.Store.initialize(root / "state")
+        source = Path(hub.__file__).resolve()
+        target = root / "bin/midas_usage_hub.py"
+        target.write_bytes(source.read_bytes())
+        target.chmod(0o700)
+        agents = self.root / "LaunchAgents"
+        agents.mkdir(mode=0o755)
+        plist = agents / (manage.LABEL + ".plist")
+        payload = {"Label": manage.LABEL, "ProgramArguments": [sys.executable, "-B", str(target), "--state-dir", str(root / "state"), "serve", "--bind", "127.0.0.1", "--port", "8766"]}
+        plist.write_bytes(plistlib.dumps(payload))
+        plist.chmod(0o600)
+        runtime = self.root / "runtime"
+        (runtime / "bin").mkdir(mode=0o700, parents=True)
+        binary = runtime / "bin/python3"
+        binary.write_text("#!/bin/sh\nexec " + "'" + sys.executable.replace("'", "'\\''") + "'" + ' "$@"\n')
+        binary.chmod(0o700)
+        return root, store, source, target, runtime, plist
+
+    def test_reload_waits_for_unload_and_retries_transient_bootstrap_in_same_gui_domain(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        fake = FakeLaunchd(plist, ghost_polls=3, old_transients=2)
+        with fake.installed():
+            manage.reload_service(plist, root)
+        self.assertEqual(fake.attempts[False], 3)
+        self.assertGreaterEqual(fake.now, 1)
+        self.assertEqual(sum(call[1] == "bootout" for call in fake.calls), 1)
+        first_bootstrap = next(i for i, call in enumerate(fake.calls) if call[1] == "bootstrap")
+        self.assertGreater(first_bootstrap, 5)
+        self.assertEqual(fake.current, plistlib.loads(plist.read_bytes())["ProgramArguments"])
+
+    def test_reload_preserves_working_job_when_gui_domain_is_unavailable(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        fake = FakeLaunchd(plist, no_gui=True)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.reload_service(plist, root)
+        self.assertEqual(caught.exception.code, "gui_session_unavailable")
+        self.assertEqual(caught.exception.diagnostics["reason"], "domain_unavailable")
+        self.assertEqual(len(fake.calls), 1)
+        self.assertNotIn("PRIVATE-FIXTURE-SECRET", json.dumps(caught.exception.diagnostics))
+
+    def test_reload_does_not_accept_registered_old_or_different_arguments(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        fake = FakeLaunchd(plist, mismatch=True)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.reload_service(plist, root)
+        self.assertEqual(caught.exception.code, "service_configuration_mismatch")
+
+    def test_bootstrap_timeout_rolls_back_and_retries_restored_service_without_database_replacement(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        before_source, before_plist = target.read_bytes(), plist.read_bytes()
+        db_inode = store.path.stat().st_ino
+        fake = FakeLaunchd(plist, fail_new=True, old_transients=1)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.upgrade(root, source, runtime, plist)
+        self.assertEqual(caught.exception.code, "upgrade_rolled_back")
+        self.assertEqual(caught.exception.diagnostics["activation"]["code"], "service_reload_timeout")
+        self.assertEqual(caught.exception.diagnostics["activation"]["diagnostics"]["reason"], "input_output")
+        self.assertNotIn("PRIVATE-FIXTURE-SECRET", json.dumps(caught.exception.diagnostics))
+        self.assertGreater(fake.attempts[True], 1)
+        self.assertEqual(fake.attempts[False], 2)
+        self.assertEqual(fake.current, plistlib.loads(before_plist)["ProgramArguments"])
+        self.assertEqual(target.read_bytes(), before_source)
+        self.assertEqual(plist.read_bytes(), before_plist)
+        self.assertEqual(store.path.stat().st_ino, db_inode)
+
+    def test_failed_rollback_reports_only_sanitized_lifecycle_reasons(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        before_source, before_plist = target.read_bytes(), plist.read_bytes()
+        fake = FakeLaunchd(plist, fail_new=True, old_transients=10000)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.upgrade(root, source, runtime, plist)
+        self.assertEqual(caught.exception.code, "rollback_restart_failed")
+        for phase in ("activation", "rollback"):
+            self.assertEqual(caught.exception.diagnostics[phase]["code"], "service_reload_timeout")
+            self.assertEqual(caught.exception.diagnostics[phase]["diagnostics"]["reason"], "input_output")
+        self.assertNotIn("PRIVATE-FIXTURE-SECRET", json.dumps(caught.exception.diagnostics))
+        self.assertEqual(target.read_bytes(), before_source)
+        self.assertEqual(plist.read_bytes(), before_plist)
+
+    def test_service_health_wait_accounts_for_validated_startup_throttle_with_cap(self):
+        self.assertEqual(manage.service_startup_timeout({"ThrottleInterval": 30}), 45)
+        self.assertEqual(manage.service_startup_timeout({"ThrottleInterval": 0}), 45)
+        self.assertEqual(manage.service_startup_timeout({"ThrottleInterval": 300}), 60)
+        for invalid in (-1, True, "30", 4000):
+            with self.assertRaises(manage.ManageError):
+                manage.service_startup_timeout({"ThrottleInterval": invalid})
+
+    def test_upgrade_preserves_database_and_installs_private_runtime(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        with store.connect() as c:
+            before_workspace = hub.Store.workspace_in(c)
+        calls = []
+        result = manage.upgrade(root, source, runtime, plist, restart=lambda *args: calls.append(args), health=lambda: None)
+        self.assertEqual(result["status"], "healthy")
+        self.assertEqual(len(calls), 1)
+        payload = plistlib.loads(plist.read_bytes())
+        self.assertTrue(payload["ProgramArguments"][0].startswith(str(root / "runtimes")))
+        self.assertFalse("codex" in payload["ProgramArguments"][0].lower())
+        with store.connect() as c:
+            self.assertEqual(hub.Store.workspace_in(c), before_workspace)
+            self.assertEqual(c.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        self.assertEqual(len(list((root / "backups").glob("*/hub.sqlite3"))), 1)
+        self.assertEqual(target.read_bytes(), source.read_bytes())
+
+    def test_parallel_management_cannot_activate_two_versions(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        with manage.management_lock(root):
+            with self.assertRaises(manage.ManageError) as caught:
+                manage.upgrade(root, source, runtime, plist)
+        self.assertEqual(caught.exception.code, "management_busy")
+        self.assertFalse((root / "backups").exists())
+
+    def test_migration_rehearsal_rejects_changed_workspace_before_activation(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        before_source, before_plist, before_database = target.read_bytes(), plist.read_bytes(), store.path.read_bytes()
+        def bad_store(directory):
+            staged = hub.Store(directory)
+            def migrate():
+                staged.ensure_v2()
+                with staged.connect() as connection:
+                    connection.execute("UPDATE metadata SET value=?", (b"tampered",))
+            return types.SimpleNamespace(ensure_v2=migrate)
+        with mock.patch.object(manage, "load_hub", return_value=types.SimpleNamespace(Store=bad_store)):
+            with self.assertRaises(manage.ManageError) as caught:
+                manage.upgrade(root, source, runtime, plist, restart=lambda *args: self.fail("restart called"))
+        self.assertEqual(caught.exception.code, "migration_changed_legacy_state")
+        self.assertEqual(target.read_bytes(), before_source)
+        self.assertEqual(plist.read_bytes(), before_plist)
+        self.assertEqual(store.path.read_bytes(), before_database)
+
+    def test_failed_health_rolls_back_code_and_service_without_replacing_live_database(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        before_source, before_plist = target.read_bytes(), plist.read_bytes()
+        db_inode = store.path.stat().st_ino
+        calls = []
+        def failed_health():
+            with store.connect() as c:
+                c.execute("CREATE TABLE IF NOT EXISTS fixture_accepted_after_upgrade(value TEXT)")
+                c.execute("INSERT INTO fixture_accepted_after_upgrade VALUES ('preserve')")
+            raise manage.ManageError("injected_health_failure")
+        with self.assertRaises(manage.ManageError) as caught:
+            manage.upgrade(root, source, runtime, plist, restart=lambda *args: calls.append(args), health=failed_health)
+        self.assertEqual(caught.exception.code, "upgrade_rolled_back")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(target.read_bytes(), before_source)
+        self.assertEqual(plist.read_bytes(), before_plist)
+        self.assertEqual(store.path.stat().st_ino, db_inode)
+        with store.connect() as c:
+            self.assertEqual(c.execute("SELECT value FROM fixture_accepted_after_upgrade").fetchone()[0], "preserve")
+
+    def test_runtime_external_symlink_and_public_listener_rejected(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        (runtime / "leak").symlink_to(self.root)
+        with self.assertRaises(manage.ManageError):
+            manage.runtime_digest(runtime)
+        payload = plistlib.loads(plist.read_bytes())
+        payload["ProgramArguments"][-3] = "0.0.0.0"
+        plist.write_bytes(plistlib.dumps(payload))
+        with self.assertRaises(manage.ManageError):
+            manage.service_payload(plist, root)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.48.4**, build **130**. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.0**, build **132**. This sync update is under validation; the last published binary is recorded below. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -35,6 +35,20 @@ ships two feeds, both written by `Scripts/make_midas_appcast.py`:
 Installed Midas reads `/releases/latest/download/<feed>`. Users who install 0.37.0 manually keep
 their settings (adopted on first launch) and update automatically from then on. Widgets must be
 re-added once because the app identity changed.
+
+## 0.49.0 changes: durable incremental sync
+
+Version 0.49.0, build 132, retains canonical event identities in private pages and
+exchanges only changed history pages through the existing Tailscale hub. Expected-base
+revisions, durable outboxes and explicit applied receipts protect interrupted uploads,
+restored backups and peer cache recovery. Checked, accepted, applied and peer-received
+states are separate from source coverage. Old aggregate history remains preserved with
+its uncertainty; source absence never deletes history.
+
+The app bundles a managed hub helper and relocatable Python runtime, with database
+backup, migration rehearsal, health checks and code rollback. The hub retains legacy
+collector support. See [operations](SYNC_OPERATIONS.md) and [protocol](SYNC_V2_PROTOCOL.md).
+Validation and installed release evidence will be recorded after the final checks.
 
 ## 0.48.4 changes: complete cross-Mac sync history
 

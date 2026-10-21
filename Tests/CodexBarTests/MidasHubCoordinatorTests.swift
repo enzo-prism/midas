@@ -15,7 +15,10 @@ struct MidasHubCoordinatorTests {
         let coordinator = fixture.coordinator(identity: identity)
         try await coordinator.connect(hub: fixture.connection)
         coordinator.deviceName = "An unapproved rename"
-        self.collect(on: coordinator, event: "mini", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "mini",
+            tokens: 100)
         await coordinator.syncNow()
 
         #expect(coordinator.isEnabled)
@@ -34,7 +37,9 @@ struct MidasHubCoordinatorTests {
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
         #expect(coordinator.isEnabled)
         identity.value.cloudAccountFingerprint = "identity-unavailable"
-        let restarted = fixture.coordinator(restore: true, identity: identity)
+        let restarted = fixture.coordinator(
+            restore: true,
+            identity: identity)
         #expect(restarted.isEnabled)
         #expect(restarted.hasConnection)
         #expect(restarted.snapshots[.codex]?.sessionTokens == 100)
@@ -43,24 +48,38 @@ struct MidasHubCoordinatorTests {
     @Test func offlineOutboxAndReceivedHistorySurviveRestartThenConverge() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
-        let peer = self.publication(workspace: fixture.workspace, deviceID: UUID(), event: "spark", tokens: 200)
+        let peer = self.publication(
+            workspace: fixture.workspace,
+            deviceID: UUID(),
+            event: "spark",
+            tokens: 200)
         await fixture.hub.setPublications([peer])
         let coordinator = fixture.coordinator()
         try await coordinator.connect(hub: fixture.connection)
-        self.collect(on: coordinator, event: "first", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "first",
+            tokens: 100)
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
 
         await fixture.hub.setFailure(.unavailable)
-        self.collect(on: coordinator, event: "offline", tokens: 50)
+        self.collect(
+            on: coordinator,
+            event: "offline",
+            tokens: 50)
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
-        #expect(coordinator.status.contains("last received"))
+        #expect(coordinator.hasPendingUpload)
+        #expect(coordinator.issue != nil)
         let restarted = fixture.coordinator(restore: true)
         #expect(restarted.hasConnection)
         #expect(restarted.snapshots[.codex]?.sessionTokens == 300)
         #expect(restarted.devices.count == 2)
-        self.collect(on: restarted, event: nil, tokens: 0)
+        self.collect(
+            on: restarted,
+            event: nil,
+            tokens: 0)
         await restarted.syncNow()
         #expect(restarted.snapshots[.codex]?.sessionTokens == 300)
 
@@ -78,7 +97,10 @@ struct MidasHubCoordinatorTests {
         defer { fixture.cleanup() }
         let coordinator = fixture.coordinator()
         try await coordinator.connect(hub: fixture.connection)
-        self.collect(on: coordinator, event: "saved", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "saved",
+            tokens: 100)
         await coordinator.syncNow()
         await fixture.hub.setFailure(.unauthorized)
         await coordinator.syncNow()
@@ -89,7 +111,9 @@ struct MidasHubCoordinatorTests {
         #expect(!(coordinator.issue ?? "").contains(fixture.connection.credential))
         let preferences = String(describing: fixture.defaults.dictionaryRepresentation())
         #expect(!preferences.contains(fixture.connection.credential))
-        let cache = try #require(String(bytes: Data(contentsOf: fixture.hubCache), encoding: .utf8))
+        let cache = try #require(String(
+            bytes: Data(contentsOf: fixture.checkpoint),
+            encoding: .utf8))
         #expect(!cache.contains(fixture.connection.credential))
         let attributes = try FileManager.default.attributesOfItem(atPath: fixture.connectionFile.path)
         #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
@@ -102,10 +126,15 @@ struct MidasHubCoordinatorTests {
         defer { fixture.cleanup() }
         let coordinator = fixture.coordinator()
         try await coordinator.connect(hub: fixture.connection)
-        self.collect(on: coordinator, event: "saved", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "saved",
+            tokens: 100)
         await coordinator.syncNow()
-        let previousCache = try Data(contentsOf: fixture.hubCache)
-        await fixture.hub.replaceWorkspace(MidasUsageSyncWorkspace(id: fixture.workspace.id, createdAt: Self.now))
+        let previousCache = try Data(contentsOf: fixture.checkpoint)
+        await fixture.hub.replaceWorkspace(MidasUsageSyncWorkspace(
+            id: fixture.workspace.id,
+            createdAt: Self.now))
         await coordinator.syncNow()
 
         #expect(!coordinator.isEnabled)
@@ -113,10 +142,7 @@ struct MidasHubCoordinatorTests {
         #expect(coordinator.snapshots.isEmpty)
         #expect(coordinator.issue?.contains("workspace changed") == true)
         // The last received ledger is not replaced by the untrusted response.
-        struct SavedLedger: Decodable { let publications: [MidasUsageSyncPublication] }
-        let cache = try JSONDecoder().decode(SavedLedger.self, from: Data(contentsOf: fixture.hubCache))
-        let previous = try JSONDecoder().decode(SavedLedger.self, from: previousCache)
-        #expect(cache.publications == previous.publications)
+        #expect(try Data(contentsOf: fixture.checkpoint) == previousCache)
         let restarted = fixture.coordinator()
         await #expect(throws: MidasUsageSyncError.wrongWorkspace) {
             try await restarted.connect(hub: fixture.connection)
@@ -144,17 +170,25 @@ struct MidasHubCoordinatorTests {
         defer { fixture.cleanup() }
         let coordinator = fixture.coordinator()
         try await coordinator.connect(hub: fixture.connection)
-        self.collect(on: coordinator, event: "saved", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "saved",
+            tokens: 100)
         await coordinator.syncNow()
         let replacement = MidasUsageHubConnection(
             endpoint: fixture.connection.endpoint,
             deviceID: fixture.connection.deviceID,
             deviceName: fixture.connection.deviceName,
-            credential: String(repeating: "b", count: 48),
+            credential: String(
+                repeating: "b",
+                count: 48),
             workspaceID: fixture.workspace.id)
         try await coordinator.connect(hub: replacement)
         #expect(try MidasUsageHubConnectionFile.load(at: fixture.connectionFile) == replacement)
-        self.collect(on: coordinator, event: nil, tokens: 0)
+        self.collect(
+            on: coordinator,
+            event: nil,
+            tokens: 0)
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
     }
@@ -162,49 +196,118 @@ struct MidasHubCoordinatorTests {
     @Test func switchingTransportsRetainsSeparateOfflineOutboxes() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
-        let folder = fixture.directory.appendingPathComponent("shared", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        let folder = fixture.directory.appendingPathComponent(
+            "shared",
+            isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: folder,
+            withIntermediateDirectories: false)
         let coordinator = fixture.coordinator()
         try await coordinator.connect(folder: folder)
-        self.collect(on: coordinator, event: "folder", tokens: 10)
+        self.collect(
+            on: coordinator,
+            event: "folder",
+            tokens: 10)
         await coordinator.syncNow()
         try await coordinator.connect(hub: fixture.connection)
-        self.collect(on: coordinator, event: "hub", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "hub",
+            tokens: 100)
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
         try await coordinator.connect(folder: folder)
-        self.collect(on: coordinator, event: nil, tokens: 0)
+        self.collect(
+            on: coordinator,
+            event: nil,
+            tokens: 0)
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 10)
     }
 
-    @Test func changingTransportRejectsALateHubResponse() async throws {
+    @Test func changingTransportPreservesTheWorkingConnectionUntilReplacement() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         let gate = Gate()
         let hub = fixture.hub
         let coordinator = fixture.coordinator(exchange: { connection, workspace, local, now in
             await gate.suspend()
-            return try await hub.exchange(connection: connection, workspace: workspace, local: local, now: now)
+            return try await hub.exchange(
+                connection: connection,
+                workspace: workspace,
+                local: local,
+                now: now)
         })
         try await coordinator.connect(hub: fixture.connection)
-        self.collect(on: coordinator, event: "late", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "late",
+            tokens: 100)
         let sync = Task { await coordinator.syncNow() }
         await gate.waitUntilBlocked()
         coordinator.selectTransport(.folder)
         await gate.release()
         await sync.value
-        #expect(coordinator.transport == .folder)
-        #expect(coordinator.snapshots.isEmpty)
+        #expect(coordinator.transport == .tailscaleHub)
+        #expect(coordinator.selectedTransport == .folder)
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
         #expect(!coordinator.isSyncing)
-        #expect(!coordinator.isEnabled)
+        #expect(coordinator.isEnabled)
+    }
+
+    @Test(arguments: [false, true])
+    func replacementDrainBlocksNewChecksUntilThePreviousWriterFinishes(disableWhileDraining: Bool) async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        let gate = Gate()
+        var collections = 0
+        coordinator.makeLocalUsage = { workspace, now in
+            collections += 1
+            await gate.suspend()
+            return MidasUsageSyncLocalUsage(events: [Self.event(
+                workspace: workspace,
+                name: "retained",
+                tokens: 100,
+                now: now)])
+        }
+        let oldSync = Task { await coordinator.syncNow() }
+        await gate.waitUntilBlocked()
+        let replacement = Task { try await coordinator.connect(hub: fixture.connection) }
+        for _ in 0..<1000 {
+            if coordinator.isReplacingConnection { break }
+            await Task.yield()
+        }
+        #expect(coordinator.isReplacingConnection)
+        let readsBefore = await fixture.hub.readRequests
+        await coordinator.syncNow()
+        #expect(await fixture.hub.readRequests == readsBefore)
+        #expect(collections == 1)
+        if disableWhileDraining { coordinator.isEnabled = false }
+        await gate.release()
+        await oldSync.value
+        if disableWhileDraining {
+            await #expect(throws: CancellationError.self) { try await replacement.value }
+            #expect(!coordinator.isEnabled)
+            #expect(!coordinator.isReplacingConnection)
+            return
+        }
+        try await replacement.value
+        #expect(!coordinator.isReplacingConnection)
+        #expect(coordinator.hasConnection)
+        await coordinator.syncNow()
+        #expect(collections == 2)
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
     }
 
     @Test func connectionFileImportCopiesTheEnrollmentToPrivateLocalStorage() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         let imported = fixture.directory.appendingPathComponent("enrollment.json")
-        try MidasUsageHubConnectionFile.save(fixture.connection, to: imported)
+        try MidasUsageHubConnectionFile.save(
+            fixture.connection,
+            to: imported)
         let coordinator = fixture.coordinator()
         try await coordinator.connect(hubConnectionFile: imported)
         #expect(coordinator.hasConnection)
@@ -220,15 +323,19 @@ struct MidasHubCoordinatorTests {
         defer { fixture.cleanup() }
         try fixture.installConnection()
         let coordinator = fixture.coordinator(
-            restore: true, identity: Identity(cloudAccountFingerprint: "identity-unavailable"))
-        self.collect(on: coordinator, event: "installed", tokens: 100)
+            restore: true,
+            identity: Identity(cloudAccountFingerprint: "identity-unavailable"))
+        self.collect(
+            on: coordinator,
+            event: "installed",
+            tokens: 100)
         #expect(coordinator.hasConnection)
         #expect(!FileManager.default.fileExists(atPath: fixture.hubCache.path))
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
         #expect(coordinator.lastPublishedAt == Self.now)
         #expect(coordinator.issue == nil)
-        #expect(FileManager.default.fileExists(atPath: fixture.hubCache.path))
+        #expect(FileManager.default.fileExists(atPath: fixture.checkpoint.path))
         let restarted = fixture.coordinator(restore: true)
         #expect(restarted.snapshots[.codex]?.sessionTokens == 100)
     }
@@ -249,13 +356,16 @@ struct MidasHubCoordinatorTests {
         #expect(!FileManager.default.fileExists(atPath: fixture.hubCache.path))
         #expect(coordinator.status.contains("retry automatically"))
         await fixture.hub.setFailure(nil)
-        self.collect(on: coordinator, event: "retry", tokens: 50)
+        self.collect(
+            on: coordinator,
+            event: "retry",
+            tokens: 50)
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 50)
         #expect(coordinator.issue == nil)
     }
 
-    @Test func installedConnectionNeverBootstrapsOverACorruptOrMismatchedCache() async throws {
+    @Test func corruptPeerCacheRebuildsWithoutReenrollmentAndKeepsOriginalBytes() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         try fixture.installConnection()
@@ -263,33 +373,112 @@ struct MidasHubCoordinatorTests {
         try corrupt.write(to: fixture.hubCache)
         let coordinator = fixture.coordinator(restore: true)
         await coordinator.syncNow()
-        #expect(!coordinator.hasConnection)
-        #expect(coordinator.issue?.contains("could not be validated") == true)
+        #expect(coordinator.hasConnection)
+        #expect(coordinator.issue == nil)
         #expect(try Data(contentsOf: fixture.hubCache) == corrupt)
-        let firstRequests = await fixture.hub.workspaceRequests
-        #expect(firstRequests == 0)
-
-        try FileManager.default.removeItem(at: fixture.hubCache)
-        try await coordinator.connect(hub: fixture.connection)
+        #expect(FileManager.default.fileExists(atPath: fixture.checkpoint.path))
         let saved = try #require(JSONSerialization
-            .jsonObject(with: Data(contentsOf: fixture.hubCache)) as? [String: Any])
+            .jsonObject(with: Data(contentsOf: fixture.checkpoint)) as? [String: Any])
         var mismatched = saved
         mismatched["accountFingerprint"] = "another enrollment"
         let encoded = try JSONSerialization.data(withJSONObject: mismatched)
-        try encoded.write(to: fixture.hubCache)
+        try encoded.write(to: fixture.checkpoint)
         let requestsBeforeRestore = await fixture.hub.workspaceRequests
         let restarted = fixture.coordinator(restore: true)
         await restarted.syncNow()
         #expect(!restarted.hasConnection)
-        #expect(try Data(contentsOf: fixture.hubCache) == encoded)
+        #expect(try Data(contentsOf: fixture.checkpoint) == encoded)
         let requestsAfterRestore = await fixture.hub.workspaceRequests
         #expect(requestsAfterRestore == requestsBeforeRestore)
+    }
+
+    @Test func unchangedHealthyCheckAdvancesFreshnessWithoutRewritingCheckpoint() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        self.collect(
+            on: coordinator,
+            event: "stable",
+            tokens: 100)
+        await coordinator.syncNow()
+        let checkpoint = try Data(contentsOf: fixture.checkpoint)
+        let before = try FileManager.default
+            .attributesOfItem(atPath: fixture.checkpoint.path)[.modificationDate] as? Date
+        coordinator.makeLocalUsage = nil
+        await coordinator.syncNow()
+        #expect(coordinator.lastCheckedAt == Self.now)
+        #expect(try Data(contentsOf: fixture.checkpoint) == checkpoint)
+        let after = try FileManager.default
+            .attributesOfItem(atPath: fixture.checkpoint.path)[.modificationDate] as? Date
+        #expect(before == after)
+    }
+
+    @Test func failedCheckpointCannotAcknowledgeAnUnchangedRetryUntilItIsDurable() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let writes = CacheWriteControl()
+        let receipts = ReceiptCounter()
+        let hub = fixture.hub
+        let coordinator = fixture.coordinator(
+            exchange: { connection, workspace, local, now in
+                let result = try await hub.exchange(
+                    connection: connection,
+                    workspace: workspace,
+                    local: local,
+                    now: now)
+                return MidasUsageHubExchange(
+                    workspace: result.workspace,
+                    publications: result.publications,
+                    publicationSucceeded: result.publicationSucceeded,
+                    unavailableFiles: 0,
+                    rejectedFiles: 0,
+                    syncState: MidasUsageHubSyncState(
+                        checkedAt: now,
+                        appliedRevisions: [connection.deviceID
+                            .uuidString: result.publications.count]))
+            },
+            acknowledge: { _, _, _ in await receipts.record(); return [] },
+            cacheWriter: { data, url in
+                try writes.write(
+                    data,
+                    to: url)
+            })
+        try await coordinator.connect(hub: fixture.connection)
+        self.collect(
+            on: coordinator,
+            event: "local",
+            tokens: 100)
+        await coordinator.syncNow()
+        coordinator.makeLocalUsage = nil
+        let before = await receipts.count
+        let acceptedOwnHead = await hub.publication(for: fixture.connection.deviceID)
+        let ownHead = try #require(acceptedOwnHead)
+        await fixture.hub.setPublications([ownHead, self.publication(
+            workspace: fixture.workspace,
+            deviceID: UUID(),
+            event: "new-peer",
+            tokens: 400)])
+        writes.setFailure(true)
+        await coordinator.syncNow()
+        #expect(await receipts.count == before)
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
+        writes.setFailure(false)
+        await coordinator.syncNow()
+        #expect(await receipts.count == before + 1)
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 500)
+        let restarted = fixture.coordinator(restore: true)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 500)
     }
 
     @Test func firstSyncReceivesExistingTotalsBeforeTheSlowLocalScan() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
-        let peer = self.publication(workspace: fixture.workspace, deviceID: UUID(), event: "peer", tokens: 200)
+        let peer = self.publication(
+            workspace: fixture.workspace,
+            deviceID: UUID(),
+            event: "peer",
+            tokens: 200)
         await fixture.hub.setPublications([peer])
         let coordinator = fixture.coordinator()
         try await coordinator.connect(hub: fixture.connection)
@@ -297,7 +486,10 @@ struct MidasHubCoordinatorTests {
         coordinator.makeLocalUsage = { workspace, now in
             await gate.suspend()
             return MidasUsageSyncLocalUsage(events: [Self.event(
-                workspace: workspace, name: "mini", tokens: 100, now: now)])
+                workspace: workspace,
+                name: "mini",
+                tokens: 100,
+                now: now)])
         }
         let sync = Task { await coordinator.syncNow() }
         await gate.waitUntilBlocked()
@@ -309,16 +501,23 @@ struct MidasHubCoordinatorTests {
         await sync.value
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
         #expect(coordinator.lastPublishedAt == Self.now)
-        self.collect(on: coordinator, event: nil, tokens: 0)
+        self.collect(
+            on: coordinator,
+            event: nil,
+            tokens: 0)
         await coordinator.syncNow()
         let reads = await fixture.hub.readRequests
-        #expect(reads == 1)
+        #expect(reads == 2)
     }
 
     @Test func readOnlyAcknowledgementIsRejectedWhileLocalCollectionContinues() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
-        let peer = self.publication(workspace: fixture.workspace, deviceID: UUID(), event: "peer", tokens: 900)
+        let peer = self.publication(
+            workspace: fixture.workspace,
+            deviceID: UUID(),
+            event: "peer",
+            tokens: 900)
         let hub = fixture.hub
         let coordinator = fixture.coordinator(exchange: { connection, workspace, local, now in
             if local == nil {
@@ -329,15 +528,23 @@ struct MidasHubCoordinatorTests {
                     unavailableFiles: 0,
                     rejectedFiles: 0)
             }
-            return try await hub.exchange(connection: connection, workspace: workspace, local: local, now: now)
+            return try await hub.exchange(
+                connection: connection,
+                workspace: workspace,
+                local: local,
+                now: now)
         })
         try await coordinator.connect(hub: fixture.connection)
-        self.collect(on: coordinator, event: "mini", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "mini",
+            tokens: 100)
         await coordinator.syncNow()
-        #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
-        #expect(coordinator.devices.count == 1)
+        #expect(coordinator.snapshots.isEmpty)
+        #expect(coordinator.devices.isEmpty)
         #expect(coordinator.lastReceivedAt == nil)
-        #expect(coordinator.lastPublishedAt == Self.now)
+        #expect(coordinator.lastPublishedAt == nil)
+        #expect(coordinator.hasPendingUpload)
     }
 
     @Test func failedColdReadNeverAcknowledgesOrDiscardsTheOfflineOutbox() async throws {
@@ -346,48 +553,81 @@ struct MidasHubCoordinatorTests {
         let coordinator = fixture.coordinator()
         try await coordinator.connect(hub: fixture.connection)
         await fixture.hub.setFailure(.unavailable)
-        self.collect(on: coordinator, event: "offline", tokens: 100)
+        self.collect(
+            on: coordinator,
+            event: "offline",
+            tokens: 100)
         await coordinator.syncNow()
-        struct SavedOutbox: Decodable { let pendingLocal: MidasUsageSyncPublication? }
-        let before = try JSONDecoder().decode(SavedOutbox.self, from: Data(contentsOf: fixture.hubCache))
-        #expect(before.pendingLocal?.events.count == 1)
+        struct SavedOutbox: Decodable { let revision: String; let pending: Bool }
+        let outboxURL = fixture.directory.appendingPathComponent("hub-outbox.json")
+        let before = try JSONDecoder().decode(SavedOutbox.self, from: Data(contentsOf: outboxURL))
+        #expect(before.pending)
+        let store = try MidasUsageCanonicalStore(root: fixture.directory.appendingPathComponent("hub-outbox-records"))
+        let pending = try store.load(
+            workspaceID: fixture.workspace.id,
+            deviceID: fixture.connection.deviceID,
+            revision: before.revision,
+            now: Self.now)
+        #expect(pending?.events.count == 1)
         let restarted = fixture.coordinator(restore: true)
         restarted.makeLocalUsage = { _, _ in throw CancellationError() }
         await restarted.syncNow()
-        let after = try JSONDecoder().decode(SavedOutbox.self, from: Data(contentsOf: fixture.hubCache))
-        #expect(after.pendingLocal == before.pendingLocal)
+        let after = try JSONDecoder().decode(SavedOutbox.self, from: Data(contentsOf: outboxURL))
+        #expect(after.revision == before.revision)
+        #expect(after.pending)
         #expect(restarted.lastPublishedAt == nil)
         #expect(restarted.snapshots.isEmpty)
     }
 
-    private func collect(on coordinator: MidasUsageSyncCoordinator, event: String?, tokens: Int) {
+    private func collect(
+        on coordinator: MidasUsageSyncCoordinator,
+        event: String?,
+        tokens: Int)
+    {
         coordinator.makeLocalUsage = { workspace, now in
             guard let event else { return MidasUsageSyncLocalUsage() }
             return MidasUsageSyncLocalUsage(events: [Self.event(
-                workspace: workspace, name: event, tokens: tokens, now: now)])
+                workspace: workspace,
+                name: event,
+                tokens: tokens,
+                now: now)])
         }
     }
 
-    private static func event(
-        workspace: MidasUsageSyncWorkspace, name: String, tokens: Int, now: Date) -> MidasUsageSyncEvent
+    private nonisolated static func event(
+        workspace: MidasUsageSyncWorkspace,
+        name: String,
+        tokens: Int,
+        now: Date) -> MidasUsageSyncEvent
     {
         MidasUsageSyncEvent(
-            id: workspace.opaqueID(provider: .codex, components: ["synthetic", name]),
+            id: workspace.opaqueID(
+                provider: .codex,
+                components: ["synthetic", name]),
             provider: .codex,
             day: MidasUsageSyncPublication.day(now),
             observedAt: now,
-            values: .init(tokens: tokens, costUSD: 1))
+            values: .init(
+                tokens: tokens,
+                costUSD: 1))
     }
 
     private func publication(
-        workspace: MidasUsageSyncWorkspace, deviceID: UUID, event: String, tokens: Int) -> MidasUsageSyncPublication
+        workspace: MidasUsageSyncWorkspace,
+        deviceID: UUID,
+        event: String,
+        tokens: Int) -> MidasUsageSyncPublication
     {
         MidasUsageSyncPublication(
             workspaceID: workspace.id,
             deviceID: deviceID,
             deviceName: "Spark",
             publishedAt: Self.now,
-            events: [Self.event(workspace: workspace, name: event, tokens: tokens, now: Self.now)])
+            events: [Self.event(
+                workspace: workspace,
+                name: event,
+                tokens: tokens,
+                now: Self.now)])
     }
 
     @MainActor
@@ -395,7 +635,9 @@ struct MidasHubCoordinatorTests {
         var value: MidasUsageSyncEnvironmentIdentity
 
         init(cloudAccountFingerprint: String = "no-icloud-account") {
-            self.value = .init(deviceBinding: "synthetic-mini", cloudAccountFingerprint: cloudAccountFingerprint)
+            self.value = .init(
+                deviceBinding: "synthetic-mini",
+                cloudAccountFingerprint: cloudAccountFingerprint)
         }
     }
 
@@ -404,6 +646,10 @@ struct MidasHubCoordinatorTests {
         let directory: URL
         let cache: URL
         let hubCache: URL
+        var checkpoint: URL {
+            self.directory.appendingPathComponent("hub-checkpoint-v2.json")
+        }
+
         let connectionFile: URL
         let suite: String
         let defaults: UserDefaults
@@ -418,10 +664,16 @@ struct MidasHubCoordinatorTests {
                 throw POSIXError(.ENOENT)
             }
             defer { Darwin.free(path) }
-            self.directory = URL(fileURLWithPath: String(cString: path), isDirectory: true)
-                .appendingPathComponent(self.suite, isDirectory: true)
+            self.directory = URL(
+                fileURLWithPath: String(cString: path),
+                isDirectory: true)
+                .appendingPathComponent(
+                    self.suite,
+                    isDirectory: true)
             try FileManager.default.createDirectory(
-                at: self.directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+                at: self.directory,
+                withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700])
             self.cache = self.directory.appendingPathComponent("state.json")
             self.hubCache = self.directory.appendingPathComponent("hub-state.json")
             self.connectionFile = self.directory.appendingPathComponent("hub-connection.json")
@@ -430,7 +682,9 @@ struct MidasHubCoordinatorTests {
                 endpoint: URL(string: "https://mini.synthetic.ts.net")!,
                 deviceID: UUID(),
                 deviceName: "Mac mini",
-                credential: String(repeating: "a", count: 48),
+                credential: String(
+                    repeating: "a",
+                    count: 48),
                 workspaceID: self.workspace.id)
             self.hub = Hub(workspace: self.workspace)
         }
@@ -440,7 +694,14 @@ struct MidasHubCoordinatorTests {
             identity: Identity = Identity(),
             exchange: (@Sendable (
                 MidasUsageHubConnection, MidasUsageSyncWorkspace, MidasUsageSyncPublication?,
-                Date) async throws -> MidasUsageHubExchange)? = nil) -> MidasUsageSyncCoordinator
+                Date) async throws -> MidasUsageHubExchange)? = nil,
+            acknowledge: @escaping @Sendable (
+                MidasUsageHubConnection,
+                MidasUsageSyncWorkspace,
+                MidasUsageHubSyncState) async throws
+                -> [MidasUsageHubPeerReceipt] = { _, _, _ in [] },
+            cacheWriter: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(to: $1) })
+            -> MidasUsageSyncCoordinator
         {
             let hub = self.hub
             return MidasUsageSyncCoordinator(
@@ -452,15 +713,27 @@ struct MidasHubCoordinatorTests {
                 hubConnectionURL: self.connectionFile,
                 hubWorkspaceLoader: { _ in try await hub.loadWorkspace() },
                 hubExchange: exchange ?? { connection, workspace, local, now in
-                    try await hub.exchange(connection: connection, workspace: workspace, local: local, now: now)
+                    try await hub.exchange(
+                        connection: connection,
+                        workspace: workspace,
+                        local: local,
+                        now: now)
                 },
-                currentTime: { MidasHubCoordinatorTests.now })
+                hubAcknowledge: acknowledge,
+                currentTime: { MidasHubCoordinatorTests.now },
+                cacheWriter: cacheWriter)
         }
 
         func installConnection() throws {
-            try MidasUsageHubConnectionFile.save(self.connection, to: self.connectionFile)
-            self.defaults.set(MidasUsageSyncTransport.tailscaleHub.rawValue, forKey: "midasUsageSyncTransport")
-            self.defaults.set(true, forKey: "midasUsageSyncEnabled")
+            try MidasUsageHubConnectionFile.save(
+                self.connection,
+                to: self.connectionFile)
+            self.defaults.set(
+                MidasUsageSyncTransport.tailscaleHub.rawValue,
+                forKey: "midasUsageSyncTransport")
+            self.defaults.set(
+                true,
+                forKey: "midasUsageSyncEnabled")
         }
 
         func cleanup() {
@@ -469,12 +742,36 @@ struct MidasHubCoordinatorTests {
         }
     }
 
+    private final class CacheWriteControl: @unchecked Sendable {
+        private let lock = NSLock()
+        private var failing = false
+        func setFailure(_ failing: Bool) {
+            self.lock.withLock { self.failing = failing }
+        }
+
+        func write(_ data: Data, to url: URL) throws {
+            try self.lock.withLock {
+                if self.failing { throw CocoaError(.fileWriteNoPermission) }
+                try data.write(to: url)
+            }
+        }
+    }
+
+    private actor ReceiptCounter {
+        private(set) var count = 0
+        func record() {
+            self.count += 1
+        }
+    }
+
     private actor Gate {
         private var blocked = false
+        private var released = false
         private var releaseContinuation: CheckedContinuation<Void, Never>?
         private var observer: CheckedContinuation<Void, Never>?
 
         func suspend() async {
+            if self.released { return }
             self.blocked = true
             self.observer?.resume()
             self.observer = nil
@@ -487,6 +784,7 @@ struct MidasHubCoordinatorTests {
         }
 
         func release() {
+            self.released = true
             self.releaseContinuation?.resume()
             self.releaseContinuation = nil
         }
@@ -509,6 +807,10 @@ struct MidasHubCoordinatorTests {
             self.workspace = workspace
         }
 
+        func publication(for deviceID: UUID) -> MidasUsageSyncPublication? {
+            self.publications.first { $0.deviceID == deviceID }
+        }
+
         func setFailure(_ failure: MidasUsageHubError?) {
             self.failure = failure
         }
@@ -529,7 +831,9 @@ struct MidasHubCoordinatorTests {
         {
             if let failure { throw failure }
             if let local {
-                try local.validate(workspaceID: workspace.id, now: now)
+                try local.validate(
+                    workspaceID: workspace.id,
+                    now: now)
                 #expect(local.deviceID == connection.deviceID)
                 #expect(local.deviceName == connection.deviceName)
                 self.publications.removeAll { $0.deviceID == local.deviceID }
@@ -544,5 +848,142 @@ struct MidasHubCoordinatorTests {
                 unavailableFiles: 0,
                 rejectedFiles: 0)
         }
+    }
+}
+
+extension MidasHubCoordinatorTests {
+    @Test func concurrentReplacementWaitsForTheSameOriginalWriter() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        let gate = Gate()
+        coordinator.makeLocalUsage = { _, _ in await gate.suspend(); return MidasUsageSyncLocalUsage() }
+        let sync = Task { await coordinator.syncNow() }
+        await gate.waitUntilBlocked()
+        let first = Task { try await coordinator.connect(hub: fixture.connection) }
+        for _ in 0..<1000 {
+            if coordinator.isReplacingConnection { break }; await Task.yield()
+        }
+        var secondCompleted = false
+        let second = Task { try await coordinator.connect(hub: fixture.connection); secondCompleted = true }
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+        #expect(!secondCompleted)
+        await gate.release()
+        await sync.value
+        await #expect(throws: CancellationError.self) { try await first.value }
+        try await second.value
+        #expect(secondCompleted)
+        #expect(!coordinator.isReplacingConnection)
+    }
+
+    @Test func malformedCriticalOutboxIsPreservedAndCannotBeOverwrittenByAnotherScan() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        await fixture.hub.setFailure(.unavailable)
+        self.collect(on: coordinator, event: "only-unpublished-copy", tokens: 100)
+        await coordinator.syncNow()
+        let outboxURL = fixture.directory.appendingPathComponent("hub-outbox.json")
+        let malformed = Data("damaged metadata".utf8)
+        try malformed.write(to: outboxURL)
+        let restarted = fixture.coordinator(restore: true)
+        var scans = 0
+        restarted.makeLocalUsage = { _, _ in scans += 1; return MidasUsageSyncLocalUsage() }
+        await fixture.hub.setFailure(nil)
+        await restarted.syncNow()
+        #expect(scans == 0)
+        #expect(restarted.outboxRequiresRepair)
+        #expect(restarted.hasPendingUpload)
+        #expect(restarted.issue?.contains("queue needs repair") == true)
+        #expect(restarted.lastPublishedAt == nil)
+        #expect(try Data(contentsOf: outboxURL) == malformed)
+        let store = try MidasUsageCanonicalStore(root: fixture.directory.appendingPathComponent("hub-outbox-records"))
+        let original = try store.load(
+            workspaceID: fixture.workspace.id,
+            deviceID: fixture.connection.deviceID,
+            now: Self.now)
+        #expect(original?.events.count == 1)
+    }
+
+    @Test func authoritativeV2OwnHeadWinsOverTheOriginalUploadInput() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let hub = fixture.hub
+        let coordinator = fixture.coordinator(exchange: { connection, workspace, local, now in
+            if let local {
+                let reconciled = MidasUsageSyncPublication(
+                    workspaceID: workspace.id,
+                    deviceID: connection.deviceID,
+                    deviceName: connection.deviceName,
+                    publishedAt: local.publishedAt,
+                    events: local.events + [Self.event(
+                        workspace: workspace,
+                        name: "concurrent-hub-record",
+                        tokens: 200,
+                        now: now)])
+                return MidasUsageHubExchange(
+                    workspace: workspace,
+                    publications: [reconciled],
+                    publicationSucceeded: true,
+                    unavailableFiles: 0,
+                    rejectedFiles: 0,
+                    syncState: MidasUsageHubSyncState(
+                        checkedAt: now,
+                        appliedRevisions: [connection
+                            .deviceID
+                            .uuidString: 2],
+                        acceptedLocalRevision: 2))
+            }
+            return try await hub.exchange(connection: connection, workspace: workspace, local: nil, now: now)
+        })
+        try await coordinator.connect(hub: fixture.connection)
+        self.collect(on: coordinator, event: "local", tokens: 100)
+        await coordinator.syncNow()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
+        let restarted = fixture.coordinator(restore: true)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 300)
+    }
+
+    @Test func restoredHubHeadRetainsCachedPeerIDsAndRepublishesThisMacHistory() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let hub = fixture.hub
+        let peerID = UUID()
+        await hub.setPublications([self.publication(
+            workspace: fixture.workspace,
+            deviceID: peerID,
+            event: "peer-original",
+            tokens: 100)])
+        let coordinator = fixture.coordinator(exchange: { connection, workspace, local, now in
+            let result = try await hub.exchange(connection: connection, workspace: workspace, local: local, now: now)
+            return MidasUsageHubExchange(
+                workspace: workspace,
+                publications: result.publications,
+                publicationSucceeded: result.publicationSucceeded,
+                unavailableFiles: 0,
+                rejectedFiles: 0,
+                syncState: MidasUsageHubSyncState(checkedAt: now, acceptedLocalRevision: 2))
+        })
+        try await coordinator.connect(hub: fixture.connection)
+        self.collect(on: coordinator, event: "local-preserved", tokens: 50)
+        await coordinator.syncNow()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 150)
+        await hub.setPublications([self.publication(
+            workspace: fixture.workspace,
+            deviceID: peerID,
+            event: "peer-restored-backup",
+            tokens: 200)])
+        coordinator.makeLocalUsage = nil
+        await coordinator.syncNow()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 350)
+        let repairedHead = await hub.publication(for: fixture.connection.deviceID)
+        #expect(repairedHead?.events.count == 1)
+        let restarted = fixture.coordinator(restore: true)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 350)
+        #expect(coordinator.issue == nil)
     }
 }

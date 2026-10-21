@@ -1,69 +1,53 @@
-"""Print a small numeric sync receipt without reading credentials or provider logs."""
+#!/usr/bin/env python3
+"""Compatibility entrypoint for the production-aware Midas sync doctor.
 
+A cached list of names is never proof of convergence. The default path is the
+stable Midas app; optional fixture paths are accepted only by this local script.
+"""
 import argparse
-import hashlib
+import importlib.util
 import json
-import os
 from pathlib import Path
-import stat
-import subprocess
+import sys
 import time
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--wait", type=int, default=0, help="Wait up to this many seconds for all three devices")
-args = parser.parse_args()
-if not 0 <= args.wait <= 600:
-    parser.error("--wait must be between 0 and 600")
-cache = Path.home() / "Library/Application Support/Midas/usage-sync/hub-state.json"
-binary = Path.home() / "Applications/Midas Tailscale Preview.app/Contents/MacOS/Midas"
-deadline = time.monotonic() + args.wait
-last_stamp = None
-publications = []
-issue = None
-expected_devices = {"Mac mini", "MacBook Pro", "Spark local runtime"}
-while True:
-    try:
-        for component in (cache, *cache.parents):
-            if component.is_symlink():
-                raise ValueError("Private sync cache path contains a symbolic link")
-        metadata = cache.stat()
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
-            raise ValueError("Sync cache is not a private owned regular file")
-        if metadata.st_size > 128 * 1024 * 1024:
-            raise ValueError("Sync cache exceeds the verification limit")
-        if metadata.st_mtime_ns != last_stamp:
-            last_stamp = metadata.st_mtime_ns
-            publications = json.loads(cache.read_bytes()).get("publications", [])
-        if {p.get("deviceName") for p in publications} >= expected_devices:
+
+def load_manager():
+    source = Path(__file__).resolve().parent / "usage-hub/midas_sync_manage.py"
+    spec = importlib.util.spec_from_file_location("midas_sync_manage", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--wait", type=int, default=0, help="Wait up to 600 seconds for a fresh applied checkpoint")
+    parser.add_argument("--max-age", type=int, default=300)
+    parser.add_argument("--root", type=Path, default=Path.home() / "Library/Application Support/Midas")
+    parser.add_argument("--app", type=Path, default=Path("/Applications/Midas.app"))
+    parser.add_argument("--offline", action="store_true", help="Inspect local receipt without claiming online health")
+    parser.add_argument("--require-peer-receipts", action="store_true")
+    parser.add_argument("--required-device-id", action="append", default=[], help="Enrolled UUID, repeat for each Mac to prove peer convergence")
+    args = parser.parse_args()
+    if not 0 <= args.wait <= 600 or not 1 <= args.max_age <= 3600:
+        parser.error("wait must be 0...600; max-age must be 1...3600")
+    manager = load_manager()
+    deadline = time.monotonic() + args.wait
+    while True:
+        try:
+            report = manager.doctor(args.root, online=not args.offline, app_path=args.app, max_age=args.max_age, required_device_ids=args.required_device_id or None)
+        except manager.ManageError as error:
+            report = {"schemaVersion": 1, "status": "needs_attention", "code": error.code}
+        except Exception:
+            report = {"schemaVersion": 1, "status": "needs_attention", "code": "local_state_unavailable"}
+        healthy = report["status"] == "healthy" and (not args.require_peer_receipts or report.get("requiredDevicesCaughtUp") is True)
+        if healthy or time.monotonic() >= deadline or args.offline:
             break
-    except (OSError, ValueError, TypeError) as error:
-        issue = type(error).__name__
-    if time.monotonic() >= deadline:
-        break
-    time.sleep(2)
+        time.sleep(min(2, max(0, deadline - time.monotonic())))
+    print(json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False))
+    return 0 if healthy else 2
 
-ordered = sorted(publications, key=lambda p: p["deviceID"])
-def publication_digest(publication):
-    return hashlib.sha256(json.dumps(
-        publication, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()).hexdigest()
 
-configuration = {}
-for label, key in (("period", "midasSpendPeriodSelection"), ("combined", "midasUsageSyncIncludeTotals"),
-                   ("transport", "midasUsageSyncTransport")):
-    result = subprocess.run(["/usr/bin/defaults", "read", "com.designprism.midas.debug", key],
-                            capture_output=True, text=True)
-    configuration[label] = result.stdout.strip() if result.returncode == 0 else None
-receipt = {
-    "receivedDevices": [{"name": p["deviceName"], "publishedAtAppleEpoch": p["publishedAt"],
-                         "events": len(p["events"]), "accountDays": len(p["accountDays"]),
-                         "publicationSHA256": publication_digest(p)} for p in ordered],
-    "publicationSetSHA256": hashlib.sha256(json.dumps(
-        ordered, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest(),
-    "appBinarySHA256": hashlib.sha256(binary.read_bytes()).hexdigest() if binary.is_file() else None,
-    "allThreeDevicesReceived": {p["deviceName"] for p in ordered} >= expected_devices,
-    "configuration": configuration,
-}
-if issue and not ordered:
-    receipt["verificationIssue"] = issue
-print(json.dumps(receipt, separators=(",", ":")))
-raise SystemExit(0 if receipt["allThreeDevicesReceived"] else 2)
+if __name__ == "__main__":
+    raise SystemExit(main())
