@@ -216,6 +216,8 @@ def doctor(root: Path, *, online=True, app_path=Path("/Applications/Midas.app"),
     else:
         report["code"] = "receipt_unavailable"
     info_path = app_path / "Contents/Info.plist"
+    if not info_path.is_file():
+        raise ManageError("app_unavailable")
     if info_path.exists():
         info = plistlib.loads(info_path.read_bytes())
         if info.get("CFBundleIdentifier") != BUNDLE_ID:

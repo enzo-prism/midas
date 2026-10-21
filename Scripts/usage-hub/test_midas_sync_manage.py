@@ -136,6 +136,13 @@ class ManagerTests(unittest.TestCase):
         with mock.patch.object(manage, "manifest", side_effect=AssertionError("network called")):
             self.assertEqual(manage.doctor(self.support, online=False, app_path=self.app)["status"], "unchecked")
 
+    def test_missing_production_app_does_not_report_healthy(self):
+        self.receipt()
+        (self.app / "Contents/Info.plist").unlink()
+        with self.assertRaises(manage.ManageError) as caught:
+            self.doctor()
+        self.assertEqual(caught.exception.code, "app_unavailable")
+
     def test_wrong_app_and_unsafe_connection_fail_closed(self):
         info = self.app / "Contents/Info.plist"
         info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.example.wrong"}))
