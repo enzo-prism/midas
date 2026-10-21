@@ -62,6 +62,20 @@ class HubInstallerTests(unittest.TestCase):
         with store.connect() as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM devices").fetchone()[0], 0)
 
+    def test_explicit_runtime_is_copied_to_midas_owned_versioned_directory(self):
+        runtime = self.root / "runtime"
+        (runtime / "bin").mkdir(parents=True)
+        binary = runtime / "bin/python3"
+        binary.write_text("#!/bin/sh\nexec '" + sys.executable.replace("'", "'\\''") + "' \"$@\"\n")
+        binary.chmod(0o700)
+        result = self.run_installer("--initialize", "--runtime-root", str(runtime))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = plistlib.loads(self.service.read_bytes())
+        installed = Path(payload["ProgramArguments"][0])
+        self.assertTrue(installed.is_relative_to(self.install / "runtimes"))
+        self.assertEqual(installed.read_bytes(), binary.read_bytes())
+        self.assertIn("-I", payload["ProgramArguments"])
+
     def test_missing_initialize_does_not_create_database_or_service(self):
         result = self.run_installer()
         self.assertNotEqual(result.returncode, 0)

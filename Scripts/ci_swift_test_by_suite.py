@@ -37,8 +37,16 @@ def run_command(command: list[str], timeout: int | None = None) -> int:
         return 124
 
 
+def swift_test_command() -> list[str]:
+    command = ["swift", "test"]
+    build_system = os.environ.get("MIDAS_SWIFTPM_BUILD_SYSTEM")
+    if build_system:
+        command.extend(["--build-system", build_system])
+    return command
+
+
 def swift_test_list() -> list[str]:
-    result = subprocess.run(["swift", "test", "list"], check=True, capture_output=True, text=True)
+    result = subprocess.run([*swift_test_command(), "list"], check=True, capture_output=True, text=True)
     suites: set[str] = set()
     for line in result.stdout.splitlines():
         if "/" not in line:
@@ -81,7 +89,7 @@ def filter_for(suites: list[str]) -> str:
 
 
 def run_group(suites: list[str], timeout: int) -> int:
-    return run_command(["swift", "test", "--no-parallel", "--filter", filter_for(suites)], timeout=timeout)
+    return run_command([*swift_test_command(), "--no-parallel", "--filter", filter_for(suites)], timeout=timeout)
 
 
 def main() -> int:

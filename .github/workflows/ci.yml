@@ -10,6 +10,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  usage-sync-python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Hub, installer, runtime, and lifecycle contracts
+        run: python3 -m unittest discover -s Scripts/usage-hub -p 'test_*.py' -v
+
   lint-build-test:
     runs-on: macos-15-intel
     timeout-minutes: 70
@@ -39,6 +50,16 @@ jobs:
 
       - name: Lint
         run: ./Scripts/lint.sh lint
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Real Swift and Python usage sync integration
+        timeout-minutes: 15
+        env:
+          MIDAS_RUN_HUB_INTEGRATION: "1"
+        run: swift test --filter MidasUsageHubIntegrationTests
 
       - name: Swift Test
         timeout-minutes: 60

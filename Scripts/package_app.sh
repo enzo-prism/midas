@@ -7,13 +7,16 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 LOWER_CONF=$(printf "%s" "$CONF" | tr '[:upper:]' '[:lower:]')
 
-# Optional build storage overrides. App staging and signing files remain under ROOT.
+# Optional build storage overrides; staging/output may live outside FileProvider storage.
 SWIFTPM_SCRATCH_PATH="${MIDAS_SWIFTPM_SCRATCH_PATH:-$ROOT/.build}"
 case "$SWIFTPM_SCRATCH_PATH" in
   /*) ;;
   *) SWIFTPM_SCRATCH_PATH="$ROOT/$SWIFTPM_SCRATCH_PATH" ;;
 esac
 SWIFTPM_ARGS=(--scratch-path "$SWIFTPM_SCRATCH_PATH")
+if [[ -n "${MIDAS_SWIFTPM_BUILD_SYSTEM:-}" ]]; then
+  SWIFTPM_ARGS+=(--build-system "$MIDAS_SWIFTPM_BUILD_SYSTEM")
+fi
 WIDGET_DERIVED_DATA_PATH="${MIDAS_WIDGET_DERIVED_DATA_PATH:-$ROOT/.build/xcode-widget-extension-${LOWER_CONF}}"
 case "$WIDGET_DERIVED_DATA_PATH" in
   /*) ;;
@@ -122,8 +125,18 @@ for ARCH in "${ARCH_LIST[@]}"; do
   swift build "${SWIFTPM_ARGS[@]}" -c "$CONF" --arch "$ARCH"
 done
 
-APP_FINAL="$ROOT/Midas.app"
-APP_STAGE="$ROOT/.build/package/Midas.app"
+APP_FINAL="${MIDAS_APP_OUTPUT:-$ROOT/Midas.app}"
+APP_STAGE="${MIDAS_APP_STAGE:-$ROOT/.build/package/Midas.app}"
+for package_path in "$APP_FINAL" "$APP_STAGE"; do
+  if [[ "$package_path" != /* || "$package_path" != *.app ]]; then
+    echo "ERROR: App staging/output overrides must be absolute .app paths." >&2
+    exit 1
+  fi
+done
+if [[ "$APP_FINAL" == "$APP_STAGE" ]]; then
+  echo "ERROR: App staging/output paths must differ." >&2
+  exit 1
+fi
 rm -rf "$APP_STAGE"
 APP="$APP_STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
@@ -480,6 +493,14 @@ if [[ ! -d "$APP/Contents/Resources/KeyboardShortcuts_KeyboardShortcuts.bundle" 
   exit 1
 fi
 
+# Ship a supported private runtime; release sync must not depend on Codex/Homebrew caches.
+if [[ -n "${MIDAS_HUB_PYTHON_ROOT:-}" ]]; then
+  "$ROOT/Scripts/bundle_midas_sync_resources.sh" "$APP" "$MIDAS_HUB_PYTHON_ROOT"
+elif [[ "$LOWER_CONF" == "release" ]]; then
+  echo "ERROR: MIDAS_HUB_PYTHON_ROOT must name a prepared standalone Python runtime." >&2
+  exit 1
+fi
+
 # Ensure contents are writable before stripping attributes and signing.
 chmod -R u+w "$APP"
 
@@ -493,6 +514,18 @@ if [[ -f "${APP}/Contents/Helpers/CodexBarCLI" ]]; then
 fi
 if [[ -f "${APP}/Contents/Helpers/CodexBarClaudeWatchdog" ]]; then
   codesign "${CODESIGN_ARGS[@]}" "${APP}/Contents/Helpers/CodexBarClaudeWatchdog"
+fi
+
+# Sign each runtime Mach-O leaf before sealing the app. Never follow runtime symlinks.
+if [[ -d "${APP}/Contents/Resources/MidasSync/runtime" ]]; then
+  while IFS= read -r -d '' runtime_leaf; do
+    if /usr/bin/file -b "$runtime_leaf" | /usr/bin/grep -q 'Mach-O'; then
+      codesign "${CODESIGN_ARGS[@]}" "$runtime_leaf"
+    fi
+  done < <(find "${APP}/Contents/Resources/MidasSync/runtime" -type f -print0)
+fi
+if [[ -f "${APP}/Contents/Helpers/MidasSyncManage" ]]; then
+  codesign "${CODESIGN_ARGS[@]}" "${APP}/Contents/Helpers/MidasSyncManage"
 fi
 
 # Sign widget extension if present
@@ -510,6 +543,7 @@ codesign "${CODESIGN_ARGS[@]}" \
   --entitlements "$APP_ENTITLEMENTS" \
   "$APP"
 
+mkdir -p "$(dirname "$APP_FINAL")"
 rm -rf "$APP_FINAL"
 mv "$APP" "$APP_FINAL"
 APP="$APP_FINAL"
