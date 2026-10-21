@@ -70,7 +70,8 @@ struct MidasHubCoordinatorTests {
             tokens: 50)
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
-        #expect(coordinator.status.contains("last received"))
+        #expect(coordinator.hasPendingUpload)
+        #expect(coordinator.issue != nil)
         let restarted = fixture.coordinator(restore: true)
         #expect(restarted.hasConnection)
         #expect(restarted.snapshots[.codex]?.sessionTokens == 300)
@@ -252,6 +253,44 @@ struct MidasHubCoordinatorTests {
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
         #expect(!coordinator.isSyncing)
         #expect(coordinator.isEnabled)
+    }
+
+    @Test func replacementDrainBlocksNewChecksUntilThePreviousWriterFinishes() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        let gate = Gate()
+        var collections = 0
+        coordinator.makeLocalUsage = { workspace, now in
+            collections += 1
+            await gate.suspend()
+            return MidasUsageSyncLocalUsage(events: [Self.event(
+                workspace: workspace,
+                name: "retained",
+                tokens: 100,
+                now: now)])
+        }
+        let oldSync = Task { await coordinator.syncNow() }
+        await gate.waitUntilBlocked()
+        let replacement = Task { try await coordinator.connect(hub: fixture.connection) }
+        for _ in 0..<1000 {
+            if coordinator.isReplacingConnection { break }
+            await Task.yield()
+        }
+        #expect(coordinator.isReplacingConnection)
+        let readsBefore = await fixture.hub.readRequests
+        await coordinator.syncNow()
+        #expect(await fixture.hub.readRequests == readsBefore)
+        #expect(collections == 1)
+        await gate.release()
+        await oldSync.value
+        try await replacement.value
+        #expect(!coordinator.isReplacingConnection)
+        #expect(coordinator.hasConnection)
+        await coordinator.syncNow()
+        #expect(collections == 2)
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 100)
     }
 
     @Test func connectionFileImportCopiesTheEnrollmentToPrivateLocalStorage() async throws {

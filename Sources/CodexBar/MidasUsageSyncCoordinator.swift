@@ -128,7 +128,10 @@ final class MidasUsageSyncCoordinator {
             self.defaults.set(
                 self.isEnabled,
                 forKey: "midasUsageSyncEnabled")
-            if self.isEnabled { self.scheduleSync() } else { self.pause() }
+            if self.isEnabled { self.scheduleSync() } else {
+                self.connectionAttemptID = nil
+                self.pause()
+            }
         }
     }
 
@@ -232,6 +235,7 @@ final class MidasUsageSyncCoordinator {
     @ObservationIgnored private var recoveringPeerCache = false
     @ObservationIgnored private var stagedTransport: MidasUsageSyncTransport?
     @ObservationIgnored private var connectionAttemptID: UUID?
+    @ObservationIgnored private var connectionDrainID: UUID?
     var selectedTransport: MidasUsageSyncTransport {
         self.stagedTransport ?? self.transport
     }
@@ -365,7 +369,7 @@ final class MidasUsageSyncCoordinator {
     }
 
     func scheduleSync() {
-        guard self.automaticallySyncs, self.isEnabled else { return }
+        guard self.automaticallySyncs, self.isEnabled, !self.isReplacingConnection else { return }
         if self.activeSync != nil || self.operation != nil {
             self.dirtyWhileSyncing = true
             return
@@ -412,69 +416,6 @@ final class MidasUsageSyncCoordinator {
         try await self.connect(hub: connection)
     }
 
-    /// Import is explicit. The private credential is stored only in a protected local file.
-    func connect(hub connection: MidasUsageHubConnection) async throws {
-        let attemptID = UUID()
-        self.connectionAttemptID = attemptID
-        let identity = self.environmentIdentity()
-        guard identity.deviceBinding == self.deviceBinding,
-              !self.automaticallySyncs || identity.deviceBinding != nil
-        else { throw MidasUsageSyncError.folderUnavailable }
-        try connection.validate()
-        let selected = try await self.hubWorkspaceLoader(connection)
-        try selected.validate()
-        try Task.checkCancellation()
-        guard self.connectionAttemptID == attemptID,
-              self.environmentIdentity().deviceBinding == identity.deviceBinding else { throw CancellationError() }
-        guard connection.workspaceID == nil || connection.workspaceID == selected.id else {
-            throw MidasUsageSyncError.wrongWorkspace
-        }
-        let candidateCacheURL = self.persistenceURL?.deletingLastPathComponent()
-            .appendingPathComponent("hub-state.json")
-        if let previous = self.readCache(at: candidateCacheURL),
-           previous.workspace.id == selected.id, previous.workspace != selected
-        { throw MidasUsageSyncError.wrongWorkspace }
-        let pinned = MidasUsageHubConnection(
-            endpoint: connection.endpoint,
-            deviceID: connection.deviceID,
-            deviceName: connection.deviceName,
-            credential: connection.credential,
-            workspaceID: selected.id)
-        // Drain the old writer only after replacement validation succeeds. A failed
-        // replacement leaves the current connection, display and enabled choice intact.
-        let oldSync = self.activeSync
-        self.pause()
-        await oldSync?.value
-        guard self.connectionAttemptID == attemptID,
-              self.environmentIdentity().deviceBinding == identity.deviceBinding else { throw CancellationError() }
-        try LocalPersistence.write(
-            JSONEncoder().encode(pinned),
-            to: self.hubConnectionURL)
-        self.transport = .tailscaleHub
-        self.stagedTransport = nil
-        self.defaults.set(
-            self.transport.rawValue,
-            forKey: "midasUsageSyncTransport")
-        self.hubConnection = pinned
-        self.workspace = selected
-        self.folderURL = nil
-        self.deviceName = connection.deviceName
-        self.accountFingerprint = Self.hubFingerprint(pinned)
-        self.clearReceivedView()
-        self.restoreCache(
-            expected: selected,
-            acceptsExplicitReconnection: true)
-        self.restoreOutbox(
-            expected: selected,
-            acceptsExplicitReconnection: true)
-        self.issue = nil
-        self.isEnabled = true
-        self.status = "Connected to your Tailscale hub. Waiting for usage."
-        try await self.persistCache()
-        try Task.checkCancellation()
-        if self.automaticallySyncs { await self.syncNow() }
-    }
-
     private func clearReceivedView() {
         self.received = []
         self.pendingLocal = nil
@@ -509,6 +450,8 @@ final class MidasUsageSyncCoordinator {
             options: [],
             includingResourceValuesForKeys: nil,
             relativeTo: nil)
+        self.connectionDrainID = attemptID
+        defer { self.finishConnectionDrain(attemptID: attemptID) }
         let oldSync = self.activeSync
         self.pause()
         await oldSync?.value
@@ -543,7 +486,7 @@ final class MidasUsageSyncCoordinator {
         self.issue = nil
         self.isEnabled = true
         self.status = "Connected. Waiting for usage."
-        if self.automaticallySyncs { await self.syncNow() }
+        // The replacement defer resumes automatic work after releasing the writer gate.
     }
 
     func disconnect() {
@@ -570,7 +513,7 @@ final class MidasUsageSyncCoordinator {
     }
 
     func syncNow(forceCollection: Bool = true) async {
-        guard self.isEnabled, !Task.isCancelled else { return }
+        guard self.isEnabled, !Task.isCancelled, !self.isReplacingConnection else { return }
         guard self.activeSync == nil else {
             self.dirtyWhileSyncing = true
             return
@@ -974,49 +917,85 @@ final class MidasUsageSyncCoordinator {
 }
 
 extension MidasUsageSyncCoordinator {
-    func connectivityRecovered() {
-        self.nextRetryAt = nil
-        self.consecutiveFailures = 0
+    /// Import is explicit. The private credential is stored only in a protected local file.
+    func connect(hub connection: MidasUsageHubConnection) async throws {
+        let attemptID = UUID()
+        self.connectionAttemptID = attemptID
+        let identity = self.environmentIdentity()
+        guard identity.deviceBinding == self.deviceBinding,
+              !self.automaticallySyncs || identity.deviceBinding != nil
+        else { throw MidasUsageSyncError.folderUnavailable }
+        try connection.validate()
+        let selected = try await self.hubWorkspaceLoader(connection)
+        try selected.validate()
+        try Task.checkCancellation()
+        guard self.connectionAttemptID == attemptID,
+              self.environmentIdentity().deviceBinding == identity.deviceBinding else { throw CancellationError() }
+        guard connection.workspaceID == nil || connection.workspaceID == selected.id else {
+            throw MidasUsageSyncError.wrongWorkspace
+        }
+        let candidateCacheURL = self.persistenceURL?.deletingLastPathComponent()
+            .appendingPathComponent("hub-state.json")
+        if let previous = self.readCache(at: candidateCacheURL),
+           previous.workspace.id == selected.id, previous.workspace != selected
+        { throw MidasUsageSyncError.wrongWorkspace }
+        let pinned = MidasUsageHubConnection(
+            endpoint: connection.endpoint,
+            deviceID: connection.deviceID,
+            deviceName: connection.deviceName,
+            credential: connection.credential,
+            workspaceID: selected.id)
+        // Drain the old writer only after replacement validation succeeds. A failed
+        // replacement leaves the current connection, display and enabled choice intact.
+        self.connectionDrainID = attemptID
+        defer { self.finishConnectionDrain(attemptID: attemptID) }
+        let oldSync = self.activeSync
+        self.pause()
+        await oldSync?.value
+        guard self.connectionAttemptID == attemptID,
+              self.environmentIdentity().deviceBinding == identity.deviceBinding else { throw CancellationError() }
+        try LocalPersistence.write(
+            JSONEncoder().encode(pinned),
+            to: self.hubConnectionURL)
+        self.transport = .tailscaleHub
+        self.stagedTransport = nil
+        self.defaults.set(
+            self.transport.rawValue,
+            forKey: "midasUsageSyncTransport")
+        self.hubConnection = pinned
+        self.workspace = selected
+        self.folderURL = nil
+        self.deviceName = connection.deviceName
+        self.accountFingerprint = Self.hubFingerprint(pinned)
+        self.clearReceivedView()
+        self.restoreCache(
+            expected: selected,
+            acceptsExplicitReconnection: true)
+        self.restoreOutbox(
+            expected: selected,
+            acceptsExplicitReconnection: true)
+        self.issue = nil
+        self.isEnabled = true
+        self.status = "Connected to your Tailscale hub. Waiting for usage."
+        try await self.persistCache()
+        try Task.checkCancellation()
+        // The replacement defer resumes automatic work after releasing the writer gate.
+    }
+}
+
+extension MidasUsageSyncCoordinator {
+    private func finishConnectionDrain(attemptID: UUID) {
+        guard self.connectionDrainID == attemptID else { return }
+        self.connectionDrainID = nil
         self.scheduleSync()
     }
 }
 
 extension MidasUsageSyncCoordinator {
-    func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.title = "Connect Midas usage"
-        panel.message = "Choose the same private folder on both Macs to share usage counts, costs, and device names."
-        panel.prompt = "Connect"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.begin { [weak self] response in
-            guard response == .OK, let folder = panel.url else { return }
-            Task { @MainActor [weak self] in
-                do { try await self?.connect(folder: folder) } catch is CancellationError {
-                    return
-                } catch { self?.issue = self?.message(error) }
-            }
-        }
-    }
-
-    func chooseHubConnection() {
-        let panel = NSOpenPanel()
-        panel.title = "Connect to your Tailscale hub"
-        panel.message = "Choose the private Midas connection file created for this Mac."
-        panel.prompt = "Connect"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.begin { [weak self] response in
-            guard response == .OK, let file = panel.url else { return }
-            Task { @MainActor [weak self] in
-                do { try await self?.connect(hubConnectionFile: file) } catch is CancellationError {
-                    return
-                } catch { self?.issue = self?.message(error) }
-            }
-        }
+    func connectivityRecovered() {
+        self.nextRetryAt = nil
+        self.consecutiveFailures = 0
+        self.scheduleSync()
     }
 }
 

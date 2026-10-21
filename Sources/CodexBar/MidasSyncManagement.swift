@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -84,5 +85,44 @@ final class MidasSyncManagement {
             guard result.schemaVersion == 1 else { throw CocoaError(.coderReadCorrupt) }
             return result
         }.value
+    }
+}
+
+extension MidasUsageSyncCoordinator {
+    func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Connect Midas usage"
+        panel.message = "Choose the same private folder on both Macs to share usage counts, costs, and device names."
+        panel.prompt = "Connect"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.begin { [weak self] response in
+            guard response == .OK, let folder = panel.url else { return }
+            Task { @MainActor [weak self] in
+                do { try await self?.connect(folder: folder) } catch is CancellationError {
+                    return
+                } catch { self?.issue = self?.message(error) }
+            }
+        }
+    }
+
+    func chooseHubConnection() {
+        let panel = NSOpenPanel()
+        panel.title = "Connect to your Tailscale hub"
+        panel.message = "Choose the private Midas connection file created for this Mac."
+        panel.prompt = "Connect"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.begin { [weak self] response in
+            guard response == .OK, let file = panel.url else { return }
+            Task { @MainActor [weak self] in
+                do { try await self?.connect(hubConnectionFile: file) } catch is CancellationError {
+                    return
+                } catch { self?.issue = self?.message(error) }
+            }
+        }
     }
 }
