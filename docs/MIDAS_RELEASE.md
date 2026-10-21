@@ -26,9 +26,14 @@ probe using the 0.49.0 (132) host discovered 0.49.1 (133) at the public archive 
 Archive SHA-256: `619da8f2f5aee0e390d204465a912dab50a03c2755ad226fa598ca8c47348d2d`.
 
 The identical public notarized bundle is installed on the Mac mini. Local nicknames and circle
-selection survived. Remote [CI run 39590867857](https://github.com/enzo-prism/midas/actions/runs/39590867857)
-has passed Linux x64/arm64 builds, tests and smoke checks, Python contracts, and macOS lint;
-macOS integration/full tests remain running separately from the completed local full suite.
+selection survived. At publication, remote [CI run 39590867857](https://github.com/enzo-prism/midas/actions/runs/39590867857)
+had passed Linux x64/arm64 builds, tests and smoke checks, Python contracts, and macOS lint;
+macOS integration/full tests were still running separately from the completed local full suite.
+
+Website commit `6f62ce9bc39948b6eae9e891eb675f64a37a778f` reached production Ready as
+`dpl_56UCmZYdExvNWzCU9GxaHPZLhSH5` at `midas-ai.dev`. The site build and all 18 live
+browser checks passed. Both public download links select the verified 0.49.1 archive;
+a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
