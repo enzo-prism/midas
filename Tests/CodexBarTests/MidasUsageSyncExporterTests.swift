@@ -537,7 +537,7 @@ struct MidasUsageSyncExporterTests {
         #expect(full.events.count == 3)
         let sizes = try full.events.map { try JSONEncoder().encode($0).count + 1 }.sorted()
         var options = fixture.options
-        options.maximumEventBytes = sizes.suffix(2).reduce(0, +) + 8
+        options.maximumEventBytes = (sizes.last ?? 0) + 8
         let limited = try await MidasUsageSyncExporter.export(
             workspace: workspace, providers: [.meta], now: Self.now, options: options)
         #expect(limited.events.allSatisfy { MidasUsageSyncRollup.isRollup($0, deviceID: nil) })
@@ -825,5 +825,28 @@ struct MidasUsageSyncExporterTests {
         #expect(fresh.events.reduce(0) { $0 + ($1.values.tokens ?? 0) } == 240)
         #expect(Set(fresh.events.map(\.day)) == Set([MidasUsageSyncPublication.day(oldAt), "2026-10-13"]))
         #expect(fresh.excludedRecords == 0)
+    }
+}
+
+extension MidasUsageSyncExporterTests {
+    @Test
+    func `Canonical source survives missing logs and scanner cache`() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let log = fixture.meta.appendingPathComponent("one/session.jsonl")
+        try fixture.write([Self.metaLine(recordID: "first"), Self.metaLine(recordID: "second")], at: log)
+        var options = fixture.options
+        options.deviceID = UUID()
+        options.canonicalRoot = fixture.root.resolvingSymlinksInPath().appendingPathComponent("canonical")
+        options.preservesCanonicalEvents = true
+        let workspace = MidasUsageSyncWorkspace()
+        let initial = try await MidasUsageSyncExporter.export(
+            workspace: workspace, providers: [.meta], now: Self.now, options: options)
+        try FileManager.default.removeItem(at: log)
+        let restored = try await MidasUsageSyncExporter.export(
+            workspace: workspace, providers: [.meta], now: Self.now, options: options)
+        #expect(initial.events.count == 2)
+        #expect(restored.events == initial.events)
+        #expect(restored.events.allSatisfy { !MidasUsageSyncRollup.isRollup($0, deviceID: options.deviceID) })
     }
 }

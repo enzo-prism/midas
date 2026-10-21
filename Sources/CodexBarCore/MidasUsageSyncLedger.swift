@@ -23,7 +23,10 @@ public struct MidasUsageSyncLedger: Sendable {
             max(previous?.events.count ?? 0, fresh.events.count), MidasUsageSyncPublication.maximumRecords))
         var previousRollups: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
         var freshRollups: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
-        for (isFresh, source) in [(false, previous?.events ?? []), (true, fresh.events)] {
+        for (isFresh, source) in [
+            (false, previous.map(Self.canonicalDisplayEvents) ?? []),
+            (true, Self.canonicalDisplayEvents(fresh)),
+        ] {
             for event in source where event.day >= cutoff {
                 if MidasUsageSyncRollup.isRollup(event, deviceID: deviceID) {
                     let key = MidasUsageSyncRollup.DayKey(event)
@@ -150,6 +153,93 @@ public struct MidasUsageSyncLedger: Sendable {
                 ? Int.max : fresh.excludedRecords + dropped)
     }
 
+    /// The durable source of truth keeps identities. Absence in a later partial scan never deletes one.
+    /// Legacy aggregates are retained alongside recovered constituents; display resolves their overlap conservatively.
+    public static func retainingCanonicalHistory(
+        previous: MidasUsageSyncPublication?,
+        fresh: MidasUsageSyncPublication) throws -> MidasUsageSyncPublication
+    {
+        let previous = previous.flatMap {
+            $0.workspaceID == fresh.workspaceID && $0.deviceID == fresh.deviceID ? $0 : nil
+        }
+        let validationDate = max(previous?.publishedAt ?? fresh.publishedAt, fresh.publishedAt)
+        try fresh.validateCanonical(workspaceID: fresh.workspaceID, now: validationDate)
+        if let previous { try previous.validateCanonical(workspaceID: fresh.workspaceID, now: validationDate) }
+        var events: [EventKey: MidasUsageSyncEvent] = [:]
+        for event in (previous?.events ?? []) + fresh.events {
+            let key = EventKey(event)
+            if let old = events[key], !Self.prefers(event, over: old) { continue }
+            events[key] = event
+        }
+        var accounts: [AccountKey: MidasUsageSyncAccountDay] = [:]
+        for row in (previous?.accountDays ?? []) + fresh.accountDays {
+            let key = AccountKey(row)
+            if let old = accounts[key], !Self.prefers(row, over: old) { continue }
+            accounts[key] = row
+        }
+        let result = MidasUsageSyncPublication(
+            workspaceID: fresh.workspaceID,
+            deviceID: fresh.deviceID,
+            deviceName: fresh.deviceName,
+            publishedAt: max(previous?.publishedAt ?? fresh.publishedAt, fresh.publishedAt),
+            events: events.values.sorted(by: Self.eventPrecedes),
+            accountDays: accounts.values.sorted(by: Self.accountPrecedes),
+            excludedRecords: fresh.excludedRecords)
+        try result.validateCanonical(workspaceID: fresh.workspaceID, now: result.publishedAt)
+        return result
+    }
+
+    /// A legacy aggregate has unknown constituents. Keep all raw candidates in canonical storage,
+    /// but never add fine rows on top of an overlapping opaque provider/day aggregate in the display.
+    public static func canonicalDisplayEvents(_ publication: MidasUsageSyncPublication) -> [MidasUsageSyncEvent] {
+        var fine: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
+        var legacy: [MidasUsageSyncRollup.DayKey: [MidasUsageSyncEvent]] = [:]
+        var unique: [EventKey: MidasUsageSyncEvent] = [:]
+        for event in publication.events {
+            let key = EventKey(event)
+            if let old = unique[key], !Self.prefers(event, over: old) { continue }
+            unique[key] = event
+        }
+        for event in unique.values.sorted(by: Self.eventPrecedes) {
+            let key = MidasUsageSyncRollup.DayKey(event)
+            if MidasUsageSyncRollup.isRollup(event, deviceID: publication.deviceID) {
+                legacy[key, default: []].append(event)
+            } else {
+                fine[key, default: []].append(event)
+            }
+        }
+        var result: [MidasUsageSyncEvent] = []
+        for key in Set(fine.keys).union(legacy.keys).sorted() {
+            let individuals = fine[key] ?? []
+            let aggregates = legacy[key] ?? []
+            if aggregates.isEmpty {
+                result += individuals
+            } else if individuals.isEmpty {
+                result += aggregates
+            } else {
+                result += Self.coversLegacyBaseline(individuals, aggregates: aggregates) ? individuals : aggregates
+            }
+        }
+        return result.sorted(by: Self.eventPrecedes)
+    }
+
+    private static func coversLegacyBaseline(
+        _ individuals: [MidasUsageSyncEvent], aggregates: [MidasUsageSyncEvent]) -> Bool
+    {
+        // Erased membership cannot prove exact coverage. Preserve every known baseline metric
+        // until the independently retained fine evidence covers it, and continue reporting uncertainty.
+        let metrics: [(MidasUsageSyncValues) -> Double?] = [
+            { $0.tokens.map(Double.init) }, { $0.requests.map(Double.init) },
+            { $0.costUSD }, { $0.apiEquivalentCostUSD },
+        ]
+        return metrics.allSatisfy { metric in
+            let baseline = aggregates.compactMap { metric($0.values) }
+            guard !baseline.isEmpty else { return true }
+            let fine = individuals.compactMap { metric($0.values) }
+            return !fine.isEmpty && fine.reduce(0, +) >= baseline.reduce(0, +)
+        }
+    }
+
     private static func tokenTotal(_ events: [MidasUsageSyncEvent]) -> Int {
         events.reduce(0) { total, event in
             let next = total.addingReportingOverflow(event.values.tokens ?? 0)
@@ -157,24 +247,36 @@ public struct MidasUsageSyncLedger: Sendable {
         }
     }
 
-    public init(publications: [MidasUsageSyncPublication], workspaceID: UUID, now: Date = Date()) throws {
+    public enum Validation: Sendable { case legacy, canonical }
+
+    public init(
+        publications: [MidasUsageSyncPublication],
+        workspaceID: UUID,
+        now: Date = Date(),
+        validation: Validation = .legacy) throws
+    {
         // The coordinator reconciles up to 128 cached + 128 received + one local revision.
         guard publications.count <= 257 else { throw MidasUsageSyncError.limitExceeded }
         var devices: [UUID: MidasUsageSyncPublication] = [:]
         for publication in publications {
-            try publication.validate(workspaceID: workspaceID, now: now)
+            if validation == .canonical {
+                try publication.validateCanonical(workspaceID: workspaceID, now: now)
+            } else {
+                try publication.validate(workspaceID: workspaceID, now: now)
+            }
             if let previous = devices[publication.deviceID], !Self.prefers(publication, over: previous) { continue }
             devices[publication.deviceID] = publication
         }
         self.publications = devices.values.sorted { $0.deviceID.uuidString < $1.deviceID.uuidString }
         guard self.publications.count <= 128 else { throw MidasUsageSyncError.limitExceeded }
         let recordCount = self.publications.reduce(0) { $0 + $1.events.count + $1.accountDays.count }
-        guard recordCount <= 250_000 else { throw MidasUsageSyncError.limitExceeded }
+        let maximumRecords = validation == .canonical ? MidasUsageSyncPublication.maximumCanonicalRecords : 250_000
+        guard recordCount <= maximumRecords else { throw MidasUsageSyncError.limitExceeded }
         self.excludedRecords = Self.sumIntegers(self.publications.map(\.excludedRecords)) ?? Int.max
         var events: [EventKey: MidasUsageSyncEvent] = [:]
         var accounts: [AccountKey: MidasUsageSyncAccountDay] = [:]
         for publication in self.publications {
-            for event in publication.events {
+            for event in validation == .canonical ? Self.canonicalDisplayEvents(publication) : publication.events {
                 let key = EventKey(event)
                 if let previous = events[key], !Self.prefers(event, over: previous) { continue }
                 events[key] = event
@@ -246,19 +348,11 @@ public struct MidasUsageSyncLedger: Sendable {
 
     /// Merge complete records, never independently maximize monetary and token fields.
     private static func prefers(_ lhs: MidasUsageSyncEvent, over rhs: MidasUsageSyncEvent) -> Bool {
-        // Streaming/copy-prefix revisions are monotonic. A later scan of an old copied prefix cannot erase completion.
-        if lhs.values.tokens != rhs.values.tokens {
-            return (lhs.values.tokens ?? -1) > (rhs.values.tokens ?? -1)
-        }
-        if lhs.observedAt != rhs.observedAt { return lhs.observedAt > rhs.observedAt }
-        guard lhs != rhs else { return false }
-        return self.canonical(lhs) > self.canonical(rhs)
+        MidasUsageSyncRecordOrder.prefers(lhs, over: rhs)
     }
 
     private static func prefers(_ lhs: MidasUsageSyncAccountDay, over rhs: MidasUsageSyncAccountDay) -> Bool {
-        if lhs.observedAt != rhs.observedAt { return lhs.observedAt > rhs.observedAt }
-        guard lhs != rhs else { return false }
-        return self.canonical(lhs) > self.canonical(rhs)
+        MidasUsageSyncRecordOrder.prefers(lhs, over: rhs)
     }
 
     private static func prefers(_ lhs: MidasUsageSyncPublication, over rhs: MidasUsageSyncPublication) -> Bool {

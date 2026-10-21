@@ -3,6 +3,9 @@ import Foundation
 /// Exports only numeric local usage after the user opts into a shared workspace.
 /// Account quotas are not device events: they must never be summed by this exporter.
 public enum MidasUsageSyncExporter {
+    /// Bump when a controlled pricing catalog or policy changes; never derive this from scan time or app builds.
+    public static let pricingCatalogGeneration = 1
+
     public struct Options: Sendable {
         public var codexSessionsRoot: URL?
         public var codexAdditionalSessionsRoots: [URL]
@@ -14,6 +17,10 @@ public enum MidasUsageSyncExporter {
         public var forceRescan: Bool
         /// Publishing device. Older events beyond the publication budget become this device's day rollups.
         public var deviceID: UUID?
+        /// Private authoritative numeric history, independent of rebuildable scanner and peer caches.
+        public var canonicalRoot: URL?
+        /// v2 uses identity-preserving events; v1 callers retain the bounded derived view.
+        public var preservesCanonicalEvents: Bool
         /// Leave room for provider-account history and publication metadata.
         var maximumEventBytes = MidasUsageSyncPublication.maximumFileBytes - 4 * 1024 * 1024
 
@@ -26,7 +33,9 @@ public enum MidasUsageSyncExporter {
             codexTraceDatabaseURL: URL? = nil,
             historyDays: Int = 365,
             forceRescan: Bool = false,
-            deviceID: UUID? = nil)
+            deviceID: UUID? = nil,
+            canonicalRoot: URL? = nil,
+            preservesCanonicalEvents: Bool = false)
         {
             self.codexSessionsRoot = codexSessionsRoot
             self.codexAdditionalSessionsRoots = codexAdditionalSessionsRoots
@@ -37,6 +46,8 @@ public enum MidasUsageSyncExporter {
             self.historyDays = historyDays
             self.forceRescan = forceRescan
             self.deviceID = deviceID
+            self.canonicalRoot = canonicalRoot
+            self.preservesCanonicalEvents = preservesCanonicalEvents
         }
     }
 
@@ -114,22 +125,10 @@ public enum MidasUsageSyncExporter {
     }
 
     private struct Accumulator {
-        private struct Entry {
-            var event: MidasUsageSyncEvent
-            var byteCount: Int
-            var position: Int
-        }
-
         var excludedRecords = 0
+        private(set) var limitExceeded = false
         let maximumBytes: Int
-        private var bytes = 0
-        private var entries: [String: Entry] = [:]
-        private var heap: [String] = []
-        private let encoder = JSONEncoder()
-        /// Provider days that no longer fit as individual events. Each is published only as rollups.
-        private var rolledDays: Set<MidasUsageSyncRollup.DayKey> = []
-        private var rolledIDs: Set<String> = []
-        private var rollups = MidasUsageSyncRollup.Builder()
+        private var events: [String: MidasUsageSyncEvent] = [:]
 
         init(maximumBytes: Int) {
             self.maximumBytes = min(
@@ -137,20 +136,9 @@ public enum MidasUsageSyncExporter {
                 MidasUsageSyncPublication.maximumFileBytes - 4 * 1024 * 1024)
         }
 
-        func sortedEvents(deviceID: UUID?) -> [MidasUsageSyncEvent] {
-            var rollups = self.rollups
-            var events: [MidasUsageSyncEvent] = []
-            events.reserveCapacity(self.entries.count)
-            for entry in self.entries.values {
-                if self.rolledDays.contains(MidasUsageSyncRollup.DayKey(entry.event)) {
-                    rollups.add(entry.event)
-                } else {
-                    events.append(entry.event)
-                }
-            }
-            events += rollups.events(deviceID: deviceID)
-            events.sort { $0.id < $1.id }
-            return events
+        var canonicalEvents: [MidasUsageSyncEvent] {
+            self.events.values
+                .sorted { $0.provider == $1.provider ? $0.id < $1.id : $0.provider.rawValue < $1.provider.rawValue }
         }
 
         mutating func add(_ event: MidasUsageSyncEvent) {
@@ -158,94 +146,40 @@ public enum MidasUsageSyncExporter {
                 self.excludedRecords += 1
                 return
             }
-            if self.rolledDays.contains(MidasUsageSyncRollup.DayKey(event)), self.entries[event.id] == nil {
-                // A later copy of an already rolled-up event must not be added to its day twice.
-                guard self.rolledIDs.insert(event.id).inserted else { return }
-                self.rollups.add(event)
+            let priced = event.values.costUSD != nil || event.values.apiEquivalentCostUSD != nil
+            let event = MidasUsageSyncEvent(
+                id: event.id,
+                provider: event.provider,
+                day: event.day,
+                observedAt: event.observedAt,
+                values: priced ? event.values.withPricingRevision(MidasUsageSyncExporter.pricingCatalogGeneration)
+                    : event.values)
+            let key = event.provider.rawValue + ":" + event.id
+            if let existing = self.events[key], !MidasUsageSyncRecordOrder.prefers(event, over: existing) { return }
+            if self.events[key] == nil, self.events.count >= MidasUsageSyncPublication.maximumCanonicalRecords {
+                // Fail the whole scan rather than publishing a silently incomplete replacement.
+                self.limitExceeded = true
                 return
             }
-            let existing = self.entries[event.id]
-            if let existing {
-                // Reject copied prefixes before any JSON allocation. They cannot replace
-                // a more complete retained event, even when a copied log was scanned later.
-                let moreComplete = (event.values.tokens ?? -1) > (existing.event.values.tokens ?? -1)
-                let newer = event.values.tokens == existing.event.values.tokens
-                    && event.observedAt > existing.event.observedAt
-                guard moreComplete || newer else { return }
-            }
-            let encodedBytes = autoreleasepool { try? self.encoder.encode(event).count }
-            guard let encodedBytes
-            else {
-                self.excludedRecords += 1
-                return
-            }
-            let byteCount = encodedBytes + 1
-            if let existing {
-                self.entries[event.id] = Entry(event: event, byteCount: byteCount, position: existing.position)
-                self.bytes += byteCount - existing.byteCount
-                self.siftUp(existing.position)
-                self.siftDown(self.entries[event.id]?.position ?? existing.position)
-            } else {
-                self.entries[event.id] = Entry(event: event, byteCount: byteCount, position: self.heap.count)
-                self.bytes += byteCount
-                self.heap.append(event.id)
-                self.siftUp(self.heap.count - 1)
-            }
-            // One dictionary owns each event, size and heap position instead of three full hash tables.
-            // Heap pruning bounds both memory and work, independent of provider/file scan order.
-            // Older events become day totals instead of disappearing from shared history.
-            while self.entries.count > MidasUsageSyncPublication.maximumRecords - 4096
-                || self.bytes > self.maximumBytes
-            {
-                guard let oldest = self.removeOldest() else { break }
-                self.rolledDays.insert(MidasUsageSyncRollup.DayKey(oldest))
-                self.rolledIDs.insert(oldest.id)
-                self.rollups.add(oldest)
-            }
+            self.events[key] = event
         }
 
-        private func precedes(_ left: Int, _ right: Int) -> Bool {
-            guard let lhs = self.entries[self.heap[left]]?.event,
-                  let rhs = self.entries[self.heap[right]]?.event else { return false }
-            if lhs.observedAt != rhs.observedAt { return lhs.observedAt < rhs.observedAt }
-            return lhs.id < rhs.id
-        }
-
-        private mutating func swap(_ left: Int, _ right: Int) {
-            self.heap.swapAt(left, right)
-            self.entries[self.heap[left]]?.position = left
-            self.entries[self.heap[right]]?.position = right
-        }
-
-        private mutating func siftUp(_ initial: Int) {
-            var index = initial
-            while index > 0 {
-                let parent = (index - 1) / 2
-                guard self.precedes(index, parent) else { return }
-                self.swap(index, parent)
-                index = parent
+        func legacyEvents(deviceID: UUID?, now: Date) -> [MidasUsageSyncEvent] {
+            let publication = MidasUsageSyncPublication(
+                workspaceID: UUID(),
+                deviceID: deviceID ?? UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)),
+                deviceName: "Midas",
+                publishedAt: now,
+                events: self.canonicalEvents)
+            return MidasUsageSyncLedger.retainingLocalHistory(
+                previous: nil,
+                fresh: publication,
+                maximumBytes: self.maximumBytes + 4096).events.map { event in
+                // Legacy fixture callers historically use a nil rollup namespace.
+                guard deviceID == nil,
+                      MidasUsageSyncRollup.isRollup(event, deviceID: publication.deviceID) else { return event }
+                return MidasUsageSyncRollup.rollUp([event], deviceID: nil).first ?? event
             }
-        }
-
-        private mutating func siftDown(_ initial: Int) {
-            var index = initial
-            while 2 * index + 1 < self.heap.count {
-                var child = 2 * index + 1
-                if child + 1 < self.heap.count, self.precedes(child + 1, child) { child += 1 }
-                guard self.precedes(child, index) else { return }
-                self.swap(index, child)
-                index = child
-            }
-        }
-
-        private mutating func removeOldest() -> MidasUsageSyncEvent? {
-            guard let first = self.heap.first else { return nil }
-            if self.heap.count > 1 { self.swap(0, self.heap.count - 1) }
-            self.heap.removeLast()
-            let removed = self.entries.removeValue(forKey: first)
-            self.bytes -= removed?.byteCount ?? 0
-            if !self.heap.isEmpty { self.siftDown(0) }
-            return removed?.event
         }
     }
 
@@ -322,8 +256,24 @@ public enum MidasUsageSyncExporter {
                 }
             }
         }
+        guard !output.limitExceeded else { throw MidasUsageSyncError.limitExceeded }
+        var canonical = output.canonicalEvents
+        if let root = options.canonicalRoot, let deviceID = options.deviceID {
+            let store = try MidasUsageCanonicalStore(root: root)
+            let fresh = MidasUsageSyncPublication(
+                workspaceID: workspace.id,
+                deviceID: deviceID,
+                deviceName: "Midas",
+                publishedAt: now,
+                events: canonical,
+                excludedRecords: output.excludedRecords)
+            canonical = try store.retain(previous: nil, fresh: fresh, now: now).events
+            try store.prune(retainingRevisions: [])
+        }
         return ExportResult(
-            events: output.sortedEvents(deviceID: options.deviceID),
+            events: options.preservesCanonicalEvents ? canonical : output.legacyEvents(
+                deviceID: options.deviceID,
+                now: now),
             excludedRecords: output.excludedRecords)
     }
 

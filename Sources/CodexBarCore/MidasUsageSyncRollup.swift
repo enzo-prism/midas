@@ -76,7 +76,9 @@ public enum MidasUsageSyncRollup {
     /// Rolls every event into per-group totals and returns them as rollup events.
     static func rollUp(_ events: some Sequence<MidasUsageSyncEvent>, deviceID: UUID?) -> [MidasUsageSyncEvent] {
         var builder = Builder()
-        for event in events {
+        for event in events.sorted(by: {
+            $0.provider == $1.provider ? $0.id < $1.id : $0.provider.rawValue < $1.provider.rawValue
+        }) {
             builder.add(event)
         }
         return builder.events(deviceID: deviceID)
@@ -94,6 +96,7 @@ public enum MidasUsageSyncRollup {
         var reasoning: Int?
         var unpriced = 0
         var estimated = 0
+        var pricingRevision: Int?
         var observedAt = Date.distantPast
 
         mutating func add(_ event: MidasUsageSyncEvent) {
@@ -110,6 +113,7 @@ public enum MidasUsageSyncRollup {
             // The ledger counts an unpriced event at least once even when its own counter is zero.
             self.unpriced += max(values.unpricedRequests, values.costUSD == nil ? 1 : 0)
             self.estimated += values.estimatedRequests
+            if let revision = values.pricingRevision { self.pricingRevision = max(self.pricingRevision ?? 0, revision) }
             self.observedAt = max(self.observedAt, event.observedAt)
         }
 
@@ -138,7 +142,8 @@ public enum MidasUsageSyncRollup {
                     provenance: key.provenance,
                     model: key.model,
                     unpricedRequests: self.unpriced,
-                    estimatedRequests: self.estimated))
+                    estimatedRequests: self.estimated,
+                    pricingRevision: self.pricingRevision))
             return (try? event.values.validate()) == nil ? nil : event
         }
     }

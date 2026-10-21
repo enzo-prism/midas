@@ -83,6 +83,8 @@ public struct MidasUsageSyncValues: Codable, Sendable, Equatable {
     public let model: String?
     public let unpricedRequests: Int
     public let estimatedRequests: Int
+    /// Controlled catalog generation. Missing legacy values are generation zero.
+    public let pricingRevision: Int?
 
     public init(
         tokens: Int?,
@@ -93,7 +95,8 @@ public struct MidasUsageSyncValues: Codable, Sendable, Equatable {
         provenance: CostProvenance = .listPriceEstimate,
         model: String? = nil,
         unpricedRequests: Int = 0,
-        estimatedRequests: Int = 0)
+        estimatedRequests: Int = 0,
+        pricingRevision: Int? = nil)
     {
         self.tokens = tokens
         self.requests = requests
@@ -104,22 +107,39 @@ public struct MidasUsageSyncValues: Codable, Sendable, Equatable {
         self.model = model
         self.unpricedRequests = unpricedRequests
         self.estimatedRequests = estimatedRequests
+        self.pricingRevision = pricingRevision
     }
 
     public func validate() throws {
-        // Bound imported values so the capped 250k-record ledger remains safe in every existing chart aggregator.
+        // Bound imported values so the capped two-million-record ledger remains safe in every existing chart
+        // aggregator.
         guard Self.validCount(self.tokens), Self.validCount(self.requests),
               Self.validCount(self.tokenMix.inputTokens), Self.validCount(self.tokenMix.outputTokens),
               Self.validCount(self.tokenMix.cacheReadTokens), Self.validCount(self.tokenMix.cacheCreationTokens),
               Self.validCount(self.tokenMix.reasoningTokens), Self.validCount(self.unpricedRequests),
               Self.validCount(self.estimatedRequests), Self.validCost(self.costUSD),
               Self.validCost(self.apiEquivalentCostUSD),
+              self.pricingRevision.map({ (0...2_147_483_647).contains($0) }) ?? true,
               self.model
                   .map({
                       $0.utf8.count <= 160 && !$0.unicodeScalars
                           .contains(where: CharacterSet.controlCharacters.contains) }) ??
                   true
         else { throw MidasUsageSyncError.invalidRecord }
+    }
+
+    func withPricingRevision(_ revision: Int) -> Self {
+        Self(
+            tokens: self.tokens,
+            requests: self.requests,
+            costUSD: self.costUSD,
+            apiEquivalentCostUSD: self.apiEquivalentCostUSD,
+            tokenMix: self.tokenMix,
+            provenance: self.provenance,
+            model: self.model,
+            unpricedRequests: self.unpricedRequests,
+            estimatedRequests: self.estimatedRequests,
+            pricingRevision: revision)
     }
 
     private static func validCount(_ value: Int?) -> Bool {
@@ -179,6 +199,8 @@ public struct MidasUsageSyncAccountDay: Codable, Sendable, Equatable {
 
 public struct MidasUsageSyncPublication: Codable, Sendable, Equatable {
     public static let maximumRecords = 100_000
+    /// Canonical data is paged; this count bounds aggregate arithmetic and working memory independently of wire pages.
+    public static let maximumCanonicalRecords = 2_000_000
     public static let maximumFileBytes = 32 * 1024 * 1024
     public var schemaVersion: Int
     public let workspaceID: UUID
@@ -210,10 +232,24 @@ public struct MidasUsageSyncPublication: Codable, Sendable, Equatable {
     }
 
     public func validate(workspaceID: UUID, now: Date = Date()) throws {
+        try self.validate(workspaceID: workspaceID, now: now, maximumRecords: Self.maximumRecords)
+    }
+
+    public func validateCanonical(workspaceID: UUID, now: Date = Date()) throws {
+        try self.validate(workspaceID: workspaceID, now: now, maximumRecords: Self.maximumCanonicalRecords)
+    }
+
+    /// Legacy aggregates survive migration, but their erased member identities cannot be reconstructed.
+    public var legacyAggregateDayCount: Int {
+        Set(self.events.filter { MidasUsageSyncRollup.isRollup($0, deviceID: self.deviceID) }
+            .map { $0.provider.rawValue + ":" + $0.day }).count
+    }
+
+    private func validate(workspaceID: UUID, now: Date, maximumRecords: Int) throws {
         guard self.schemaVersion == 1 else { throw MidasUsageSyncError.unsupportedSchema }
         guard self.workspaceID == workspaceID else { throw MidasUsageSyncError.wrongWorkspace }
-        guard self.events.count <= Self.maximumRecords,
-              self.accountDays.count <= Self.maximumRecords - self.events.count
+        guard self.events.count <= maximumRecords,
+              self.accountDays.count <= maximumRecords - self.events.count
         else { throw MidasUsageSyncError.limitExceeded }
         guard self.excludedRecords >= 0, self.publishedAt.timeIntervalSince1970.isFinite,
               self.publishedAt <= now.addingTimeInterval(300), self.publishedAt >= Date(timeIntervalSince1970: 0),
