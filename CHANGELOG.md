@@ -7,7 +7,8 @@
 - Display the selected account identity in the menu, tooltip, and accessibility description; honor Hide personal information. Missing or failed selected accounts never borrow another account's quota.
 - Use explicit monthly Codex allowances when no weekly allowance is reported, with correct period labels and weekly priority. Short sessions never substitute for the circle's allowance.
 
-Build 133. Signed local build verified; public release verification is in progress.
+Build 133. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.49.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.49.1-midas.1).
 
 ## Midas 0.48.4 — October 20, 2026
 

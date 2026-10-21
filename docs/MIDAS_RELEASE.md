@@ -4,7 +4,7 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
-## Release candidate
+## 0.49.1 changes: choose the menu-bar account
 
 Version 0.49.1 (build 133) adds a persistent menu-bar account choice per provider, independent
 of the active CLI login. The circle follows the selected account's quota; aggregate spend is
@@ -14,18 +14,32 @@ The exact binary identifies source `3c5d89b4f`. The canonical full Swift test su
 privacy, removed-account, refresh-cap, stale/error, and monthly/weekly period regressions pass.
 Two separate saved Codex accounts returned fresh, error-free app-written usage snapshots;
 the ambient CLI authorization file was unchanged. Native live menu automation timed out, so
-these checks do not claim a live click-through. Public release verification is in progress.
+these checks do not claim a live click-through. The public Apple Silicon release is
+[v0.49.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.49.1-midas.1).
+
+Apple notarization submission `d2a17feb-2d3e-49cd-8c15-cc543124a115` was Accepted.
+The app and dSYM share arm64 UUID `E9DB2FFA-CF67-34CE-94AE-AFE3E5E441A3`.
+Deep strict signature, stapled ticket and Gatekeeper checks passed. Downloaded draft assets,
+anonymous public downloads, archive verification against the embedded Sparkle public key,
+both XML signatures, and both actual latest-feed routes match. A native Sparkle information
+probe using the 0.49.0 (132) host discovered 0.49.1 (133) at the public archive URL.
+Archive SHA-256: `619da8f2f5aee0e390d204465a912dab50a03c2755ad226fa598ca8c47348d2d`.
+
+The identical public notarized bundle is installed on the Mac mini. Local nicknames and circle
+selection survived. Remote [CI run 39590867857](https://github.com/enzo-prism/midas/actions/runs/39590867857)
+has passed Linux x64/arm64 builds, tests and smoke checks, Python contracts, and macOS lint;
+macOS integration/full tests remain running separately from the completed local full suite.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.1**, build **133**. The current public stable release is still **0.49.0**, build **132**, pending publication verification. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.1**, build **133**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.49.0**, build **132**, tagged
-`v0.49.0-midas.1`, superseding 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.49.1**, build **133**, tagged
+`v0.49.1-midas.1`, superseding 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
