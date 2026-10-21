@@ -1,5 +1,6 @@
 """Isolated lifecycle and doctor fixtures. No real launchd, accounts, or network devices."""
 import copy
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,74 @@ from unittest import mock
 
 import midas_sync_manage as manage
 import midas_usage_hub as hub
+
+
+class FakeLaunchd:
+    """A private launchd state machine; no real process or domain is changed."""
+    def __init__(self, plist, *, ghost_polls=0, old_transients=0, fail_new=False, no_gui=False, mismatch=False):
+        self.plist = plist
+        self.domain = "gui/" + str(os.getuid())
+        self.target = self.domain + "/" + manage.LABEL
+        self.current = plistlib.loads(plist.read_bytes())["ProgramArguments"]
+        self.ghost_polls = ghost_polls
+        self.remaining_ghosts = 0
+        self.unloading = False
+        self.old_transients = old_transients
+        self.fail_new = fail_new
+        self.no_gui = no_gui
+        self.mismatch = mismatch
+        self.now = 0
+        self.calls = []
+        self.attempts = {True: 0, False: 0}
+        self.real_run = subprocess.run
+
+    def run(self, args, **kwargs):
+        if args[0] != "/bin/launchctl":
+            return self.real_run(args, **kwargs)
+        self.calls.append(args)
+        action, value = args[1:3]
+        status, output, error = 0, "", ""
+        if action == "print" and value == self.domain:
+            if self.no_gui:
+                status, error = 125, "Could not find domain: PRIVATE-FIXTURE-SECRET"
+        elif action == "print" and value == self.target:
+            if self.unloading:
+                if self.remaining_ghosts:
+                    self.remaining_ghosts -= 1
+                else:
+                    self.current = None
+                    self.unloading = False
+            if self.current is None:
+                status, error = 113, "Could not find service"
+            else:
+                output = "arguments = {\n" + "\n".join(self.current) + "\n}\n"
+        elif action == "bootout":
+            assert value == self.target
+            self.unloading = True
+            self.remaining_ghosts = self.ghost_polls
+        elif action == "bootstrap":
+            assert value == self.domain and len(args) == 4 and args[3] == str(self.plist)
+            desired = plistlib.loads(self.plist.read_bytes())["ProgramArguments"]
+            is_new = "/runtimes/" in desired[0]
+            self.attempts[is_new] += 1
+            if (is_new and self.fail_new) or (not is_new and self.attempts[is_new] <= self.old_transients):
+                status, error = 5, "Bootstrap failed: 5: Input/output error PRIVATE-FIXTURE-SECRET"
+            else:
+                self.current = ["unexpected"] if self.mismatch else desired
+        else:
+            raise AssertionError("Unexpected launchctl command")
+        return subprocess.CompletedProcess(args, status, output, error)
+
+    def sleep(self, interval):
+        self.now += interval
+
+    @contextlib.contextmanager
+    def installed(self):
+        with mock.patch.object(manage.sys, "platform", "darwin"), \
+                mock.patch.object(manage.subprocess, "run", side_effect=self.run), \
+                mock.patch.object(manage.time, "monotonic", side_effect=lambda: self.now), \
+                mock.patch.object(manage.time, "sleep", side_effect=self.sleep):
+            yield self
 
 
 class ManagerTests(unittest.TestCase):
@@ -180,6 +249,75 @@ class ManagerTests(unittest.TestCase):
         binary.write_text("#!/bin/sh\nexec " + "'" + sys.executable.replace("'", "'\\''") + "'" + ' "$@"\n')
         binary.chmod(0o700)
         return root, store, source, target, runtime, plist
+
+    def test_reload_waits_for_unload_and_retries_transient_bootstrap_in_same_gui_domain(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        fake = FakeLaunchd(plist, ghost_polls=3, old_transients=2)
+        with fake.installed():
+            manage.reload_service(plist, root)
+        self.assertEqual(fake.attempts[False], 3)
+        self.assertGreaterEqual(fake.now, 1)
+        self.assertEqual(sum(call[1] == "bootout" for call in fake.calls), 1)
+        first_bootstrap = next(i for i, call in enumerate(fake.calls) if call[1] == "bootstrap")
+        self.assertGreater(first_bootstrap, 5)
+        self.assertEqual(fake.current, plistlib.loads(plist.read_bytes())["ProgramArguments"])
+
+    def test_reload_preserves_working_job_when_gui_domain_is_unavailable(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        fake = FakeLaunchd(plist, no_gui=True)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.reload_service(plist, root)
+        self.assertEqual(caught.exception.code, "gui_session_unavailable")
+        self.assertEqual(caught.exception.diagnostics["reason"], "domain_unavailable")
+        self.assertEqual(len(fake.calls), 1)
+        self.assertNotIn("PRIVATE-FIXTURE-SECRET", json.dumps(caught.exception.diagnostics))
+
+    def test_reload_does_not_accept_registered_old_or_different_arguments(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        fake = FakeLaunchd(plist, mismatch=True)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.reload_service(plist, root)
+        self.assertEqual(caught.exception.code, "service_configuration_mismatch")
+
+    def test_bootstrap_timeout_rolls_back_and_retries_restored_service_without_database_replacement(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        before_source, before_plist = target.read_bytes(), plist.read_bytes()
+        db_inode = store.path.stat().st_ino
+        fake = FakeLaunchd(plist, fail_new=True, old_transients=1)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.upgrade(root, source, runtime, plist)
+        self.assertEqual(caught.exception.code, "upgrade_rolled_back")
+        self.assertEqual(caught.exception.diagnostics["activation"]["code"], "service_reload_timeout")
+        self.assertEqual(caught.exception.diagnostics["activation"]["diagnostics"]["reason"], "input_output")
+        self.assertNotIn("PRIVATE-FIXTURE-SECRET", json.dumps(caught.exception.diagnostics))
+        self.assertGreater(fake.attempts[True], 1)
+        self.assertEqual(fake.attempts[False], 2)
+        self.assertEqual(fake.current, plistlib.loads(before_plist)["ProgramArguments"])
+        self.assertEqual(target.read_bytes(), before_source)
+        self.assertEqual(plist.read_bytes(), before_plist)
+        self.assertEqual(store.path.stat().st_ino, db_inode)
+
+    def test_failed_rollback_reports_only_sanitized_lifecycle_reasons(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        before_source, before_plist = target.read_bytes(), plist.read_bytes()
+        fake = FakeLaunchd(plist, fail_new=True, old_transients=10000)
+        with fake.installed(), self.assertRaises(manage.ManageError) as caught:
+            manage.upgrade(root, source, runtime, plist)
+        self.assertEqual(caught.exception.code, "rollback_restart_failed")
+        for phase in ("activation", "rollback"):
+            self.assertEqual(caught.exception.diagnostics[phase]["code"], "service_reload_timeout")
+            self.assertEqual(caught.exception.diagnostics[phase]["diagnostics"]["reason"], "input_output")
+        self.assertNotIn("PRIVATE-FIXTURE-SECRET", json.dumps(caught.exception.diagnostics))
+        self.assertEqual(target.read_bytes(), before_source)
+        self.assertEqual(plist.read_bytes(), before_plist)
+
+    def test_service_health_wait_accounts_for_validated_startup_throttle_with_cap(self):
+        self.assertEqual(manage.service_startup_timeout({"ThrottleInterval": 30}), 45)
+        self.assertEqual(manage.service_startup_timeout({"ThrottleInterval": 0}), 45)
+        self.assertEqual(manage.service_startup_timeout({"ThrottleInterval": 300}), 60)
+        for invalid in (-1, True, "30", 4000):
+            with self.assertRaises(manage.ManageError):
+                manage.service_startup_timeout({"ThrottleInterval": invalid})
 
     def test_upgrade_preserves_database_and_installs_private_runtime(self):
         root, store, source, target, runtime, plist = self.prepare_hub()

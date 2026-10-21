@@ -38,8 +38,9 @@ MAX_CLOCK_SKEW_SECONDS = 30
 
 
 class ManageError(Exception):
-    def __init__(self, code: str):
+    def __init__(self, code: str, diagnostics=None):
         self.code = code
+        self.diagnostics = diagnostics
         super().__init__(code)
 
 
@@ -289,18 +290,104 @@ def restart_service(path: Path, root: Path):
         raise ManageError("service_restart_failed")
 
 
+def launchctl_reason(stderr: str):
+    # Return only fixed classifications. Raw launchctl output may contain local paths.
+    text = stderr.lower()
+    for fragments, reason in (
+            (("operation not permitted", "permission denied"), "permission_denied"),
+            (("could not find domain",), "domain_unavailable"),
+            (("no such process", "not found"), "not_found"),
+            (("input/output",), "input_output"),
+            (("in progress",), "in_progress"),
+            (("already loaded", "already bootstrapped"), "already_loaded")):
+        if any(fragment in text for fragment in fragments):
+            return reason
+    return "command_failed"
+
+
+def registered_arguments(output: str):
+    arguments = []
+    collecting = False
+    for line in output.splitlines():
+        value = line.strip()
+        if value == "arguments = {":
+            collecting = True
+        elif collecting and value == "}":
+            return arguments
+        elif collecting:
+            arguments.append(value)
+    return None
+
+
 def reload_service(path: Path, root: Path):
-    service_payload(path, root)
+    payload = service_payload(path, root)
     if sys.platform != "darwin":
         raise ManageError("macos_required")
     domain = "gui/" + str(os.getuid())
-    # kickstart alone keeps launchd's old ProgramArguments; bootstrap loads the staged runtime.
-    subprocess.run(["/bin/launchctl", "bootout", domain + "/" + LABEL],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
-    result = subprocess.run(["/bin/launchctl", "bootstrap", domain, str(path)],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
-    if result.returncode:
-        raise ManageError("service_reload_failed")
+    target = domain + "/" + LABEL
+    deadline = time.monotonic() + 15
+    last_failure = None
+
+    def command(action, *values, discard_output=False):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ManageError("service_reload_timeout", last_failure)
+        try:
+            result = subprocess.run(["/bin/launchctl", action, *values],
+                                    stdout=subprocess.DEVNULL if discard_output else subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True, timeout=min(5, remaining))
+        except subprocess.TimeoutExpired:
+            raise ManageError("service_reload_timeout", {"operation": action, "reason": "timeout"}) from None
+        return result
+
+    # An SSH session may not have a GUI domain. Never unload a working service
+    # until its existing GUI domain is confirmed available.
+    context = command("print", domain, discard_output=True)
+    if context.returncode:
+        raise ManageError("gui_session_unavailable", {"operation": "print", "status": context.returncode,
+                                                       "reason": launchctl_reason(context.stderr)})
+    unloaded = command("bootout", target)
+    if unloaded.returncode:
+        last_failure = {"operation": "bootout", "status": unloaded.returncode,
+                        "reason": launchctl_reason(unloaded.stderr)}
+    # bootout returns before launchd has necessarily finished removing the job.
+    # Poll its fixed service target rather than racing immediate registration.
+    while command("print", target).returncode == 0:
+        time.sleep(.2)
+    while True:
+        loaded = command("bootstrap", domain, str(path))
+        if loaded.returncode:
+            last_failure = {"operation": "bootstrap", "status": loaded.returncode,
+                            "reason": launchctl_reason(loaded.stderr)}
+        observed = command("print", target)
+        if observed.returncode == 0:
+            if registered_arguments(observed.stdout) == payload["ProgramArguments"]:
+                return
+            raise ManageError("service_configuration_mismatch",
+                              {"operation": "print", "reason": "arguments_mismatch"})
+        if loaded.returncode and last_failure["reason"] in {"permission_denied", "domain_unavailable"}:
+            raise ManageError("service_reload_failed", last_failure)
+        # Even after a disappeared print target, launchd may briefly reject a
+        # bootstrap with error 5. Retry within the same bounded GUI domain.
+        time.sleep(.2)
+
+
+def service_startup_timeout(payload):
+    throttle = payload.get("ThrottleInterval", 30)
+    if type(throttle) is not int or not 0 <= throttle <= 3600:
+        raise ManageError("unsafe_service")
+    # Existing services use a 30-second throttle. Allow that startup window plus
+    # migration time while keeping the complete helper/rollback bounded.
+    return max(45, min(60, throttle + 15))
+
+
+def safe_failure(error):
+    if isinstance(error, ManageError):
+        result = {"code": error.code}
+        if error.diagnostics is not None:
+            result["diagnostics"] = error.diagnostics
+        return result
+    return {"code": "local_operation_failed"}
 
 
 def load_hub(source: Path):
@@ -388,6 +475,7 @@ def _upgrade(root: Path, source: Path, runtime: Path, plist_path: Path, *, resta
     raw = source.read_bytes()
     candidate = load_hub(source)
     old_payload = service_payload(plist_path, root)
+    startup_timeout = service_startup_timeout(old_payload)
     target = safe_path(root / "bin/midas_usage_hub.py", owned=True, regular=True)
     database = safe_path(root / "state/hub.sqlite3", owned=True, private=True, regular=True)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
@@ -454,7 +542,7 @@ def _upgrade(root: Path, source: Path, runtime: Path, plist_path: Path, *, resta
         else:
             connection_file = root.parent / "usage-sync/hub-connection.json"
             connection = validated_connection(connection_file)
-            deadline = time.monotonic() + 20
+            deadline = time.monotonic() + startup_timeout
             while True:
                 try:
                     observed, _ = manifest(connection)
@@ -465,14 +553,15 @@ def _upgrade(root: Path, source: Path, runtime: Path, plist_path: Path, *, resta
                     if time.monotonic() >= deadline:
                         raise ManageError("upgrade_health_failed") from None
                     time.sleep(.25)
-    except Exception:
+    except Exception as activation_error:
         atomic_private(target, old_source, 0o700)
         atomic_private(plist_path, old_plist)
         try:
             restart(plist_path, root)
-        except Exception:
-            raise ManageError("rollback_restart_failed") from None
-        raise ManageError("upgrade_rolled_back") from None
+        except Exception as rollback_error:
+            raise ManageError("rollback_restart_failed", {"activation": safe_failure(activation_error),
+                                                          "rollback": safe_failure(rollback_error)}) from None
+        raise ManageError("upgrade_rolled_back", {"activation": safe_failure(activation_error)}) from None
     return {"status": "healthy", "hubVersion": getattr(candidate, "HUB_VERSION", None),
             "codeSHA256": hashlib.sha256(raw).hexdigest(), "runtimeSHA256": digest, "backupCreated": True}
 
@@ -524,6 +613,8 @@ def main():
                 report.update(status="healthy", code="pairing_denied")
     except ManageError as error:
         report.update(status="needs_attention", code=error.code)
+        if error.diagnostics is not None:
+            report["diagnostics"] = error.diagnostics
     except Exception as error:
         # Never return exception arguments: they can include credentials, paths or database rows.
         report.update(status="needs_attention", code={FileNotFoundError: "not_installed", PermissionError: "access_denied",
