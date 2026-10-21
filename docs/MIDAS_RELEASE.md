@@ -6,7 +6,7 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.0**, build **131**. This sync update is under validation; the last published binary is recorded below. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.0**, build **132**. This sync update is under validation; the last published binary is recorded below. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
@@ -38,7 +38,7 @@ re-added once because the app identity changed.
 
 ## 0.49.0 changes: durable incremental sync
 
-Version 0.49.0, build 131, retains canonical event identities in private pages and
+Version 0.49.0, build 132, retains canonical event identities in private pages and
 exchanges only changed history pages through the existing Tailscale hub. Expected-base
 revisions, durable outboxes and explicit applied receipts protect interrupted uploads,
 restored backups and peer cache recovery. Checked, accepted, applied and peer-received
