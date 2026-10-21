@@ -124,6 +124,10 @@ final class MidasUsageSyncCoordinator {
         self.currentTime()
     }
 
+    var isReplacingConnection: Bool {
+        self.connectionDrainID != nil
+    }
+
     var syncDeviceID: UUID {
         self.hubConnection?.deviceID ?? self.deviceID
     }
@@ -764,9 +768,9 @@ final class MidasUsageSyncCoordinator {
               self.identityStillMatches() else { throw CancellationError() }
         var recoveredPending: MidasUsageSyncPublication?
         if hubState != nil, publication == nil, !self.criticalOutboxNeedsRepair,
-           let head = result.publications.first(where: { $0.deviceID == self.syncDeviceID }),
            let retained = ledger.publications.first(where: { $0.deviceID == self.syncDeviceID }),
-           head.events != retained.events || head.accountDays != retained.accountDays
+           result.publications.first(where: { $0.deviceID == self.syncDeviceID })?.events != retained.events ||
+           result.publications.first(where: { $0.deviceID == self.syncDeviceID })?.accountDays != retained.accountDays
         {
             recoveredPending = try await self.worker.retain(
                 previous: self.pendingLocal,

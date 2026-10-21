@@ -805,6 +805,10 @@ struct MidasHubCoordinatorTests {
             self.workspace = workspace
         }
 
+        func publication(for deviceID: UUID) -> MidasUsageSyncPublication? {
+            self.publications.first { $0.deviceID == deviceID }
+        }
+
         func setFailure(_ failure: MidasUsageHubError?) {
             self.failure = failure
         }
@@ -974,6 +978,8 @@ extension MidasHubCoordinatorTests {
         coordinator.makeLocalUsage = nil
         await coordinator.syncNow()
         #expect(coordinator.snapshots[.codex]?.sessionTokens == 350)
+        let repairedHead = await hub.publication(for: fixture.connection.deviceID)
+        #expect(repairedHead?.events.count == 1)
         let restarted = fixture.coordinator(restore: true)
         #expect(restarted.snapshots[.codex]?.sessionTokens == 350)
         #expect(coordinator.issue == nil)
