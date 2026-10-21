@@ -3,13 +3,16 @@ import SwiftUI
 @MainActor
 struct PreferencesSyncPane: View {
     @Bindable var coordinator: MidasUsageSyncCoordinator
+    @State private var management = MidasSyncManagement()
+    @State private var pairingCode = ""
+    @State private var pairing = MidasSyncPairing()
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 20) {
                 SettingsSection(title: "Combine usage across your devices") {
                     Picker("Connection", selection: Binding(
-                        get: { self.coordinator.transport },
+                        get: { self.coordinator.selectedTransport },
                         set: { self.coordinator.selectTransport($0) }))
                     {
                         ForEach(MidasUsageSyncTransport.allCases) { transport in
@@ -18,7 +21,7 @@ struct PreferencesSyncPane: View {
                     }
                     .pickerStyle(.segmented)
                     .accessibilityIdentifier("midas-sync-transport")
-                    if self.coordinator.transport == .tailscaleHub {
+                    if self.coordinator.selectedTransport == .tailscaleHub {
                         self.caption("Use your Mac mini as a private hub. Import the connection file created " +
                             "for this Mac. Tailscale must be connected on both devices.")
                         self.hubControls
@@ -28,8 +31,8 @@ struct PreferencesSyncPane: View {
                         self.folderControls
                     }
                     self.toggleRow(
-                        title: "Sync usage from this Mac",
-                        subtitle: "Keep Midas open on each Mac to share new usage.",
+                        title: "Keep usage in sync",
+                        subtitle: "Receive shared usage and save new activity automatically while Midas is open.",
                         binding: self.$coordinator.isEnabled)
                         .disabled(!self.coordinator.hasConnection)
                     self.toggleRow(
@@ -55,6 +58,10 @@ struct PreferencesSyncPane: View {
                             "Create a new connection file to change it.")
                     }
                     MidasSyncStatusView(coordinator: self.coordinator)
+                }
+
+                if self.coordinator.selectedTransport == .tailscaleHub {
+                    self.managementControls
                 }
 
                 if !self.coordinator.devices.isEmpty {
@@ -107,6 +114,24 @@ struct PreferencesSyncPane: View {
 
     private var hubControls: some View {
         VStack(alignment: .leading, spacing: 8) {
+            DisclosureGroup("Connect with a code") {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("https://your-hub.your-tailnet.ts.net", text: self.$pairing.endpoint)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Private Tailscale hub address")
+                        .disabled(self.pairing.isWaiting)
+                    if let code = self.pairing.code {
+                        Text(code).font(.title.monospacedDigit()).textSelection(.enabled)
+                            .accessibilityLabel("Pairing code \(code)")
+                    }
+                    if let message = self.pairing.message { self.caption(message) }
+                    HStack {
+                        Button("Request connection") { self.pairing.begin(coordinator: self.coordinator) }
+                            .disabled(self.pairing.isWaiting)
+                        if self.pairing.isWaiting { Button("Cancel") { self.pairing.cancel() } }
+                    }
+                }.padding(.top, 8)
+            }
             HStack(spacing: 12) {
                 Button(self.coordinator.hubEndpoint == nil ? "Import connection file…" : "Replace connection file…") {
                     self.coordinator.chooseHubConnection()
@@ -175,11 +200,54 @@ struct PreferencesSyncPane: View {
                             .foregroundStyle(MidasTheme.secondaryText)
                     }
                 }
-                Text("Last seen \(device.lastSeenAt.formatted(date: .abbreviated, time: .shortened))")
+                Text("Latest shared activity \(device.lastSeenAt.formatted(date: .abbreviated, time: .shortened))")
                     .font(.footnote)
                     .foregroundStyle(MidasTheme.secondaryText)
             }
             Spacer()
+            if let applied = device.hasAppliedLatest, !device.isThisMac {
+                Label(applied ? "Received" : "Waiting", systemImage: applied ? "checkmark.circle" : "clock")
+                    .font(.caption)
+                    .accessibilityLabel(applied ? "Received this Mac’s latest shared usage" :
+                        "Waiting to receive this Mac’s latest usage")
+            }
+        }
+    }
+
+    private var managementControls: some View {
+        DisclosureGroup("Manage the hub on this Mac") {
+            VStack(alignment: .leading, spacing: 10) {
+                self
+                    .caption(
+                        "These controls manage the hub running on this Mac. " +
+                            "Your Tailscale connection and saved history are preserved.")
+                HStack {
+                    Button("Check hub") { Task { await self.management.run(.doctor) } }
+                    Button("Repair hub") { Task { await self.management.run(.upgrade) } }
+                    Button("Review device requests") { Task { await self.management.run(.pairingList) } }
+                }
+                .disabled(self.management.isRunning)
+                if let message = self.management.message { self.caption(message) }
+                ForEach(self.management.requests) { request in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(request.deviceName ?? "New device")
+                        TextField("Code shown on the other Mac", text: self.$pairingCode)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Pairing verification code")
+                        HStack {
+                            Button("Approve device") {
+                                Task { await self.management.run(
+                                    .pairingApprove,
+                                    requestID: request.id,
+                                    code: self.pairingCode) }
+                            }
+                            Button("Deny") { Task { await self.management.run(.pairingDeny, requestID: request.id) } }
+                        }
+                        .disabled(self.management.isRunning)
+                    }
+                }
+            }
+            .padding(.top, 8)
         }
     }
 

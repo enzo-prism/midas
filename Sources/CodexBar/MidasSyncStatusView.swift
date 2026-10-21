@@ -64,7 +64,7 @@ struct MidasSyncStatusView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                Label(self.presentation.title, systemImage: self.presentation.symbol)
+                Label(self.coordinator.healthSummary, systemImage: self.presentation.symbol)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 if self.coordinator.isSyncing {
@@ -85,6 +85,12 @@ struct MidasSyncStatusView: View {
                 .foregroundStyle(MidasTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if let coverage = self.coordinator.coverageIssue {
+                Label(coverage, systemImage: "chart.bar.xaxis")
+                    .font(.footnote)
+                    .foregroundStyle(MidasTheme.warning)
+            }
+
             if let summary = self.presentation.sharingSummary {
                 Text(summary)
                     .font(.footnote)
@@ -99,7 +105,7 @@ struct MidasSyncStatusView: View {
             }
 
             if self.coordinator.isEnabled, self.coordinator.hasConnection {
-                self.transferDates
+                DisclosureGroup("Sync details") { self.transferDates }
                 Text(self.coordinator.transport == .tailscaleHub
                     ? "Showing the last received totals. Devices that are offline may have newer usage waiting to sync."
                     : "Saving here does not confirm another Mac has received your usage.")
@@ -115,6 +121,15 @@ struct MidasSyncStatusView: View {
 
     private var transferDates: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if let date = self.coordinator.lastCheckedAt {
+                Text("Hub checked: \(date.formatted(date: .abbreviated, time: .shortened))")
+            }
+            if let date = self.coordinator.lastCollectedAt {
+                Text("Local usage collected: \(date.formatted(date: .abbreviated, time: .shortened))")
+            }
+            if let date = self.coordinator.nextRetryAt {
+                Text("Retry planned: \(date.formatted(date: .omitted, time: .shortened))")
+            }
             if let date = self.coordinator.lastPublishedAt {
                 Text("Last successful upload: \(date.formatted(date: .abbreviated, time: .shortened))")
             }

@@ -104,7 +104,12 @@ extension UsageStore {
         let enabled = self.enabledProvidersForBackgroundWork()
         let options = MidasUsageSyncExporter.Options(
             codexAdditionalSessionsRoots: self.midasCodexSyncAdditionalSessionsRoots,
-            deviceID: self.midasUsageSync.syncDeviceID)
+            deviceID: self.midasUsageSync.syncDeviceID,
+            canonicalRoot: self.midasUsageSync.transport == .tailscaleHub
+                ? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(MidasIdentity.supportDirectoryName)
+                .appendingPathComponent("usage-sync/canonical") : nil,
+            preservesCanonicalEvents: self.midasUsageSync.transport == .tailscaleHub)
         let exported = try await MidasUsageSyncExporter.export(
             workspace: workspace,
             providers: [.codex, .claude, .meta],
