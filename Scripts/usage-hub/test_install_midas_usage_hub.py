@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -26,13 +27,23 @@ class HubInstallerTests(unittest.TestCase):
         self.agents = self.root / "LaunchAgents"
         self.logs = self.root / "logs"
         self.service = self.agents / "com.designprism.midas.usage-hub.plist"
+        # CI toolcache executables may belong to another account or be group writable.
+        # Exercise the real production guard with an owned 700 binary rather than
+        # relaxing it. The lib link supports relocatable Linux/standalone-Python
+        # loaders and their stdlib; this is an isolated fixture, not a shipped runtime.
+        interpreter = self.root / "interpreter"
+        (interpreter / "bin").mkdir(parents=True, mode=0o700)
+        self.python = interpreter / "bin/python3"
+        shutil.copyfile(Path(sys.executable).resolve(), self.python)
+        self.python.chmod(0o700)
+        (interpreter / "lib").symlink_to(Path(sys.base_prefix) / "lib", target_is_directory=True)
 
     def tearDown(self):
         self.temporary.cleanup()
 
     def run_installer(self, *arguments):
         return subprocess.run(
-            ["bash", str(self.script), "--python", sys.executable, "--source", str(self.source),
+            ["bash", str(self.script), "--python", str(self.python), "--source", str(self.source),
              "--install-root", str(self.install), "--launch-agents-dir", str(self.agents),
              "--log-dir", str(self.logs), *arguments],
             capture_output=True, text=True, timeout=30,
@@ -48,7 +59,7 @@ class HubInstallerTests(unittest.TestCase):
         self.assertTrue(payload["RunAtLoad"])
         self.assertTrue(payload["KeepAlive"])
         self.assertEqual(payload["ProgramArguments"][-4:], ["--bind", "127.0.0.1", "--port", "8766"])
-        self.assertEqual(Path(payload["ProgramArguments"][0]), Path(sys.executable).resolve())
+        self.assertEqual(Path(payload["ProgramArguments"][0]), self.python)
         self.assertNotIn("tailscale", " ".join(payload["ProgramArguments"]).lower())
         copied = self.install / "bin/midas_usage_hub.py"
         self.assertEqual(copied.read_bytes(), self.source.read_bytes())
@@ -66,7 +77,7 @@ class HubInstallerTests(unittest.TestCase):
         runtime = self.root / "runtime"
         (runtime / "bin").mkdir(parents=True)
         binary = runtime / "bin/python3"
-        binary.write_text("#!/bin/sh\nexec '" + sys.executable.replace("'", "'\\''") + "' \"$@\"\n")
+        binary.write_text("#!/bin/sh\nexec '" + str(self.python).replace("'", "'\\''") + "' \"$@\"\n")
         binary.chmod(0o700)
         result = self.run_installer("--initialize", "--runtime-root", str(runtime))
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -75,6 +86,16 @@ class HubInstallerTests(unittest.TestCase):
         self.assertTrue(installed.is_relative_to(self.install / "runtimes"))
         self.assertEqual(installed.read_bytes(), binary.read_bytes())
         self.assertIn("-I", payload["ProgramArguments"])
+
+    def test_writable_interpreter_is_rejected_without_creating_state(self):
+        unsafe = self.python.with_name("unsafe-python3")
+        shutil.copyfile(self.python, unsafe)
+        unsafe.chmod(0o777)
+        result = self.run_installer("--initialize", "--python", str(unsafe))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("runtime must be an owned internal executable", result.stderr)
+        self.assertFalse((self.install / "state/hub.sqlite3").exists())
+        self.assertFalse(self.service.exists())
 
     def test_missing_initialize_does_not_create_database_or_service(self):
         result = self.run_installer()
