@@ -539,6 +539,23 @@ extension SettingsStore {
         }
     }
 
+    var midasMenuBarAccountIDs: [String: String] {
+        get { self.defaultsState.midasMenuBarAccountIDs }
+        set {
+            self.defaultsState.midasMenuBarAccountIDs = newValue
+            self.userDefaults.set(newValue, forKey: "midasMenuBarAccountIDs")
+        }
+    }
+
+    func midasMenuBarAccountID(for provider: UsageProvider) -> String? {
+        let value = self.midasMenuBarAccountIDs[provider.rawValue]
+        return value?.isEmpty == false ? value : nil
+    }
+
+    func setMidasMenuBarAccountID(_ accountID: String?, for provider: UsageProvider) {
+        self.midasMenuBarAccountIDs[provider.rawValue] = accountID?.isEmpty == false ? accountID : nil
+    }
+
     var midasMenuBarHideSpend: Bool {
         get { self.defaultsState.midasMenuBarHideSpend }
         set {

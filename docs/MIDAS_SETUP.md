@@ -115,6 +115,23 @@ The shared JSON is readable to anyone with folder access, so keep the folder pri
 stops sharing and keeps existing shared files. See [usage sync](MIDAS_USAGE_SYNC.md) for coverage,
 deduplication, privacy, recovery, and verification details.
 
+## Choose the menu-bar account
+
+Open **More actions → Menu-bar provider**, then choose a provider and an account.
+The selection is remembered separately for each provider. **Current account** follows the
+provider's active account. Account choices include both the nickname and identity; Hide personal
+information replaces those labels with account numbers.
+
+The circle uses that account's remaining allowance: Codex's weekly limit, or its explicitly
+reported monthly allowance when no weekly limit exists. A missing account or unavailable quota
+stays unavailable instead of showing another account's balance. A failed refresh marks retained
+usage as last known. Changing this choice does not switch the Codex or Claude CLI login, and
+combined spend totals keep their existing scope. Connected accounts continue refreshing even
+when the account chosen for the circle differs from the active login.
+
+An optional Codex email filter below still restricts which accounts are available. Remove it
+if you want to choose between all saved Codex logins.
+
 ## Limit Codex to one OpenAI account
 
 The optional local preference `midasCodexAccountEmailFilter` limits Codex to a normalized

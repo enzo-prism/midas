@@ -4,6 +4,13 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## Local development build
+
+Version 0.49.1 (build 133) adds a persistent menu-bar account choice per provider, independent
+of the active CLI login. The circle follows the selected account's quota; aggregate spend is
+unchanged. Codex free accounts with an explicit monthly allowance use a monthly label.
+This build is for local verification and has not been published to GitHub or Sparkle.
+
 ## Current distribution
 
 The release selected in `version.env` is **0.49.0**, build **132**, published as the latest stable release. 0.37.0 (build 109) was the first build with

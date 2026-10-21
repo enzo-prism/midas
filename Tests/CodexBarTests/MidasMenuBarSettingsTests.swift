@@ -40,6 +40,37 @@ struct MidasMenuBarSettingsTests {
         #expect(reloaded.midasMenuBarHideSpend)
     }
 
+    @Test func menuBarAccountSelectionPersistsIndependentlyOfAuthenticationAndTracking() throws {
+        let (settings, defaults, suite) = try self.makeSettings()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let activeSource = settings.codexActiveSource
+        let tracksAll = settings.midasTrackAllAccounts
+        settings.setMidasMenuBarAccountID("business", for: .codex)
+        settings.setMidasMenuBarAccountID("personal", for: .claude)
+        let reloaded = self.store(defaults: defaults, suite: suite)
+        #expect(reloaded.midasMenuBarAccountID(for: .codex) == "business")
+        #expect(reloaded.midasMenuBarAccountID(for: .claude) == "personal")
+        #expect(settings.codexActiveSource == activeSource)
+        #expect(settings.midasTrackAllAccounts == tracksAll)
+        reloaded.setMidasMenuBarAccountID(nil, for: .codex)
+        #expect(reloaded.midasMenuBarAccountID(for: .codex) == nil)
+        #expect(reloaded.midasMenuBarAccountID(for: .claude) == "personal")
+        #expect(self.store(defaults: defaults, suite: suite).midasMenuBarAccountID(for: .codex) == nil)
+    }
+
+    @Test func menuBarAccountSelectionParticipatesInMenuObservation() throws {
+        let (settings, defaults, suite) = try self.makeSettings()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let flag = ObservationFlag()
+        withObservationTracking {
+            _ = settings.menuObservationToken
+        } onChange: {
+            flag.markChanged()
+        }
+        settings.setMidasMenuBarAccountID("business", for: .codex)
+        #expect(flag.changed)
+    }
+
     @Test func invalidStoredValuesHaveSafeDefaults() throws {
         let (_, defaults, suite) = try self.makeSettings()
         defer { defaults.removePersistentDomain(forName: suite) }

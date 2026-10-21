@@ -118,15 +118,9 @@ struct MidasPanelView: View {
             Button("Estimate details…") { self.infoPage = .coverage }
             Divider()
             Menu("Menu-bar provider") {
-                Picker("Menu-bar provider", selection: Binding(
-                    get: { self.settings.midasMenuBarFocusProvider },
-                    set: { self.settings.midasMenuBarFocusProvider = $0 }))
-                {
-                    ForEach(self.providers, id: \.self) { provider in
-                        Text(ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue).tag(provider)
-                    }
+                ForEach(self.providers, id: \.self) { provider in
+                    self.menuBarProviderChoice(provider)
                 }
-                .pickerStyle(.inline)
             }
             Button("Provider actions & accounts…", action: self.actions.legacyMenu)
             Button("Check for Updates…", action: self.actions.checkForUpdates)
@@ -137,6 +131,67 @@ struct MidasPanelView: View {
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden)
         .fixedSize().help("More actions").accessibilityLabel("More actions")
+    }
+
+    @ViewBuilder
+    private func menuBarProviderChoice(_ provider: UsageProvider) -> some View {
+        let name = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
+        let accounts = self.actions.menuBarAccountPresentations(provider)
+        let selectedID = self.settings.midasMenuBarAccountID(for: provider)
+        let isFocused = self.settings.midasMenuBarFocusProvider == provider
+        if accounts.count > 1 || selectedID != nil {
+            Menu {
+                Button {
+                    self.selectMenuBarAccount(nil, provider: provider)
+                } label: {
+                    if isFocused, selectedID == nil {
+                        Label("Current account", systemImage: "checkmark")
+                    } else {
+                        Text("Current account")
+                    }
+                }
+                Divider()
+                ForEach(accounts) { account in
+                    Button {
+                        self.selectMenuBarAccount(account.id, provider: provider)
+                    } label: {
+                        let title = MidasMenuBarAccountLabel.title(
+                            account,
+                            hidePersonalInfo: self.settings.hidePersonalInfo)
+                        if isFocused, selectedID == account.id {
+                            Label(title, systemImage: "checkmark")
+                        } else {
+                            Text(title)
+                        }
+                    }
+                }
+                if let selectedID, !accounts.contains(where: { $0.id == selectedID }) {
+                    Label("Selected account unavailable", systemImage: "exclamationmark.circle")
+                }
+            } label: {
+                if isFocused {
+                    Label(name, systemImage: "checkmark")
+                } else {
+                    Text(name)
+                }
+            }
+        } else {
+            Button {
+                self.settings.midasMenuBarFocusProvider = provider
+            } label: {
+                if isFocused {
+                    Label(name, systemImage: "checkmark")
+                } else {
+                    Text(name)
+                }
+            }
+        }
+    }
+
+    private func selectMenuBarAccount(_ accountID: String?, provider: UsageProvider) {
+        self.settings.setMidasMenuBarAccountID(accountID, for: provider)
+        self.settings.midasMenuBarFocusProvider = provider
+        self.actions.refresh()
     }
 
     private var providers: [UsageProvider] {
@@ -305,5 +360,17 @@ enum MidasOverviewMoney {
             return "<" + 0.01.formatted(.currency(code: currency))
         }
         return amount.formatted(.currency(code: currency).precision(.fractionLength(2)))
+    }
+}
+
+/// Keep aliases useful while disambiguating accounts with their provider-owned identity.
+enum MidasMenuBarAccountLabel {
+    static func title(_ account: MidasAccountPresentation, hidePersonalInfo: Bool = false) -> String {
+        if hidePersonalInfo { return account.displayName ?? "Account" }
+        let identity = account.presentation.account.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = account.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if name.isEmpty { return identity.isEmpty ? "Account" : identity }
+        if identity.isEmpty || name == identity { return name }
+        return "\(name) (\(identity))"
     }
 }

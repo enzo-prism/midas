@@ -482,6 +482,8 @@ extension SettingsStore {
                 isMidasApp: Bundle.main.object(forInfoDictionaryKey: "MidasAirEnabled") as? Bool == true),
             midasMenuBarFocusProvider: UsageProvider(
                 rawValue: userDefaults.string(forKey: "midasMenuBarFocusProvider") ?? "") ?? .codex,
+            midasMenuBarAccountIDs: userDefaults
+                .dictionary(forKey: "midasMenuBarAccountIDs") as? [String: String] ?? [:],
             midasMenuBarHideSpend: userDefaults.object(forKey: "midasMenuBarHideSpend") as? Bool ?? false,
             mergeIcons: mergeIcons,
             switcherShowsIcons: switcherShowsIcons,

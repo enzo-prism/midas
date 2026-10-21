@@ -259,7 +259,10 @@ enum MidasCodexAccountPolicy {
 }
 
 extension StatusItemController {
-    func midasAccountPresentations(for provider: UsageProvider) -> [MidasAccountPresentation] {
+    func midasAccountPresentations(
+        for provider: UsageProvider,
+        includeAll: Bool = false) -> [MidasAccountPresentation]
+    {
         guard provider == .codex else { return self.midasTokenAccountPresentations(for: provider) }
         let projection = self.settings.codexVisibleAccountProjection
         let snapshots = Dictionary(
@@ -267,7 +270,8 @@ extension StatusItemController {
             uniquingKeysWith: { _, new in new })
         let visible = MidasCodexAccountPolicy.visibleAccounts(
             projection.visibleAccounts,
-            trackAll: self.settings.midasTrackAllAccounts,
+            trackAll: includeAll || self.settings.midasTrackAllAccounts
+                || self.settings.midasMenuBarAccountID(for: provider) != nil,
             stacked: self.settings.multiAccountMenuLayout == .stacked)
         let names = MidasAccountNames.resolve(
             identities: visible.map { ($0.id, self.accountInfo(for: $0).email ?? "") },
@@ -412,7 +416,9 @@ struct MidasAccountOverviewBars: View {
 extension StatusItemController {
     private func midasTokenAccountPresentations(for provider: UsageProvider) -> [MidasAccountPresentation] {
         let accounts = self.settings.tokenAccounts(for: provider)
-        guard accounts.count > 1 else { return [] }
+        guard !accounts.isEmpty,
+              accounts.count > 1 || self.settings.midasMenuBarAccountID(for: provider) != nil
+        else { return [] }
         var aliases = self.settings.midasAccountAliases
         for account in accounts where account.externalIdentifier != nil && !account.label.contains("@") {
             let key = provider.rawValue + ":" + account.id.uuidString

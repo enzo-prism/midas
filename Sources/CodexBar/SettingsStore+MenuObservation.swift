@@ -72,6 +72,7 @@ extension SettingsStore {
         _ = self.ollamaCookieSource
         _ = self.midasMenuBarMode
         _ = self.midasMenuBarFocusProvider
+        _ = self.midasMenuBarAccountIDs
         _ = self.midasMenuBarHideSpend
         _ = self.mergeIcons
         _ = self.switcherShowsIcons

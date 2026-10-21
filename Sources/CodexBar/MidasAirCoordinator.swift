@@ -196,6 +196,9 @@ final class MidasAirCoordinator: NSObject, NSPopoverDelegate, NSWindowDelegate {
             },
             accountPresentations: { [weak self] provider in
                 self?.controller?.midasAccountPresentations(for: provider) ?? []
+            },
+            menuBarAccountPresentations: { [weak self] provider in
+                self?.controller?.midasAccountPresentations(for: provider, includeAll: true) ?? []
             })
     }
 

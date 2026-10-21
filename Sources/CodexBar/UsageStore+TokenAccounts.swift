@@ -66,16 +66,26 @@ extension UsageStore {
 
     func shouldFetchAllTokenAccounts(provider: UsageProvider, accounts: [ProviderTokenAccount]) -> Bool {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return false }
-        if provider == .claude { return !accounts.isEmpty }
+        if provider == .claude || self.settings.midasMenuBarAccountID(for: provider) != nil {
+            return !accounts.isEmpty
+        }
         return (self.settings.midasTrackAllAccounts
             || self.settings.multiAccountMenuLayout == .stacked) && accounts.count > 1
     }
 
     func shouldFetchAllCodexVisibleAccounts() -> Bool {
         let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
-        if self.settings.midasCodexAccountEmailFilter != nil { return !projection.visibleAccounts.isEmpty }
-        return (self.settings.midasTrackAllAccounts || self.settings.multiAccountMenuLayout == .stacked) &&
-            projection.visibleAccounts.count > 1
+        return self.shouldFetchCodexAccountSnapshots(accountCount: projection.visibleAccounts.count)
+    }
+
+    func shouldFetchCodexAccountSnapshots(accountCount: Int) -> Bool {
+        if self.settings.midasCodexAccountEmailFilter != nil
+            || self.settings.midasMenuBarAccountID(for: .codex) != nil
+        {
+            return accountCount > 0
+        }
+        return (self.settings.midasTrackAllAccounts || self.settings.multiAccountMenuLayout == .stacked)
+            && accountCount > 1
     }
 
     func refreshCodexVisibleAccountsForMenu(generation: UInt64? = nil) async {
@@ -84,7 +94,9 @@ extension UsageStore {
             projection.visibleAccounts,
             snapshots: self.codexAccountSnapshots,
             activeVisibleAccountID: projection.activeVisibleAccountID)
-        guard accounts.count > 1 || (self.settings.midasCodexAccountEmailFilter != nil && !accounts.isEmpty) else {
+        guard accounts.count > 1 || (self.shouldFetchCodexAccountSnapshots(accountCount: accounts.count)
+            && !accounts.isEmpty)
+        else {
             self.codexAccountSnapshots = []
             return
         }
@@ -400,7 +412,7 @@ extension UsageStore {
         generation: UInt64? = nil) async
     {
         let selectedAccount = self.settings.selectedTokenAccount(for: provider)
-        let limitedAccounts = self.limitedTokenAccounts(accounts, selected: selectedAccount)
+        let limitedAccounts = self.limitedTokenAccounts(accounts, selected: selectedAccount, provider: provider)
         let effectiveSelected = selectedAccount ?? limitedAccounts.first
 
         // Capture the prior per-account snapshot state so we can preserve last-good
@@ -503,15 +515,20 @@ extension UsageStore {
 
     func limitedTokenAccounts(
         _ accounts: [ProviderTokenAccount],
-        selected: ProviderTokenAccount?) -> [ProviderTokenAccount]
+        selected: ProviderTokenAccount?,
+        provider: UsageProvider? = nil) -> [ProviderTokenAccount]
     {
         if self.settings.midasTrackAllAccounts { return accounts }
         let limit = Self.tokenAccountMenuSnapshotLimit
         if accounts.count <= limit { return accounts }
         var limited = Array(accounts.prefix(limit))
-        if let selected, !limited.contains(where: { $0.id == selected.id }) {
-            limited.removeLast()
-            limited.append(selected)
+        let menuBarID = provider.flatMap { self.settings.midasMenuBarAccountID(for: $0) }
+        let protectedIDs = Set([selected?.id.uuidString, menuBarID].compactMap(\.self))
+        for account in accounts where protectedIDs.contains(account.id.uuidString) {
+            guard !limited.contains(where: { $0.id == account.id }),
+                  let replacement = limited.lastIndex(where: { !protectedIDs.contains($0.id.uuidString) })
+            else { continue }
+            limited[replacement] = account
         }
         return limited
     }
@@ -529,12 +546,15 @@ extension UsageStore {
         let limit = Self.tokenAccountMenuSnapshotLimit
         if accounts.count <= limit { return accounts }
         var limited = Array(accounts.prefix(limit))
-        if let activeVisibleAccountID,
-           let active = accounts.first(where: { $0.id == activeVisibleAccountID }),
-           !limited.contains(where: { $0.id == activeVisibleAccountID })
-        {
-            limited.removeLast()
-            limited.append(active)
+        let protectedIDs = Set([
+            activeVisibleAccountID,
+            self.settings.midasMenuBarAccountID(for: .codex),
+        ].compactMap(\.self))
+        for account in accounts where protectedIDs.contains(account.id) {
+            guard !limited.contains(where: { $0.id == account.id }),
+                  let replacement = limited.lastIndex(where: { !protectedIDs.contains($0.id) })
+            else { continue }
+            limited[replacement] = account
         }
         return limited
     }

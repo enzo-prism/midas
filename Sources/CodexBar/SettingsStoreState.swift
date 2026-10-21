@@ -55,6 +55,7 @@ struct SettingsDefaultsState {
     var jetbrainsIDEBasePath: String
     var midasMenuBarMode: MidasMenuBarMode
     var midasMenuBarFocusProvider: UsageProvider
+    var midasMenuBarAccountIDs: [String: String]
     var midasMenuBarHideSpend: Bool
     var mergeIcons: Bool
     var switcherShowsIcons: Bool

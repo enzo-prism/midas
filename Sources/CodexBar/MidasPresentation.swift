@@ -17,6 +17,7 @@ struct MidasActions {
     let quit: () -> Void
     var checkForUpdates: () -> Void = {}
     var accountPresentations: (UsageProvider) -> [MidasAccountPresentation] = { _ in [] }
+    var menuBarAccountPresentations: (UsageProvider) -> [MidasAccountPresentation] = { _ in [] }
 }
 
 struct MidasQuotaMetric: Identifiable {
@@ -332,20 +333,21 @@ struct MidasProviderPresentation {
         }
         var hero: MidasQuotaMetric?
         if provider == .codex,
-           let snapshot,
-           let weekly = IconRemainingResolver.resolvedWindows(snapshot: snapshot, style: .codex).primary,
-           weekly.usedPercent.isFinite
+           let quota = MidasOrbitQuota.make(provider: provider, snapshot: snapshot)
         {
-            let resetText = card?.metrics.first(where: { $0.id == "secondary" })?.resetText ?? weekly.resetsAt.map {
-                "Resets \(UsageFormatter.resetCountdownDescription(from: $0, now: Date()))"
-            } ?? weekly.resetDescription
+            let monthly = quota.id == MidasOrbitQuota.codexMonthlyID
             hero = MidasQuotaMetric(
-                id: "secondary",
-                title: "This week",
-                remainingPercent: min(100, max(0, weekly.remainingPercent)),
-                resetText: resetText,
-                helpText: weekly.resetsAt?.formatted(date: .complete, time: .shortened),
-                resetsAt: weekly.resetsAt)
+                id: quota.id,
+                title: monthly ? "This month" : "This week",
+                remainingPercent: quota.remainingPercent,
+                resetText: monthly ? quota.resetText
+                    : card?.metrics.first(where: { $0.id == "secondary" })?.resetText ?? quota.resetText,
+                helpText: quota.helpText,
+                resetsAt: quota.resetsAt)
+            if monthly {
+                // The API's monthly primary/secondary window is neither a session nor a weekly quota.
+                quotaMetrics.removeAll { $0.id == "primary" || $0.id == "secondary" }
+            }
         } else {
             // An unavailable reading (no percentage) never becomes the headline or menu-bar ring.
             hero = provider == .codex ? nil : quotaMetrics.first { $0.statusText == nil }
@@ -620,14 +622,25 @@ enum MidasClaudeLimits {
 /// Named/model windows must never substitute for an unavailable overall allowance.
 enum MidasOrbitQuota {
     private static let weekMinutes = 7 * 24 * 60
+    static let codexMonthlyID = "codex-monthly"
+
+    private static func codexWindow(_ snapshot: UsageSnapshot) -> (id: String, window: RateWindow)? {
+        if let weekly = IconRemainingResolver.resolvedWindows(snapshot: snapshot, style: .codex).primary {
+            return ("secondary", weekly)
+        }
+        // Free accounts can report an explicit 30-day allowance instead of a weekly one.
+        // Unknown durations and short sessions must never become a monthly allowance.
+        guard let monthly = [snapshot.primary, snapshot.secondary].compactMap(\.self)
+            .first(where: { $0.windowMinutes == 30 * 24 * 60 }) else { return nil }
+        return (self.codexMonthlyID, monthly)
+    }
 
     static func make(provider: UsageProvider, snapshot: UsageSnapshot?) -> MidasQuotaMetric? {
         guard provider != .meta, let snapshot else { return nil }
         let selected: (id: String, window: RateWindow)?
         switch provider {
         case .codex:
-            selected = IconRemainingResolver.resolvedWindows(snapshot: snapshot, style: .codex).primary
-                .map { ("secondary", $0) }
+            selected = self.codexWindow(snapshot)
         case .claude:
             // OAuth primary may fall back to a model-only week. All-model usage is secondary.
             if let weekly = snapshot.secondary,
@@ -665,7 +678,7 @@ enum MidasOrbitQuota {
         let window = selected.window
         return MidasQuotaMetric(
             id: selected.id,
-            title: provider == .cursor ? "Monthly limit" : "Weekly limit",
+            title: provider == .cursor || selected.id == self.codexMonthlyID ? "Monthly limit" : "Weekly limit",
             remainingPercent: min(100, max(0, window.remainingPercent)),
             resetText: window.resetsAt.map {
                 "Resets \(UsageFormatter.resetCountdownDescription(from: $0, now: Date()))"

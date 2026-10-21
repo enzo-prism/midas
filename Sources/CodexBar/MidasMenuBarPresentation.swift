@@ -176,7 +176,7 @@ struct MidasMenuBarPresentation: Equatable {
             }
         }
         guard item.provider != .meta, let hero = item.hero, hero.remainingPercent.isFinite else { return nil }
-        if item.provider == .codex, hero.id != "secondary" { return nil }
+        if item.provider == .codex, hero.id != "secondary", hero.id != MidasOrbitQuota.codexMonthlyID { return nil }
         if item.provider == .cursor, hero.id == "cursor-models" { return nil }
         return hero
     }

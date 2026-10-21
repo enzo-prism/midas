@@ -64,7 +64,13 @@ extension StatusItemController {
         self.menuBarCountdownRefreshTask?.cancel()
         self.menuBarCountdownRefreshTask = nil
         let providers = self.store.midasProvidersForUsageDisplay()
-        let presentations = providers.map { self.midasProviderPresentation(for: $0) }
+        let presentations = providers.map { provider in
+            MidasMenuBarAccountSelection.project(
+                providerPresentation: self.midasProviderPresentation(for: provider),
+                accounts: self.midasAccountPresentations(for: provider, includeAll: true),
+                selectedAccountID: self.settings.midasMenuBarAccountID(for: provider),
+                hidePersonalInfo: self.settings.hidePersonalInfo)
+        }
         let inFlight = self.store.refreshingProviders.union(self.store.tokenRefreshInFlight)
         // Background work preserves the cached display. Only real initial/manual work moves.
         let visibleActivity = Set(inFlight.filter { provider in
@@ -114,6 +120,14 @@ extension StatusItemController {
             })
             button.toolTip = MidasTokenTooltip.text(
                 favorite: self.settings.midasMenuBarFocusProvider, providers: providers, snapshots: tokens)
+            if let focused = presentations.first(where: { $0.provider == self.settings.midasMenuBarFocusProvider }) {
+                let quota = presentation.orbitRemainingPercent.map {
+                    "\($0.formatted())% remaining, \(focused.orbitQuota?.title ?? "Quota")"
+                }
+                    ?? "Quota unavailable"
+                button.toolTip = [button.toolTip, "\(focused.name): \(quota)"].compactMap(\.self)
+                    .joined(separator: "\n")
+            }
         } else {
             button.toolTip = presentation.tooltip
         }
