@@ -31,7 +31,10 @@ struct MidasUsageHubIntegrationTests {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
-        defer { process.terminate(); process.waitUntilExit() }
+        defer {
+            if process.isRunning { process.terminate() }
+            process.waitUntilExit()
+        }
         let ready = root.appendingPathComponent("ready.json")
         for _ in 0..<300 {
             if FileManager.default.fileExists(atPath: ready.path) { break }
@@ -96,6 +99,18 @@ struct MidasUsageHubIntegrationTests {
             connection: one, workspace: fixture.workspace, local: first, stateRoot: cacheOne)
         #expect(unchanged.syncState?.downloadedPages == 0)
         #expect(unchanged.syncState?.uploadedPages == 0)
+        // Corrupt a cached page without changing its length while parsed objects are still warm.
+        let pages = cacheOne.appendingPathComponent(fixture.workspace.id.uuidString)
+            .appendingPathComponent(one.deviceID.uuidString).appendingPathComponent("pages")
+        let page = try #require(FileManager.default.contentsOfDirectory(
+            at: pages, includingPropertiesForKeys: nil).first { $0.pathExtension == "json" })
+        var damaged = try Data(contentsOf: page)
+        damaged[0] = damaged[0] == 123 ? 91 : 123
+        try damaged.write(to: page)
+        let repaired = try await MidasUsageHubClient.exchange(
+            connection: one, workspace: fixture.workspace, local: first, stateRoot: cacheOne)
+        #expect((repaired.syncState?.downloadedPages ?? 0) >= 1)
+        #expect(repaired.publications.reduce(0) { $0 + $1.events.count } == 150_000)
     }
 
     private func publication(

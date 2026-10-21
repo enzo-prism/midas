@@ -18,7 +18,7 @@ USAGE
 
 hub_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 hub_source="$hub_script_dir/usage-hub/midas_usage_hub.py"
-hub_python="$(command -v python3)"
+hub_python=""
 hub_runtime_root=""
 hub_install_root=""
 hub_launch_agents=""
@@ -54,6 +54,12 @@ fi
 umask 077
 if [[ -n "$hub_runtime_root" ]]; then
   hub_python="$hub_runtime_root/bin/python3"
+elif [[ -z "$hub_python" ]]; then
+  hub_python="$(command -v python3 || true)"
+  if [[ -z "$hub_python" ]]; then
+    printf '%s\n' 'Provide --runtime-root or --python with a supported interpreter.' >&2
+    exit 1
+  fi
 fi
 
 hub_prepared_service=$("$hub_python" - "$hub_source" "$hub_install_root" "$hub_launch_agents" \
@@ -61,6 +67,7 @@ hub_prepared_service=$("$hub_python" - "$hub_source" "$hub_install_root" "$hub_l
 import hashlib
 import importlib.util
 import shutil
+import subprocess
 import os
 from pathlib import Path
 import plistlib
@@ -213,6 +220,11 @@ try:
         if manager.runtime_digest(installed_runtime) != digest:
             raise SystemExit("Managed runtime verification failed.")
         runtime = installed_runtime / "bin/python3"
+        probe = subprocess.run([str(runtime), "-I", "-B", "-c",
+                                "import sqlite3,ssl,gzip,urllib.request; c=sqlite3.connect(':memory:'); assert c.execute('select 1').fetchone()==(1,)"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+        if probe.returncode:
+            raise SystemExit("Installed runtime probe failed; preserve prepared state for review.")
     # Install exactly the source bytes inspected above, then verify SHA-256 and byte equality.
     write_new(target, source_bytes, 0o700)
     if hashlib.sha256(target.read_bytes()).digest() != hashlib.sha256(source_bytes).digest():

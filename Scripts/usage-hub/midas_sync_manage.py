@@ -10,6 +10,7 @@ import argparse
 import contextlib
 import datetime as dt
 import gzip
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -33,6 +34,7 @@ APPLE_EPOCH = 978307200
 LABEL = "com.designprism.midas.usage-hub"
 BUNDLE_ID = "com.designprism.midas"
 MAX_REPORT_BYTES = 8 * 1024 * 1024
+MAX_CLOCK_SKEW_SECONDS = 30
 
 
 class ManageError(Exception):
@@ -159,9 +161,29 @@ def manifest(connection):
     return result, round((time.monotonic() - started) * 1000)
 
 
+def revision_vector(value):
+    if not isinstance(value, dict) or len(value) > 128:
+        raise ManageError("invalid_operational_metadata")
+    for identity, revision in value.items():
+        try:
+            uuid.UUID(identity)
+        except (ValueError, TypeError, AttributeError):
+            raise ManageError("invalid_operational_metadata") from None
+        if type(revision) is not int or revision < 1:
+            raise ManageError("invalid_operational_metadata")
+    return value
+
+
 def safe_manifest_report(value):
     heads = value.get("devices", [])
     receipts = value.get("receipts", [])
+    if not isinstance(heads, list) or not isinstance(receipts, list) or len(heads) > 128 or len(receipts) > 128:
+        raise ManageError("invalid_operational_metadata")
+    for head in heads:
+        revision_vector({head.get("deviceID"): head.get("revision")})
+    for receipt in receipts:
+        revision_vector({receipt.get("deviceID"): 1})
+        revision_vector(receipt.get("appliedRevisions", {}))
     return {
         "hubVersion": value.get("hubVersion"), "protocolVersion": value.get("protocolVersion"),
         "checkedAt": value.get("checkedAt"), "enrolledDevices": len(heads),
@@ -188,7 +210,7 @@ def doctor(root: Path, *, online=True, app_path=Path("/Applications/Midas.app"),
             if field in receipt:
                 report[field] = receipt[field]
         sync_state = receipt.get("syncState") or receipt.get("state") or {}
-        report["appliedRevisions"] = sync_state.get("appliedRevisions", receipt.get("appliedRevisions", {}))
+        report["appliedRevisions"] = revision_vector(sync_state.get("appliedRevisions", receipt.get("appliedRevisions", {})))
         report["lastCheckedAt"] = sync_state.get("checkedAt", report.get("lastCheckedAt"))
         report["acceptedLocalRevision"] = sync_state.get("acceptedLocalRevision", receipt.get("acceptedLocalRevision"))
     else:
@@ -208,7 +230,7 @@ def doctor(root: Path, *, online=True, app_path=Path("/Applications/Midas.app"),
     own = next((h for h in remote.get("devices", []) if h.get("deviceID", "").lower() == connection["deviceID"].lower()), None)
     local = {str(k).lower(): v for k, v in report.get("appliedRevisions", {}).items()}
     pending = report.get("outboxPending")
-    fresh = isinstance(report.get("lastCheckedAt"), (int, float)) and 0 <= now() - report["lastCheckedAt"] <= max_age
+    fresh = isinstance(report.get("lastCheckedAt"), (int, float)) and -MAX_CLOCK_SKEW_SECONDS <= now() - report["lastCheckedAt"] <= max_age
     applied = bool(remote.get("devices")) and all(local.get(h["deviceID"].lower(), 0) >= h["revision"] for h in remote["devices"] if not h.get("revoked"))
     accepted = own and isinstance(report.get("acceptedLocalRevision"), int) and report["acceptedLocalRevision"] >= own["revision"]
     report["status"] = "healthy" if fresh and pending is False and applied and accepted else "pending"
@@ -224,7 +246,7 @@ def doctor(root: Path, *, online=True, app_path=Path("/Applications/Midas.app"),
         report["code"] = "checkpoint_pending"
     vectors = {r["deviceID"].lower(): {k.lower(): v for k, v in r.get("appliedRevisions", {}).items()} for r in remote.get("receipts", [])}
     fresh_readers = {r["deviceID"].lower() for r in remote.get("receipts", [])
-                     if isinstance(r.get("checkedAt"), (int, float)) and 0 <= now() - r["checkedAt"] <= max_age}
+                     if isinstance(r.get("checkedAt"), (int, float)) and -MAX_CLOCK_SKEW_SECONDS <= now() - r["checkedAt"] <= max_age}
     required = [h for h in remote["devices"] if (h.get("supportsReceipts", False) or h["deviceID"].lower() in vectors) and not h.get("revoked")]
     report["allReceiptCapableDevicesCaughtUp"] = bool(required) and all(h["deviceID"].lower() in fresh_readers and all(
         vectors.get(h["deviceID"].lower(), {}).get(source["deviceID"].lower(), 0) >= source["revision"]
@@ -332,7 +354,29 @@ def legacy_state_digest(database: Path):
     return digest.digest()
 
 
+@contextlib.contextmanager
+def management_lock(root: Path):
+    safe_path(root, owned=True, private=True)
+    descriptor = os.open(root / ".management.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
+            raise ManageError("unsafe_management_lock")
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ManageError("management_busy") from None
+        yield
+    finally:
+        os.close(descriptor)
+
+
 def upgrade(root: Path, source: Path, runtime: Path, plist_path: Path, *, restart=reload_service, health=None):
+    with management_lock(root):
+        return _upgrade(root, source, runtime, plist_path, restart=restart, health=health)
+
+
+def _upgrade(root: Path, source: Path, runtime: Path, plist_path: Path, *, restart=reload_service, health=None):
     """Code/runtime rollback never replaces the live DB after accepting new writes."""
     safe_path(root, owned=True, private=True)
     source = safe_path(source)
@@ -455,7 +499,8 @@ def main():
         if args.action in {"doctor", "check"}:
             report.update(doctor(root, online=not getattr(args, "offline", False), app_path=args.app))
         elif args.action == "restart":
-            restart_service(service_path(), hub_root)
+            with management_lock(hub_root):
+                restart_service(service_path(), hub_root)
             report.update(status="healthy", code="service_restarted")
         elif args.action == "upgrade":
             resource = Path(__file__).resolve().parent

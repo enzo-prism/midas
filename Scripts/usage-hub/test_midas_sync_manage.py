@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 import uuid
 from unittest import mock
@@ -104,6 +105,15 @@ class ManagerTests(unittest.TestCase):
             report = manage.doctor(self.support, app_path=self.app, required_device_ids=[self.device, self.peer])
         self.assertFalse(report["requiredDevicesCaughtUp"])
 
+    def test_small_clock_skew_is_tolerated_but_future_receipts_are_not(self):
+        self.receipt(syncState={"checkedAt": manage.now() + 5, "acceptedLocalRevision": 4,
+                                "appliedRevisions": {self.device: 4, self.peer: 3}})
+        self.remote["receipts"][1]["checkedAt"] = manage.now() + 5
+        self.assertTrue(self.doctor()["allReceiptCapableDevicesCaughtUp"])
+        self.assertEqual(self.doctor()["status"], "healthy")
+        self.remote["receipts"][1]["checkedAt"] = manage.now() + 900
+        self.assertFalse(self.doctor()["allReceiptCapableDevicesCaughtUp"])
+
     def test_partial_resource_copy_is_rejected(self):
         resources = self.root / "resources"
         resources.mkdir()
@@ -113,6 +123,13 @@ class ManagerTests(unittest.TestCase):
         with self.assertRaises(manage.ManageError) as caught:
             manage.verify_resources(resources)
         self.assertEqual(caught.exception.code, "resource_verification_failed")
+
+    def test_arbitrary_remote_identifiers_cannot_enter_redacted_report(self):
+        self.receipt()
+        self.remote["devices"][0]["deviceID"] = self.connection["credential"]
+        with self.assertRaises(manage.ManageError) as caught:
+            self.doctor()
+        self.assertEqual(caught.exception.code, "invalid_operational_metadata")
 
     def test_offline_report_never_claims_health(self):
         self.receipt()
@@ -173,6 +190,32 @@ class ManagerTests(unittest.TestCase):
             self.assertEqual(c.execute("PRAGMA integrity_check").fetchone()[0], "ok")
         self.assertEqual(len(list((root / "backups").glob("*/hub.sqlite3"))), 1)
         self.assertEqual(target.read_bytes(), source.read_bytes())
+
+    def test_parallel_management_cannot_activate_two_versions(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        with manage.management_lock(root):
+            with self.assertRaises(manage.ManageError) as caught:
+                manage.upgrade(root, source, runtime, plist)
+        self.assertEqual(caught.exception.code, "management_busy")
+        self.assertFalse((root / "backups").exists())
+
+    def test_migration_rehearsal_rejects_changed_workspace_before_activation(self):
+        root, store, source, target, runtime, plist = self.prepare_hub()
+        before_source, before_plist, before_database = target.read_bytes(), plist.read_bytes(), store.path.read_bytes()
+        def bad_store(directory):
+            staged = hub.Store(directory)
+            def migrate():
+                staged.ensure_v2()
+                with staged.connect() as connection:
+                    connection.execute("UPDATE metadata SET value=?", (b"tampered",))
+            return types.SimpleNamespace(ensure_v2=migrate)
+        with mock.patch.object(manage, "load_hub", return_value=types.SimpleNamespace(Store=bad_store)):
+            with self.assertRaises(manage.ManageError) as caught:
+                manage.upgrade(root, source, runtime, plist, restart=lambda *args: self.fail("restart called"))
+        self.assertEqual(caught.exception.code, "migration_changed_legacy_state")
+        self.assertEqual(target.read_bytes(), before_source)
+        self.assertEqual(plist.read_bytes(), before_plist)
+        self.assertEqual(store.path.read_bytes(), before_database)
 
     def test_failed_health_rolls_back_code_and_service_without_replacing_live_database(self):
         root, store, source, target, runtime, plist = self.prepare_hub()
