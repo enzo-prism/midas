@@ -6,14 +6,14 @@ upstream CodexBar and must not be used unchanged to publish this fork.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.0**, build **132**. This sync update is under validation; the last published binary is recorded below. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.0**, build **132**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.48.4**, build **130**, tagged
-`v0.48.4-midas.1`, superseding 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.49.0**, build **132**, tagged
+`v0.49.0-midas.1`, superseding 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
@@ -48,7 +48,27 @@ its uncertainty; source absence never deletes history.
 The app bundles a managed hub helper and relocatable Python runtime, with database
 backup, migration rehearsal, health checks and code rollback. The hub retains legacy
 collector support. See [operations](SYNC_OPERATIONS.md) and [protocol](SYNC_V2_PROTOCOL.md).
-Validation and installed release evidence will be recorded after the final checks.
+[PR #17](https://github.com/enzo-prism/midas/pull/17) merged after the exact release
+commit `d7e852b9a0cf35208359549b19feb97d359a75ec` passed
+[all four CI jobs](https://github.com/enzo-prism/midas/actions/runs/39527235096):
+4,607 macOS unit tests, the actual 150,000-event Swift/Python wire fixture,
+121 Python tests, and Linux x64/arm64 build, test and smoke checks. Eight synthetic
+native sync fixtures covered setup, waiting, combined and offline states in light/dark.
+The binary embeds source `0bb9b4357`; subsequent changes affect tests and CI only.
+
+Apple notarization submission `480ffa29-8144-4eb4-8d2c-6bb7cbf48a0e` was Accepted.
+App and dSYM share arm64 UUID `CB0E0CDB-5E2A-3164-BA7A-AE8809B6ED19`.
+The public app passed deep strict signature, stapled-ticket and Gatekeeper checks.
+Anonymous downloads matched all five prepared assets; the archive and both XML
+signatures verified against the app's embedded Sparkle key, and both actual latest
+feed routes returned build 132. Published October 20, 2026; archive SHA-256:
+`e56e5b225a1b1d8474e9788eb2eeac61a66fca811ecc45b60d37dd0248f884ad`.
+
+The identical public binary was installed and restarted on both Macs. Their durable
+numeric records matched, fresh mutual receipts covered all current heads, and
+baseline event/day identities and tokens were retained. Tailscale and connection
+identities remain unchanged. Legacy peers without v2 applied receipts remain unconfirmed;
+opaque historical aggregate overlap remains explicitly uncertain.
 
 ## 0.48.4 changes: complete cross-Mac sync history
 
