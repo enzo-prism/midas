@@ -60,6 +60,7 @@ jobs:
         timeout-minutes: 30
         env:
           MIDAS_RUN_HUB_INTEGRATION: "1"
+          MIDAS_TEST_PYTHON: ${{ env.pythonLocation }}/bin/python3
         run: swift test --filter MidasUsageHubIntegrationTests
 
       - name: Swift Test

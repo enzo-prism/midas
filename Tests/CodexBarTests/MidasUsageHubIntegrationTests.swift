@@ -29,18 +29,29 @@ struct MidasUsageHubIntegrationTests {
             root.path,
         ]
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        let stderrURL = root.appendingPathComponent("fixture-stderr.log")
+        try #require(FileManager.default.createFile(
+            atPath: stderrURL.path, contents: nil, attributes: [.posixPermissions: 0o600]))
+        let stderrHandle = try FileHandle(forWritingTo: stderrURL)
+        defer { try? stderrHandle.close() }
+        process.standardError = stderrHandle
         try process.run()
         defer {
             if process.isRunning { process.terminate() }
             process.waitUntilExit()
         }
         let ready = root.appendingPathComponent("ready.json")
-        for _ in 0..<300 {
-            if FileManager.default.fileExists(atPath: ready.path) { break }
-            try #require(process.isRunning)
-            try await Task.sleep(for: .milliseconds(20))
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(60))
+        while clock.now < deadline, process.isRunning, !FileManager.default.fileExists(atPath: ready.path) {
+            try await Task.sleep(for: .milliseconds(50))
         }
+        let childRunning = process.isRunning
+        let exitCode = childRunning ? -1 : process.terminationStatus
+        let failureClass = self.startupFailureClassification(stderrURL)
+        try #require(childRunning, "Python fixture exited (code \(exitCode), reason \(failureClass)).")
+        let fixtureReady = FileManager.default.fileExists(atPath: ready.path)
+        try #require(fixtureReady, "Python fixture was not ready within 60 seconds (reason \(failureClass)).")
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: ready))
         let one = fixture.connections[0]
         let two = fixture.connections[1]
@@ -111,6 +122,19 @@ struct MidasUsageHubIntegrationTests {
             connection: one, workspace: fixture.workspace, local: first, stateRoot: cacheOne)
         #expect((repaired.syncState?.downloadedPages ?? 0) >= 1)
         #expect(repaired.publications.reduce(0) { $0 + $1.events.count } == 150_000)
+    }
+
+    private func startupFailureClassification(_ url: URL) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return "stderr-unavailable" }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 4096), !data.isEmpty else { return "no-stderr" }
+        guard let text = String(bytes: data, encoding: .utf8)?.lowercased() else { return "stderr-unreadable" }
+        if text.contains("modulenotfounderror") { return "python-module-unavailable" }
+        if text.contains("syntaxerror") { return "python-runtime-incompatible" }
+        if text.contains("permissionerror") { return "fixture-permission-denied" }
+        if text.contains("address already in use") { return "fixture-bind-failed" }
+        if text.contains("no such file") { return "fixture-file-unavailable" }
+        return "fixture-startup-failed"
     }
 
     private func publication(

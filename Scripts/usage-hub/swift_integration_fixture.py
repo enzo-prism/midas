@@ -68,5 +68,7 @@ class FaultHandler(hub.HubHandler):
 server.RequestHandlerClass = FaultHandler
 with store.connect() as c:
     workspace = store.workspace_in(c)
-(root / 'ready.json').write_text(json.dumps({'connections': connections, 'workspace': workspace}))
+ready_temporary = root / 'ready.json.tmp'
+ready_temporary.write_text(json.dumps({'connections': connections, 'workspace': workspace}))
+os.replace(ready_temporary, root / 'ready.json')
 server.serve_forever(poll_interval=.05)
