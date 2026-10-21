@@ -255,7 +255,8 @@ struct MidasHubCoordinatorTests {
         #expect(coordinator.isEnabled)
     }
 
-    @Test func replacementDrainBlocksNewChecksUntilThePreviousWriterFinishes() async throws {
+    @Test(arguments: [false, true])
+    func replacementDrainBlocksNewChecksUntilThePreviousWriterFinishes(disableWhileDraining: Bool) async throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
         let coordinator = fixture.coordinator()
@@ -283,8 +284,15 @@ struct MidasHubCoordinatorTests {
         await coordinator.syncNow()
         #expect(await fixture.hub.readRequests == readsBefore)
         #expect(collections == 1)
+        if disableWhileDraining { coordinator.isEnabled = false }
         await gate.release()
         await oldSync.value
+        if disableWhileDraining {
+            await #expect(throws: CancellationError.self) { try await replacement.value }
+            #expect(!coordinator.isEnabled)
+            #expect(!coordinator.isReplacingConnection)
+            return
+        }
         try await replacement.value
         #expect(!coordinator.isReplacingConnection)
         #expect(coordinator.hasConnection)
