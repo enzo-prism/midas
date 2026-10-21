@@ -27,6 +27,20 @@ store.exchange(legacy['credential'], {'schemaVersion': 1, 'workspaceID': legacy[
 
 class FaultHandler(hub.HubHandler):
     def send_bytes(self, status, body):
+        trace = os.environ.get('MIDAS_WIRE_TRACE_FILE')
+        if trace:
+            item = {'method': self.command, 'path': self.path, 'status': status, 'bytes': len(body)}
+            if len(body) < 16384:
+                value = json.loads(body)
+                if isinstance(value, dict):
+                    item['keys'] = sorted(value)
+                    item['error'] = value.get('error')
+                    item['limits'] = value.get('limits')
+                    if 'devices' in value:
+                        item['heads'] = [{'revision': h['revision'], 'events': h['eventCount'],
+                                          'pages': len(h['pages'])} for h in value['devices']]
+            with Path(trace).open('a') as output:
+                output.write(json.dumps(item) + '\n')
         control = root / 'fault.txt'
         fault = control.read_text() if control.exists() else ''
         applies = ((fault == 'drop-commit' and self.path == '/v2/upload/commit') or

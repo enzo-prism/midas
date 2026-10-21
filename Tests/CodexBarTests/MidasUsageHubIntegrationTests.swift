@@ -127,7 +127,7 @@ struct MidasUsageHubIntegrationTests {
                 provider: .codex,
                 day: day,
                 observedAt: now,
-                values: .init(tokens: 1, costUSD: 0.000001, model: "synthetic"))
+                values: .init(tokens: 1, costUSD: 0.000001, model: "gpt-5"))
         }
         return MidasUsageSyncPublication(
             workspaceID: workspace.id,
