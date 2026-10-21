@@ -431,6 +431,10 @@ SPARKLE_BUILD_PATH="$(build_product_path "Sparkle.framework" "${ARCH_LIST[0]}")"
 if [[ -d "$SPARKLE_BUILD_PATH" ]]; then
   cp -R "$SPARKLE_BUILD_PATH" "$APP/Contents/Frameworks/"
   chmod -R a+rX "$APP/Contents/Frameworks/Sparkle.framework"
+  # FileProvider metadata follows the framework copy out of Documents. Strip it
+  # before the nested Sparkle signatures below; final app cleanup happens later.
+  chmod -R u+w "$APP/Contents/Frameworks/Sparkle.framework"
+  xattr -cr "$APP/Contents/Frameworks/Sparkle.framework"
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Midas"
   # Re-sign Sparkle and all nested components with Developer ID + timestamp
   SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
