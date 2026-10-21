@@ -170,10 +170,9 @@ notes. Orbit is now implemented; Reset Horizon remains an exploration.
 Orbit keeps spend fixed during state changes. A separate satellite moves only during the favorite’s
 active initial/manual refresh, never the capacity arc. Favorite warnings use an amber arc and static
 square marker; last-known capacity is dimmed. Other providers’ incidents never recolor this ring.
-Orbit’s hover tooltip contains only the past-30-day token counts for the favorite and all enabled
-providers. It discloses partial provider coverage in a short suffix. Shorter history and billing-cycle
-totals are unavailable rather than mislabeled as 30 days. Known zero counts remain zero. Quota,
-spend, provenance, and warning details remain in the overview and accessibility description.
+Orbit’s hover tooltip includes the selected account, its remaining allowance and period, plus
+the past-30-day token counts for the favorite and all enabled providers. It discloses partial provider coverage in a short suffix. Shorter history and billing-cycle
+totals are unavailable rather than mislabeled as 30 days. Known zero counts remain zero. Spend, provenance, reset details, and warnings remain in the overview and accessibility description.
 
 ## Local rebuild
 
@@ -323,3 +322,15 @@ Settings → Display → Track all connected accounts refreshes every configured
 When enabled, Codex cost history scans the ambient Codex home and every managed account home, including archived sessions, in one scanner pass. Existing session/file deduplication prevents copied history from multiplying the total. Root changes invalidate the cache; late results from a previous scope cannot replace current results. The combined provider estimate contributes once to the total for the selected local/shared source set.
 
 This is local-history coverage, not an account-wide billing export. Older session logs do not establish an account-by-account cost split; activity on other devices is absent unless its logs are present here. Cursor uses its connected web-session history, and Meta uses local Muse history. Adding account credentials alone cannot manufacture missing token records.
+
+
+## Menu-bar account selection (0.49.1)
+
+**More actions → Menu-bar provider** lists each connected account for providers with multiple
+accounts. Choosing an account changes only the circle's display identity. The selection is
+persisted per provider; **Current account** follows the provider's active identity. Provider-owned
+snapshots supply the quota and freshness, while aggregate spend keeps its existing scope.
+Missing selected identities stay unavailable. A surviving single pinned account continues polling.
+Codex prefers explicit weekly windows and supports an explicit 30-day allowance when no weekly
+window exists. Short sessions and model-specific windows do not substitute for that allowance.
+See [setup](MIDAS_SETUP.md#choose-the-menu-bar-account).

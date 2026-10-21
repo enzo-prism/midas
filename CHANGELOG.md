@@ -1,5 +1,14 @@
 # Changelog
 
+## Midas 0.49.1 — October 21, 2026
+
+- Choose which connected account supplies the menu-bar circle under **More actions → Menu-bar provider**. Remember a separate choice for each provider without switching the CLI login or changing combined spend totals.
+- Keep selected accounts refreshing independently, including after another account is removed. Preserve the active and selected accounts when applying refresh limits.
+- Display the selected account identity in the menu, tooltip, and accessibility description; honor Hide personal information. Missing or failed selected accounts never borrow another account's quota.
+- Use explicit monthly Codex allowances when no weekly allowance is reported, with correct period labels and weekly priority. Short sessions never substitute for the circle's allowance.
+
+Build 133. Signed local build verified; public release verification is in progress.
+
 ## Midas 0.48.4 — October 20, 2026
 
 - Fix cross-Mac sync dropping older usage from busy Macs. When a Mac's history exceeds one publication (32 MiB / 100,000 records), older provider days are now shared as per-day, per-model totals instead of being discarded; previously a heavy Mac shared only its newest ~10 days, so other Macs' 30-day totals were missing most of its usage.

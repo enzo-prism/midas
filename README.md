@@ -32,6 +32,19 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.49.1: choose the menu-bar account
+
+Version **0.49.1, build 133** adds **More actions → Menu-bar provider → Account**.
+Choose a saved Codex or other supported provider account for the remaining-usage circle.
+The choice is remembered per provider and does not switch the active CLI login or change
+combined spend totals. Connected accounts keep their own quotas, reset times, and errors.
+Codex uses a weekly allowance when reported, or an explicitly reported monthly allowance.
+Missing selected accounts stay unavailable instead of displaying another account's balance.
+
+See [account selection](docs/MIDAS_SETUP.md#choose-the-menu-bar-account) and
+[release verification](docs/MIDAS_RELEASE.md). Publication checks are in progress; use
+[GitHub Releases](https://github.com/enzo-prism/midas/releases/latest) for the current public build.
+
 ## Midas 0.48.3: selected OpenAI account
 
 **0.48.3, build 129** is published as
