@@ -844,3 +844,138 @@ struct MidasHubCoordinatorTests {
         }
     }
 }
+
+extension MidasHubCoordinatorTests {
+    @Test func concurrentReplacementWaitsForTheSameOriginalWriter() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        let gate = Gate()
+        coordinator.makeLocalUsage = { _, _ in await gate.suspend(); return MidasUsageSyncLocalUsage() }
+        let sync = Task { await coordinator.syncNow() }
+        await gate.waitUntilBlocked()
+        let first = Task { try await coordinator.connect(hub: fixture.connection) }
+        for _ in 0..<1000 {
+            if coordinator.isReplacingConnection { break }; await Task.yield()
+        }
+        var secondCompleted = false
+        let second = Task { try await coordinator.connect(hub: fixture.connection); secondCompleted = true }
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+        #expect(!secondCompleted)
+        await gate.release()
+        await sync.value
+        await #expect(throws: CancellationError.self) { try await first.value }
+        try await second.value
+        #expect(secondCompleted)
+        #expect(!coordinator.isReplacingConnection)
+    }
+
+    @Test func malformedCriticalOutboxIsPreservedAndCannotBeOverwrittenByAnotherScan() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let coordinator = fixture.coordinator()
+        try await coordinator.connect(hub: fixture.connection)
+        await fixture.hub.setFailure(.unavailable)
+        self.collect(on: coordinator, event: "only-unpublished-copy", tokens: 100)
+        await coordinator.syncNow()
+        let outboxURL = fixture.directory.appendingPathComponent("hub-outbox.json")
+        let malformed = Data("damaged metadata".utf8)
+        try malformed.write(to: outboxURL)
+        let restarted = fixture.coordinator(restore: true)
+        var scans = 0
+        restarted.makeLocalUsage = { _, _ in scans += 1; return MidasUsageSyncLocalUsage() }
+        await fixture.hub.setFailure(nil)
+        await restarted.syncNow()
+        #expect(scans == 0)
+        #expect(restarted.outboxRequiresRepair)
+        #expect(restarted.hasPendingUpload)
+        #expect(restarted.issue?.contains("queue needs repair") == true)
+        #expect(restarted.lastPublishedAt == nil)
+        #expect(try Data(contentsOf: outboxURL) == malformed)
+        let store = try MidasUsageCanonicalStore(root: fixture.directory.appendingPathComponent("hub-outbox-records"))
+        let original = try store.load(
+            workspaceID: fixture.workspace.id,
+            deviceID: fixture.connection.deviceID,
+            now: Self.now)
+        #expect(original?.events.count == 1)
+    }
+
+    @Test func authoritativeV2OwnHeadWinsOverTheOriginalUploadInput() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let hub = fixture.hub
+        let coordinator = fixture.coordinator(exchange: { connection, workspace, local, now in
+            if let local {
+                let reconciled = MidasUsageSyncPublication(
+                    workspaceID: workspace.id,
+                    deviceID: connection.deviceID,
+                    deviceName: connection.deviceName,
+                    publishedAt: local.publishedAt,
+                    events: local.events + [Self.event(
+                        workspace: workspace,
+                        name: "concurrent-hub-record",
+                        tokens: 200,
+                        now: now)])
+                return MidasUsageHubExchange(
+                    workspace: workspace,
+                    publications: [reconciled],
+                    publicationSucceeded: true,
+                    unavailableFiles: 0,
+                    rejectedFiles: 0,
+                    syncState: MidasUsageHubSyncState(
+                        checkedAt: now,
+                        appliedRevisions: [connection
+                            .deviceID
+                            .uuidString: 2],
+                        acceptedLocalRevision: 2))
+            }
+            return try await hub.exchange(connection: connection, workspace: workspace, local: nil, now: now)
+        })
+        try await coordinator.connect(hub: fixture.connection)
+        self.collect(on: coordinator, event: "local", tokens: 100)
+        await coordinator.syncNow()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 300)
+        let restarted = fixture.coordinator(restore: true)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 300)
+    }
+
+    @Test func restoredHubHeadRetainsCachedPeerIDsAndRepublishesThisMacHistory() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let hub = fixture.hub
+        let peerID = UUID()
+        await hub.setPublications([self.publication(
+            workspace: fixture.workspace,
+            deviceID: peerID,
+            event: "peer-original",
+            tokens: 100)])
+        let coordinator = fixture.coordinator(exchange: { connection, workspace, local, now in
+            let result = try await hub.exchange(connection: connection, workspace: workspace, local: local, now: now)
+            return MidasUsageHubExchange(
+                workspace: workspace,
+                publications: result.publications,
+                publicationSucceeded: result.publicationSucceeded,
+                unavailableFiles: 0,
+                rejectedFiles: 0,
+                syncState: MidasUsageHubSyncState(checkedAt: now, acceptedLocalRevision: 2))
+        })
+        try await coordinator.connect(hub: fixture.connection)
+        self.collect(on: coordinator, event: "local-preserved", tokens: 50)
+        await coordinator.syncNow()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 150)
+        await hub.setPublications([self.publication(
+            workspace: fixture.workspace,
+            deviceID: peerID,
+            event: "peer-restored-backup",
+            tokens: 200)])
+        coordinator.makeLocalUsage = nil
+        await coordinator.syncNow()
+        #expect(coordinator.snapshots[.codex]?.sessionTokens == 350)
+        let restarted = fixture.coordinator(restore: true)
+        #expect(restarted.snapshots[.codex]?.sessionTokens == 350)
+        #expect(coordinator.issue == nil)
+    }
+}

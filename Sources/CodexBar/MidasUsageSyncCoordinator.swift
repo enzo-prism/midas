@@ -3,7 +3,6 @@ import CodexBarCore
 import CryptoKit
 import Darwin
 import Foundation
-import IOKit
 import Network
 import Observation
 
@@ -37,86 +36,6 @@ struct MidasUsageSyncLocalUsage: Sendable {
     var events: [MidasUsageSyncEvent] = []
     var accountDays: [MidasUsageSyncAccountDay] = []
     var excludedRecords = 0
-}
-
-/// These opaque values stay in local preferences/cache. They never enter a shared publication.
-struct MidasUsageSyncEnvironmentIdentity: Sendable, Equatable {
-    var deviceBinding: String?
-    var cloudAccountFingerprint: String
-
-    init(
-        deviceBinding: String? = nil,
-        cloudAccountFingerprint: String = "no-icloud-account")
-    {
-        self.deviceBinding = deviceBinding
-        self.cloudAccountFingerprint = cloudAccountFingerprint
-    }
-
-    static func live() -> Self {
-        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
-        var binding: String?
-        if service != 0 {
-            defer { IOObjectRelease(service) }
-            if let identifier = IORegistryEntryCreateCFProperty(
-                service,
-                "IOPlatformUUID" as CFString,
-                kCFAllocatorDefault,
-                0)?.takeRetainedValue() as? String
-            {
-                binding = self.fingerprint(Data(("Midas local device v1:" + identifier).utf8))
-            }
-        }
-        guard let token = FileManager.default.ubiquityIdentityToken else {
-            return Self(
-                deviceBinding: binding,
-                cloudAccountFingerprint: "identity-unavailable")
-        }
-        return Self(
-            deviceBinding: binding,
-            cloudAccountFingerprint: self.cloudAccountFingerprint(
-                token: token,
-                defaults: .standard))
-    }
-
-    /// Apple defines account-token identity with isEqual, not the bytes of its archive.
-    /// Keep a local stable label so caches do not depend on serialization order.
-    static func cloudAccountFingerprint(
-        token: (any NSCoding & NSObjectProtocol)?,
-        defaults: UserDefaults) -> String
-    {
-        guard let token else { return "identity-unavailable" }
-        if let data = defaults.data(forKey: "midasUsageSyncIdentityToken"),
-           let decoder = try? NSKeyedUnarchiver(forReadingFrom: data)
-        {
-            decoder.requiresSecureCoding = false
-            decoder.decodingFailurePolicy = .setErrorAndReturn
-            let previous = decoder.decodeObject(forKey: NSKeyedArchiveRootObjectKey)
-            decoder.finishDecoding()
-            if let previous, token.isEqual(previous),
-               let fingerprint = defaults.string(forKey: "midasUsageSyncIdentityFingerprint")
-            {
-                return fingerprint
-            }
-        }
-        guard let data = try? NSKeyedArchiver.archivedData(
-            withRootObject: token,
-            requiringSecureCoding: false)
-        else {
-            return "identity-unavailable"
-        }
-        let fingerprint = "icloud-account-v2:" + UUID().uuidString
-        defaults.set(
-            data,
-            forKey: "midasUsageSyncIdentityToken")
-        defaults.set(
-            fingerprint,
-            forKey: "midasUsageSyncIdentityFingerprint")
-        return fingerprint
-    }
-
-    private static func fingerprint(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-    }
 }
 
 /// Owns explicit opt-in, an offline outbox and the received numeric view. Provider authentication stays elsewhere.
@@ -172,7 +91,11 @@ final class MidasUsageSyncCoordinator {
     var hubSyncState: MidasUsageHubSyncState?
     var peerReceipts: [MidasUsageHubPeerReceipt] = []
     var hasPendingUpload: Bool {
-        self.pendingLocal != nil
+        self.pendingLocal != nil || self.outboxRequiresRepair
+    }
+
+    var outboxRequiresRepair: Bool {
+        self.transport == .tailscaleHub && self.criticalOutboxNeedsRepair
     }
 
     var isSyncing = false
@@ -236,6 +159,8 @@ final class MidasUsageSyncCoordinator {
     @ObservationIgnored private var stagedTransport: MidasUsageSyncTransport?
     @ObservationIgnored private var connectionAttemptID: UUID?
     @ObservationIgnored private var connectionDrainID: UUID?
+    @ObservationIgnored private var connectionDrainingSync: Task<Void, Never>?
+    @ObservationIgnored private var criticalOutboxNeedsRepair = false
     var selectedTransport: MidasUsageSyncTransport {
         self.stagedTransport ?? self.transport
     }
@@ -452,7 +377,8 @@ final class MidasUsageSyncCoordinator {
             relativeTo: nil)
         self.connectionDrainID = attemptID
         defer { self.finishConnectionDrain(attemptID: attemptID) }
-        let oldSync = self.activeSync
+        let oldSync = self.connectionDrainingSync ?? self.activeSync
+        self.connectionDrainingSync = oldSync
         self.pause()
         await oldSync?.value
         guard self.connectionAttemptID == attemptID, self.environmentIdentity() == identity else {
@@ -571,6 +497,11 @@ final class MidasUsageSyncCoordinator {
             workspace: workspace,
             generation: generation)
         guard self.generation == generation, self.isEnabled else { return }
+        guard !self.outboxRequiresRepair else {
+            self.issue = "This Mac’s saved upload queue needs repair. Its original files are preserved."
+            self.status = "Received usage is available. Local sharing is paused to protect unpublished history."
+            return
+        }
         if self.transport == .tailscaleHub, receivedSuccessfully, let pending = self.pendingLocal,
            let hubHead = self.received.first(where: { $0.deviceID == self.syncDeviceID })
         {
@@ -801,8 +732,6 @@ final class MidasUsageSyncCoordinator {
         let checkedAt = self.currentTime()
         guard result.workspace == workspace else { throw MidasUsageSyncError.wrongWorkspace }
         self.phase = .applying
-        var candidates = self.received + result.publications
-        if let publication, result.publicationSucceeded { candidates.append(publication) }
         if publication == nil, result.publications == self.received, result.rejectedFiles == 0,
            result.unavailableFiles == 0, self.lastAppliedAt != nil
         {
@@ -818,6 +747,13 @@ final class MidasUsageSyncCoordinator {
             try await self.persistSyncReceipt()
             return
         }
+        var candidates: [MidasUsageSyncPublication]
+        if hubState != nil {
+            candidates = try await self.worker.reconcile(previous: self.received, heads: result.publications)
+        } else {
+            candidates = self.received + result.publications
+            if let publication, result.publicationSucceeded { candidates.append(publication) }
+        }
         let ledger = try await self.worker.ledger(
             publications: candidates,
             workspaceID: workspace.id,
@@ -826,6 +762,21 @@ final class MidasUsageSyncCoordinator {
         try Task.checkCancellation()
         guard self.generation == generation, self.isEnabled, self.workspace == workspace,
               self.identityStillMatches() else { throw CancellationError() }
+        var recoveredPending: MidasUsageSyncPublication?
+        if hubState != nil, publication == nil, !self.criticalOutboxNeedsRepair,
+           let head = result.publications.first(where: { $0.deviceID == self.syncDeviceID }),
+           let retained = ledger.publications.first(where: { $0.deviceID == self.syncDeviceID }),
+           head.events != retained.events || head.accountDays != retained.accountDays
+        {
+            recoveredPending = try await self.worker.retain(
+                previous: self.pendingLocal,
+                fresh: retained,
+                workspaceID: workspace.id,
+                now: checkedAt,
+                canonical: true)
+        }
+        try Task.checkCancellation()
+        guard self.generation == generation, self.isEnabled else { throw CancellationError() }
         let oldRemote = self.received.filter { $0.deviceID != self.syncDeviceID }
         let newRemote = ledger.publications.filter { $0.deviceID != self.syncDeviceID }
         let previousReceived = self.received
@@ -840,6 +791,7 @@ final class MidasUsageSyncCoordinator {
         let previousApplied = self.lastAppliedAt
         self.received = ledger.publications
         self.snapshots = ledger.snapshots
+        if let recoveredPending { self.pendingLocal = recoveredPending }
         self.devices = ledger.publications.map { value in
             MidasUsageSyncDeviceStatus(
                 id: value.deviceID,
@@ -863,7 +815,7 @@ final class MidasUsageSyncCoordinator {
             // The app's aggregate/cache checkpoint, not merely the transport's page
             // cache, must be durable before another device is told it was applied.
             try await self.persistCache()
-            try await self.persistOutbox()
+            if !self.criticalOutboxNeedsRepair { try await self.persistOutbox() }
             try Task.checkCancellation()
             guard self.generation == generation, self.isEnabled else { throw CancellationError() }
         } catch {
@@ -949,7 +901,8 @@ extension MidasUsageSyncCoordinator {
         // replacement leaves the current connection, display and enabled choice intact.
         self.connectionDrainID = attemptID
         defer { self.finishConnectionDrain(attemptID: attemptID) }
-        let oldSync = self.activeSync
+        let oldSync = self.connectionDrainingSync ?? self.activeSync
+        self.connectionDrainingSync = oldSync
         self.pause()
         await oldSync?.value
         guard self.connectionAttemptID == attemptID,
@@ -987,6 +940,7 @@ extension MidasUsageSyncCoordinator {
     private func finishConnectionDrain(attemptID: UUID) {
         guard self.connectionDrainID == attemptID else { return }
         self.connectionDrainID = nil
+        self.connectionDrainingSync = nil
         self.scheduleSync()
     }
 }
@@ -1282,6 +1236,17 @@ extension MidasUsageSyncCoordinator {
             self.write = write
         }
 
+        func reconcile(previous: [MidasUsageSyncPublication], heads: [MidasUsageSyncPublication]) throws
+            -> [MidasUsageSyncPublication]
+        {
+            var retained = Dictionary(uniqueKeysWithValues: previous.map { ($0.deviceID, $0) })
+            for head in heads {
+                retained[head.deviceID] = try MidasUsageSyncLedger.retainingCanonicalHistory(
+                    previous: retained[head.deviceID], fresh: head)
+            }
+            return Array(retained.values)
+        }
+
         func retain(
             previous: MidasUsageSyncPublication?,
             fresh: MidasUsageSyncPublication,
@@ -1430,7 +1395,7 @@ extension MidasUsageSyncCoordinator {
             lastPublishedAt: self.lastPublishedAt,
             lastReceivedAt: self.lastReceivedAt)
         if self.transport == .tailscaleHub {
-            try await self.persistOutbox()
+            if !self.criticalOutboxNeedsRepair { try await self.persistOutbox() }
             try await self.worker.persistPaged(
                 cache,
                 root: url.deletingLastPathComponent(),
@@ -1448,6 +1413,9 @@ extension MidasUsageSyncCoordinator {
               let value = try? JSONDecoder().decode(
                   PagedCache.self,
                   from: data), value.schemaVersion == 3,
+              (try? value.workspace.validate()) != nil,
+              value.publications.count <= 128,
+              Set(value.publications.map(\.deviceID)).count == value.publications.count,
               let store = try? MidasUsageCanonicalStore(root: root.appendingPathComponent("hub-received-records"))
         else { return nil }
         var publications: [MidasUsageSyncPublication] = []
@@ -1475,8 +1443,13 @@ extension MidasUsageSyncCoordinator {
         expected: MidasUsageSyncWorkspace?,
         acceptsExplicitReconnection: Bool = false)
     {
-        guard self.transport == .tailscaleHub, let root = self.persistenceURL?.deletingLastPathComponent(),
-              let data = try? LocalPersistence.read(root.appendingPathComponent("hub-outbox.json")),
+        guard self.transport == .tailscaleHub,
+              let root = self.persistenceURL?.deletingLastPathComponent() else { return }
+        var info = stat()
+        let outboxURL = root.appendingPathComponent("hub-outbox.json")
+        guard Darwin.lstat(outboxURL.path, &info) == 0 else { return }
+        self.criticalOutboxNeedsRepair = true
+        guard let data = try? LocalPersistence.read(outboxURL),
               let value = try? JSONDecoder().decode(
                   Outbox.self,
                   from: data), value.schemaVersion == 1,
@@ -1489,6 +1462,7 @@ extension MidasUsageSyncCoordinator {
                   deviceID: value.localDeviceID,
                   revision: value.revision,
                   now: self.currentTime()) else { return }
+        self.criticalOutboxNeedsRepair = false
         self.workspace = value.workspace
         if value.pending {
             self.pendingLocal = publication
@@ -1506,6 +1480,7 @@ extension MidasUsageSyncCoordinator {
     }
 
     private func persistOutbox() async throws {
+        guard !self.outboxRequiresRepair else { throw MidasUsageSyncError.invalidRecord }
         guard self.transport == .tailscaleHub else {
             if self.pendingLocal != nil, let url = self.cacheURL, let workspace, let accountFingerprint {
                 try await self.worker.persist(

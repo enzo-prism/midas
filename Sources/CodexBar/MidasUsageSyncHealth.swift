@@ -74,6 +74,7 @@ extension MidasUsageSyncCoordinator {
 
     var healthSummary: String {
         if !self.isEnabled { return self.hasConnection ? "Sync paused" : "Sync not connected" }
+        if self.outboxRequiresRepair { return "Saved upload queue needs repair" }
         if self.issue != nil { return self.hasPendingUpload ? "Changes saved on this Mac" : "Needs attention" }
         if self.isSyncing { return self.phase.title }
         if self.hasPendingUpload { return "Changes saved on this Mac" }
