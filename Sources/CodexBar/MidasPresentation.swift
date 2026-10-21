@@ -625,7 +625,13 @@ enum MidasOrbitQuota {
     static let codexMonthlyID = "codex-monthly"
 
     private static func codexWindow(_ snapshot: UsageSnapshot) -> (id: String, window: RateWindow)? {
-        if let weekly = IconRemainingResolver.resolvedWindows(snapshot: snapshot, style: .codex).primary {
+        // Slot names are not duration guarantees: free accounts can return a monthly secondary window.
+        // Prefer an explicit semantic week in either slot before the legacy undated secondary contract.
+        let windows = [snapshot.secondary, snapshot.primary].compactMap(\.self)
+        if let weekly = windows.first(where: { $0.windowMinutes == self.weekMinutes }) {
+            return ("secondary", weekly)
+        }
+        if let weekly = snapshot.secondary, weekly.windowMinutes == nil {
             return ("secondary", weekly)
         }
         // Free accounts can report an explicit 30-day allowance instead of a weekly one.

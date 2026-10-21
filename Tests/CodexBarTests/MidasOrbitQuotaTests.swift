@@ -273,6 +273,22 @@ struct MidasOrbitQuotaTests {
         }
     }
 
+    @Test func codexLegacyUndatedSecondaryRemainsWeeklyButExplicitDurationsControlMeaning() {
+        let legacy = self.item(.codex, secondary: self.window(51, minutes: nil))
+        #expect(legacy.hero?.title == "This week")
+        #expect(self.orbit(legacy).orbitRemainingPercent == 49)
+        let explicit = self.item(
+            .codex,
+            primary: self.window(51),
+            secondary: self.window(0, minutes: nil))
+        #expect(self.orbit(explicit).orbitRemainingPercent == 49)
+        for minutes in [300, 1440, 365 * 1440] {
+            let unsupported = self.item(.codex, secondary: self.window(0, minutes: minutes))
+            #expect(unsupported.hero == nil)
+            #expect(unsupported.orbitQuota == nil)
+        }
+    }
+
     @Test func invalidPresentationQuotaNeverBecomesARingOrWarning() {
         for value in [Double.nan, .infinity, -.infinity] {
             var item = self.item(
