@@ -46,19 +46,22 @@ public struct MidasUsageHubExchange: Codable, Sendable, Equatable {
     public let publicationSucceeded: Bool
     public let unavailableFiles: Int
     public let rejectedFiles: Int
+    public let syncState: MidasUsageHubSyncState?
 
     public init(
         workspace: MidasUsageSyncWorkspace,
         publications: [MidasUsageSyncPublication],
         publicationSucceeded: Bool,
         unavailableFiles: Int,
-        rejectedFiles: Int)
+        rejectedFiles: Int,
+        syncState: MidasUsageHubSyncState? = nil)
     {
         self.workspace = workspace
         self.publications = publications
         self.publicationSucceeded = publicationSucceeded
         self.unavailableFiles = unavailableFiles
         self.rejectedFiles = rejectedFiles
+        self.syncState = syncState
     }
 }
 
@@ -70,6 +73,13 @@ public enum MidasUsageHubError: Error, LocalizedError, Sendable, Equatable {
     case invalidResponse
     case unavailable
     case unsafeConnectionFile
+    case unsupportedProtocol
+    case incompatibleProtocol
+    case timedOut
+    case nameResolutionFailed
+    case secureConnectionFailed
+    case corruptCache
+    case revisionExpired
 
     public var errorDescription: String? {
         switch self {
@@ -80,11 +90,18 @@ public enum MidasUsageHubError: Error, LocalizedError, Sendable, Equatable {
         case .invalidResponse: "The hub returned usage that could not be validated."
         case .unavailable: "The private usage hub is unavailable. Your last received usage is retained."
         case .unsafeConnectionFile: "The hub connection file must be a private, owned, regular file with mode 600."
+        case .unsupportedProtocol: "This hub does not support incremental usage sync."
+        case .incompatibleProtocol: "Update Midas or its private hub to a compatible version."
+        case .timedOut: "The usage sync transfer exceeded its time limit. Local changes are saved for retry."
+        case .nameResolutionFailed: "The private hub name could not be resolved. Check Tailscale."
+        case .secureConnectionFailed: "The private hub’s secure connection could not be verified."
+        case .revisionExpired: "The selected hub checkpoint expired. Sync will resume from a fresh checkpoint."
+        case .corruptCache: "The local transport cache needs repair. Unacknowledged usage is retained."
         }
     }
 }
 
-/// This transport moves complete snapshots. MidasUsageSyncLedger remains the only counting and merging engine.
+/// Negotiates incremental v2 exchange while preserving old hubs and the v1 validation contract.
 public enum MidasUsageHubClient {
     public static let maximumDevices = 128
     public static let maximumExchangeBytes = 128 * 1024 * 1024
@@ -107,18 +124,27 @@ public enum MidasUsageHubClient {
         connection: MidasUsageHubConnection,
         workspace: MidasUsageSyncWorkspace,
         local: MidasUsageSyncPublication?,
-        now: Date = Date()) async throws -> MidasUsageHubExchange
+        now: Date = Date(),
+        stateRoot: URL? = nil) async throws -> MidasUsageHubExchange
     {
         try connection.validate()
         try workspace.validate()
         if let expected = connection.workspaceID, expected != workspace.id {
             throw MidasUsageSyncError.wrongWorkspace
         }
-        try local?.validate(workspaceID: workspace.id, now: now)
+        try local?.validateCanonical(workspaceID: workspace.id, now: now)
         if let local, local.deviceID != connection.deviceID || local.deviceName != connection.deviceName {
             throw MidasUsageHubError.invalidConnection
         }
-        let body = try local.map { try MidasUsageSyncEncoding.encodePublication($0) } ?? Data("null".utf8)
+        do {
+            return try await MidasUsageHubTransportV2.exchange(
+                connection: connection, workspace: workspace, local: local, now: now, stateRoot: stateRoot)
+        } catch MidasUsageHubError.unsupportedProtocol {
+            // Only an absent initial manifest route permits downgrade. Invalid v2 data never does.
+        }
+        let legacy = local.map { self.legacyPublication($0) }
+        try legacy?.validate(workspaceID: workspace.id, now: now)
+        let body = try legacy.map { try MidasUsageSyncEncoding.encodePublication($0) } ?? Data("null".utf8)
         guard body.count <= MidasUsageSyncPublication.maximumFileBytes else {
             throw MidasUsageSyncError.limitExceeded
         }
@@ -129,7 +155,61 @@ public enum MidasUsageHubClient {
         let elapsed = started.duration(to: clock.now).components
         let validationTime = now.addingTimeInterval(Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18)
         return try self.validatedExchange(
-            data, connection: connection, workspace: workspace, local: local, now: validationTime)
+            data, connection: connection, workspace: workspace, local: legacy, now: validationTime)
+    }
+
+    /// The old wire schema has a closed values whitelist. New metadata stays in canonical state.
+    static func legacyPublication(_ publication: MidasUsageSyncPublication) -> MidasUsageSyncPublication {
+        let legacy = MidasUsageSyncLedger.retainingLocalHistory(previous: nil, fresh: publication)
+        func values(_ value: MidasUsageSyncValues) -> MidasUsageSyncValues {
+            MidasUsageSyncValues(
+                tokens: value.tokens,
+                requests: value.requests,
+                costUSD: value.costUSD,
+                apiEquivalentCostUSD: value.apiEquivalentCostUSD,
+                tokenMix: value.tokenMix,
+                provenance: value.provenance,
+                model: value.model,
+                unpricedRequests: value.unpricedRequests,
+                estimatedRequests: value.estimatedRequests)
+        }
+        return MidasUsageSyncPublication(
+            workspaceID: legacy.workspaceID,
+            deviceID: legacy.deviceID,
+            deviceName: legacy.deviceName,
+            publishedAt: legacy.publishedAt,
+            events: legacy.events.map {
+                MidasUsageSyncEvent(
+                    id: $0.id,
+                    provider: $0.provider,
+                    day: $0.day,
+                    observedAt: $0.observedAt,
+                    values: values($0.values))
+            },
+            accountDays: legacy.accountDays.map {
+                MidasUsageSyncAccountDay(
+                    accountScope: $0.accountScope,
+                    provider: $0.provider,
+                    day: $0.day,
+                    observedAt: $0.observedAt,
+                    values: values($0.values))
+            },
+            excludedRecords: legacy.excludedRecords)
+    }
+
+    public static func acknowledgeApplied(
+        connection: MidasUsageHubConnection,
+        workspace: MidasUsageSyncWorkspace,
+        state: MidasUsageHubSyncState,
+        stateRoot: URL? = nil) async throws -> [MidasUsageHubPeerReceipt]
+    {
+        try connection.validate()
+        try workspace.validate()
+        if let expected = connection.workspaceID, expected != workspace.id {
+            throw MidasUsageSyncError.wrongWorkspace
+        }
+        return try await MidasUsageHubTransportV2.acknowledge(
+            connection: connection, workspace: workspace, state: state, stateRoot: stateRoot)
     }
 
     static func validatedExchange(
@@ -194,8 +274,12 @@ public enum MidasUsageHubClient {
         return result
     }
 
-    private static func request(
-        connection: MidasUsageHubConnection, path: String, body: Data?, limit: Int) async throws -> Data
+    static func request(
+        connection: MidasUsageHubConnection,
+        path: String,
+        body: Data?,
+        limit: Int,
+        notFoundError: MidasUsageHubError = .invalidResponse) async throws -> Data
     {
         try connection.validate()
         try Task.checkCancellation()
@@ -207,7 +291,7 @@ public enum MidasUsageHubClient {
         request.setValue("Bearer " + connection.credential, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-        let transfer = BoundedTransfer(limit: limit)
+        let transfer = BoundedTransfer(limit: limit, notFoundError: notFoundError)
         return try await withTaskCancellationHandler {
             try await transfer.run(request)
         } onCancel: {
@@ -219,6 +303,7 @@ public enum MidasUsageHubClient {
     private final class BoundedTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         private let lock = NSLock()
         private let limit: Int
+        private let notFoundError: MidasUsageHubError
         private var data = Data()
         private var session: URLSession?
         private var task: URLSessionDataTask?
@@ -226,8 +311,9 @@ public enum MidasUsageHubClient {
         private var failure: (any Error)?
         private var cancelled = false
 
-        init(limit: Int) {
+        init(limit: Int, notFoundError: MidasUsageHubError) {
             self.limit = limit
+            self.notFoundError = notFoundError
         }
 
         func run(_ request: URLRequest) async throws -> Data {
@@ -251,6 +337,19 @@ public enum MidasUsageHubClient {
                     self.task = task
                     task.resume()
                 }
+            }
+        }
+
+        private static func safeNetworkError(_ error: any Error) -> MidasUsageHubError {
+            guard let error = error as? URLError else { return .unavailable }
+            return switch error.code {
+            case .timedOut: .timedOut
+            case .cannotFindHost, .dnsLookupFailed: .nameResolutionFailed
+            case .secureConnectionFailed, .serverCertificateHasBadDate,
+                 .serverCertificateUntrusted, .serverCertificateHasUnknownRoot,
+                 .serverCertificateNotYetValid, .clientCertificateRejected,
+                 .clientCertificateRequired: .secureConnectionFailed
+            default: .unavailable
             }
         }
 
@@ -286,8 +385,12 @@ public enum MidasUsageHubClient {
                 guard response.statusCode == 200 else {
                     self.failure = switch response.statusCode {
                     case 401, 403: MidasUsageHubError.unauthorized
+                    case 410: MidasUsageHubError.revisionExpired
                     case 409: MidasUsageHubError.rejectedSnapshot
                     case 413: MidasUsageHubError.responseTooLarge
+                    case 404: self.notFoundError
+                    case 400: MidasUsageHubError.invalidResponse
+                    case 426: MidasUsageHubError.incompatibleProtocol
                     default: MidasUsageHubError.unavailable
                     }
                     return false
@@ -323,7 +426,8 @@ public enum MidasUsageHubClient {
                 let result: Result<Data, any Error> = switch (self.cancelled, self.failure, error) {
                 case (true, _, _): .failure(CancellationError())
                 case let (_, failure?, _): .failure(failure)
-                case (_, _, .some): .failure(MidasUsageHubError.unavailable)
+                case let (_, _, .some(error)):
+                    .failure(Self.safeNetworkError(error))
                 default: .success(self.data)
                 }
                 let continuation = self.continuation
