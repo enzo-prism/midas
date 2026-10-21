@@ -452,7 +452,9 @@ struct MidasHubCoordinatorTests {
         await coordinator.syncNow()
         coordinator.makeLocalUsage = nil
         let before = await receipts.count
-        await fixture.hub.setPublications([self.publication(
+        let acceptedOwnHead = await hub.publication(for: fixture.connection.deviceID)
+        let ownHead = try #require(acceptedOwnHead)
+        await fixture.hub.setPublications([ownHead, self.publication(
             workspace: fixture.workspace,
             deviceID: UUID(),
             event: "new-peer",
@@ -592,7 +594,7 @@ struct MidasHubCoordinatorTests {
         }
     }
 
-    private static func event(
+    private nonisolated static func event(
         workspace: MidasUsageSyncWorkspace,
         name: String,
         tokens: Int,

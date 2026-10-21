@@ -413,6 +413,7 @@ final class MidasUsageSyncCoordinator {
         self.restoreOutbox(
             expected: selected,
             acceptsExplicitReconnection: true)
+        if self.readCache() != nil { try await self.persistCache() }
         self.issue = nil
         self.isEnabled = true
         self.status = "Connected. Waiting for usage."
@@ -603,7 +604,7 @@ final class MidasUsageSyncCoordinator {
                 canonical: self.transport == .tailscaleHub)
             try Task.checkCancellation()
             guard self.generation == generation, self.isEnabled, self.identityStillMatches() else { return }
-            if let previous, self.pendingLocal == nil,
+            if self.transport == .tailscaleHub, let previous, self.pendingLocal == nil,
                previous.events == publication.events, previous.accountDays == publication.accountDays,
                previous.excludedRecords == publication.excludedRecords, previous.deviceName == publication.deviceName
             {
