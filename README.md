@@ -37,8 +37,8 @@ on first launch, without touching an upstream CodexBar install on the same Mac. 
 Version **0.49.2, build 134** shows a Muse Code plan that Meta reports as exhausted as fully used
 until its reset time, instead of estimating remaining usage from local activity. The saved plan
 reading survives relaunches, and failed plan checks back off for an hour and reuse one Muse session.
-Publication checks are in progress; use
-[GitHub Releases](https://github.com/enzo-prism/midas/releases/latest) for the current public build.
+Published as [v0.49.2-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.49.2-midas.1),
+with Developer ID signing, Apple notarization, and signed Sparkle feeds.
 
 ## Midas 0.49.1: choose the menu-bar account
 

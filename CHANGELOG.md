@@ -6,7 +6,8 @@
 - Keep the saved Meta plan reading (and the Z.ai model-usage cache) across app launches; launch-time cache cleanup no longer deletes them.
 - Stop creating a new "midas usage check" Muse session on every refresh. A failed plan check now waits an hour before retrying and resumes the same session.
 
-Build 134. Developer ID signed and notarized; publication checks are in progress.
+Build 134. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.49.2-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.49.2-midas.1).
 
 ## Midas 0.49.1 — October 21, 2026
 

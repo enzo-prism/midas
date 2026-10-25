@@ -15,7 +15,18 @@ and `zai-model-usage-v1.json`. Failed probes record `lastFailureAt` and back off
 interval, resuming the stored probe session instead of opening a new Muse session per refresh.
 Meta/cache tests (67) and the Meta|Zai|CostUsage|Midas sweep (856) pass; strict lint passes.
 A live check against the exhausted account returned both windows 100% used with Meta's reset time
-and made no further probe on rerun.
+and made no further probe on rerun. The exact binary identifies source `5364b1456`.
+
+Apple notarization submission `4b7a3687-e3de-46d1-813b-6eb06508f963` was Accepted. The app and
+dSYM share arm64 UUID `2B45F626-75AB-3AC3-A634-2E268238AE06`. Deep strict signature, stapled
+ticket, and Gatekeeper checks passed. The archive and both XML feeds were signed and verified with
+`sign_update --account enzo-prism-midas`; downloaded draft assets matched `SHA256SUMS.txt`, and the
+anonymous public archive plus both `/releases/latest/download/` feeds matched the signed files.
+Archive SHA-256: `b0bea9ac8ae884bf928fdd42de9c68e4e1d86a5299a3c6df10924ca99e5ea182`.
+The public notarized bundle is installed on the Mac mini; on launch it wrote a blocked Meta
+reading (both windows 100% used until 2026-10-26T00:00:00Z) to the plan cache.
+Website commit `84c8c4c` is live at `midas-ai.dev`; all 18 browser checks pass against production
+and the live download link returns the archive above.
 
 ## 0.49.1 changes: choose the menu-bar account
 
@@ -50,14 +61,14 @@ a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.2**, build **134**; 0.49.1 (build 133) is the latest published stable release until 0.49.2 publication is verified. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.2**, build **134**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.49.1**, build **133**, tagged
-`v0.49.1-midas.1`, superseding 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.49.2**, build **134**, tagged
+`v0.49.2-midas.1`, superseding 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
