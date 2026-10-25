@@ -4,6 +4,19 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.49.2 changes: exhausted Meta plans
+
+Version 0.49.2 (build 134) fixes the Meta card reading "100% left" while dev.meta.ai reported the
+weekly limit used up. On an exhausted plan Meta answers the probe turn with HTTP 429, and `muse serve`
+publishes no usage; Midas now parses the "Subscription quota exhausted … resets at <ISO time>" reason
+into a blocked reading (both windows fully used until that time) instead of falling back to the
+local busiest-day heuristic. Launch-time cache pruning now keeps `meta-subscription-usage-v1.json`
+and `zai-model-usage-v1.json`. Failed probes record `lastFailureAt` and back off for the cache
+interval, resuming the stored probe session instead of opening a new Muse session per refresh.
+Meta/cache tests (67) and the Meta|Zai|CostUsage|Midas sweep (856) pass; strict lint passes.
+A live check against the exhausted account returned both windows 100% used with Meta's reset time
+and made no further probe on rerun.
+
 ## 0.49.1 changes: choose the menu-bar account
 
 Version 0.49.1 (build 133) adds a persistent menu-bar account choice per provider, independent
@@ -37,7 +50,7 @@ a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.1**, build **133**, published as the latest stable release. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.2**, build **134**; 0.49.1 (build 133) is the latest published stable release until 0.49.2 publication is verified. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by

@@ -1,5 +1,13 @@
 # Changelog
 
+## Midas 0.49.2 — October 25, 2026
+
+- Show an exhausted Muse Code plan as fully used until Meta's reported reset. When Meta rejects the usage check with "Subscription quota exhausted", Midas now reads the reset time from that response instead of falling back to the local "busiest recorded day" estimate, which showed an empty plan as 100% left.
+- Keep the saved Meta plan reading (and the Z.ai model-usage cache) across app launches; launch-time cache cleanup no longer deletes them.
+- Stop creating a new "midas usage check" Muse session on every refresh. A failed plan check now waits an hour before retrying and resumes the same session.
+
+Build 134. Developer ID signed and notarized; publication checks are in progress.
+
 ## Midas 0.49.1 — October 21, 2026
 
 - Choose which connected account supplies the menu-bar circle under **More actions → Menu-bar provider**. Remember a separate choice for each provider without switching the CLI login or changing combined spend totals.

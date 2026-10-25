@@ -32,6 +32,14 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.49.2: exhausted Meta plans
+
+Version **0.49.2, build 134** shows a Muse Code plan that Meta reports as exhausted as fully used
+until its reset time, instead of estimating remaining usage from local activity. The saved plan
+reading survives relaunches, and failed plan checks back off for an hour and reuse one Muse session.
+Publication checks are in progress; use
+[GitHub Releases](https://github.com/enzo-prism/midas/releases/latest) for the current public build.
+
 ## Midas 0.49.1: choose the menu-bar account
 
 Version **0.49.1, build 133** adds account selection under **More actions → Menu-bar provider**.
