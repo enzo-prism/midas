@@ -16,7 +16,7 @@ import Foundation
 /// - A region change naturally invalidates: the cache key includes `region.rawValue`.
 public enum ZaiCostUsageCacheStore {
     private static let currentVersion = 1
-    private static let cacheFilename = "zai-model-usage-v1.json"
+    static let cacheFilename = "zai-model-usage-v1.json"
 
     private struct Payload: Codable {
         let version: Int

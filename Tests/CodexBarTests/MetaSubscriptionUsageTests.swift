@@ -1,7 +1,7 @@
-import CodexBarCore
 import Foundation
 import Testing
 @testable import CodexBar
+@testable import CodexBarCore
 
 struct MetaSubscriptionUsageTests {
     private let now = Date(timeIntervalSince1970: 1_791_874_582)
@@ -117,6 +117,137 @@ struct MetaSubscriptionUsageTests {
         #expect(MetaSubscriptionUsageCache.load(cacheRoot: root) == payload)
     }
 
+    /// The failed-turn reason `muse serve` sends when Meta rejects a probe on an exhausted plan.
+    private let exhaustedReason = "API error 429 [request_id=b2e82975-f1d9-4cea-af0e-97b077dccb7f]: "
+        + "Subscription quota exhausted. Your usage window resets at 2026-10-26T00:00:00Z. (rate_limit_error)"
+
+    @Test
+    func `quota exhausted rejection yields its reset time`() {
+        #expect(MetaSubscriptionUsage.quotaExhaustedResetDate(fromFailureReason: self.exhaustedReason)
+            == Date(timeIntervalSince1970: 1_792_972_800))
+        #expect(MetaSubscriptionUsage.quotaExhaustedResetDate(
+            fromFailureReason: "Subscription quota exhausted. Your usage window resets at 2026-10-26T00:00:00.250Z.")
+            == Date(timeIntervalSince1970: 1_792_972_800.25))
+        #expect(MetaSubscriptionUsage.quotaExhaustedResetDate(
+            fromFailureReason: "API error 429: Too many requests. Retry resets at 2026-10-26T00:00:00Z.") == nil)
+        #expect(MetaSubscriptionUsage.quotaExhaustedResetDate(fromFailureReason: "Subscription quota exhausted.")
+            == nil)
+    }
+
+    @Test
+    func `weekly block reads fully used until the reset`() throws {
+        let resetsAt = self.now.addingTimeInterval(30 * 3600)
+        let usage = try MetaSubscriptionUsage.blocked(until: resetsAt, observedAt: self.now, previous: self.usage())
+        #expect(usage.windowRemainingPercent == 0)
+        #expect(usage.windowResetsAt == resetsAt)
+        #expect(usage.windowDurationMins == 300)
+        #expect(usage.weeklyRemainingPercent == 0)
+        #expect(usage.weeklyResetsAt == resetsAt)
+        #expect(usage.blockedUntil == resetsAt)
+        #expect(usage.isCurrent(now: resetsAt.addingTimeInterval(-1)))
+        #expect(!usage.isCurrent(now: resetsAt))
+
+        let snapshot = MetaUsageSnapshot(summary: MetaUsageSummary(updatedAt: self.now), usage: usage)
+            .toUsageSnapshot()
+        let model = try self.cardModel(snapshot: snapshot, showUsed: false)
+        #expect(model.metrics.map(\.percent) == [0, 0])
+    }
+
+    @Test
+    func `window block keeps a still valid weekly reading`() throws {
+        let previous = try self.usage()
+        let resetsAt = self.now.addingTimeInterval(2 * 3600)
+        let usage = MetaSubscriptionUsage.blocked(until: resetsAt, observedAt: self.now, previous: previous)
+        #expect(usage.windowRemainingPercent == 0)
+        #expect(usage.windowResetsAt == resetsAt)
+        #expect(usage.weeklyUsedPercent == previous.weeklyUsedPercent)
+        #expect(usage.weeklyResetsAt == previous.weeklyResetsAt)
+    }
+
+    @Test
+    func `blocked cache stops being fresh at its reset`() {
+        let resetsAt = self.now.addingTimeInterval(20 * 60)
+        let usage = MetaSubscriptionUsage.blocked(until: resetsAt, observedAt: self.now, previous: nil)
+        let payload = MetaSubscriptionUsageCache.Payload(usage: usage, probeSessionID: "session-1")
+        #expect(MetaSubscriptionUsageCache.isFresh(payload, now: self.now.addingTimeInterval(10 * 60)))
+        #expect(!MetaSubscriptionUsageCache.isFresh(payload, now: resetsAt))
+    }
+
+    @Test
+    func `cache written before blocked readings still decodes`() throws {
+        let legacy = Data("""
+        {"version":1,"probeSessionID":"session-1","usage":{"windowUsedPercent":81,"windowDurationMins":300,\
+        "windowResetsAt":810211200,"weeklyUsedPercent":27,"weeklyResetsAt":810211200,\
+        "tier":"27681631238169137","observedAt":810211200}}
+        """.utf8)
+        let payload = try JSONDecoder().decode(MetaSubscriptionUsageCache.Payload.self, from: legacy)
+        #expect(payload.usage?.weeklyUsedPercent == 27)
+        #expect(payload.usage?.blockedUntil == nil)
+        #expect(payload.lastFailureAt == nil)
+        #expect(payload.probeSessionID == "session-1")
+    }
+
+    @Test
+    func `exhausted probe is cached and reuses its session`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let resetsAt = self.now.addingTimeInterval(30 * 3600)
+        let probes = ProbeLog()
+
+        let usage = try await MetaSubscriptionFetchStrategy.subscriptionUsage(now: self.now, cacheRoot: root) {
+            probes.record($0)
+            throw MetaUsageProbeFailure(error: .quotaExhausted(resetsAt: resetsAt), sessionID: "check-1")
+        }
+        #expect(usage.blockedUntil == resetsAt)
+        #expect(usage.weeklyRemainingPercent == 0)
+        #expect(MetaSubscriptionUsageCache.load(cacheRoot: root)?.probeSessionID == "check-1")
+
+        let reused = try await MetaSubscriptionFetchStrategy.subscriptionUsage(
+            now: self.now.addingTimeInterval(5 * 60), cacheRoot: root)
+        {
+            probes.record($0)
+            throw MetaUsageProbeError.timedOut
+        }
+        #expect(reused == usage)
+        #expect(probes.sessions == [nil])
+
+        let reset = try await MetaSubscriptionFetchStrategy.subscriptionUsage(
+            now: self.now.addingTimeInterval(60 * 60), cacheRoot: root)
+        {
+            probes.record($0)
+            return try (self.usage(), $0)
+        }
+        #expect(try reset == self.usage())
+        #expect(probes.sessions == [nil, "check-1"])
+    }
+
+    @Test
+    func `failed probe backs off for the hour and resumes its session`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probes = ProbeLog()
+        let failing: (String?) async throws -> (usage: MetaSubscriptionUsage, sessionID: String?) = {
+            probes.record($0)
+            throw MetaUsageProbeFailure(error: .noUsageObserved, sessionID: "check-1")
+        }
+
+        await #expect(throws: MetaUsageProbeFailure.self) {
+            try await MetaSubscriptionFetchStrategy.subscriptionUsage(
+                now: self.now, cacheRoot: root, probe: failing)
+        }
+        await #expect(throws: MetaUsageProbeError.self) {
+            try await MetaSubscriptionFetchStrategy.subscriptionUsage(
+                now: self.now.addingTimeInterval(5 * 60), cacheRoot: root, probe: failing)
+        }
+        #expect(probes.sessions == [nil])
+
+        await #expect(throws: MetaUsageProbeFailure.self) {
+            try await MetaSubscriptionFetchStrategy.subscriptionUsage(
+                now: self.now.addingTimeInterval(60 * 60), cacheRoot: root, probe: failing)
+        }
+        #expect(probes.sessions == [nil, "check-1"])
+    }
+
     @Test
     func `uuid7 has version and variant bits`() throws {
         let id = MetaUsageProbe.uuid7(now: self.now)
@@ -140,7 +271,11 @@ struct MetaSubscriptionUsageTests {
     private func cardModel(showUsed: Bool) throws -> UsageMenuCardView.Model {
         let snapshot = try MetaUsageSnapshot(summary: MetaUsageSummary(updatedAt: self.now), usage: self.usage())
             .toUsageSnapshot()
-        return try UsageMenuCardView.Model.make(.init(
+        return try self.cardModel(snapshot: snapshot, showUsed: showUsed)
+    }
+
+    private func cardModel(snapshot: UsageSnapshot, showUsed: Bool) throws -> UsageMenuCardView.Model {
+        try UsageMenuCardView.Model.make(.init(
             provider: .meta,
             metadata: #require(ProviderDefaults.metadata[.meta]),
             snapshot: snapshot,
@@ -159,5 +294,14 @@ struct MetaSubscriptionUsageTests {
             showOptionalCreditsAndExtraUsage: true,
             hidePersonalInfo: false,
             now: self.now))
+    }
+}
+
+/// Records the session each probe was asked to resume.
+private final class ProbeLog: @unchecked Sendable {
+    private(set) var sessions: [String?] = []
+
+    func record(_ sessionID: String?) {
+        self.sessions.append(sessionID)
     }
 }

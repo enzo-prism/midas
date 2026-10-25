@@ -5,8 +5,12 @@ import Foundation
 /// `usage/changed` payload (`SubscriptionUsage`). Percents are the provider's own
 /// used percents for the current window and the rolling weekly window; Midas
 /// displays what is left. `tier` is Meta's opaque tier id, kept verbatim and
-/// never presented as a plan name.
+/// never presented as a plan name. `blockedUntil` is set only on a reading
+/// derived from Meta's quota-exhausted rejection (see `blocked(until:...)`).
 public struct MetaSubscriptionUsage: Codable, Sendable, Equatable {
+    /// Muse Code's current window when no reading has reported its length.
+    public static let defaultWindowDurationMins = 300
+
     public let windowUsedPercent: Double
     public let windowDurationMins: Int
     public let windowResetsAt: Date
@@ -14,6 +18,7 @@ public struct MetaSubscriptionUsage: Codable, Sendable, Equatable {
     public let weeklyResetsAt: Date
     public let tier: String?
     public let observedAt: Date
+    public let blockedUntil: Date?
 
     public init(
         windowUsedPercent: Double,
@@ -22,7 +27,8 @@ public struct MetaSubscriptionUsage: Codable, Sendable, Equatable {
         weeklyUsedPercent: Double,
         weeklyResetsAt: Date,
         tier: String?,
-        observedAt: Date)
+        observedAt: Date,
+        blockedUntil: Date? = nil)
     {
         self.windowUsedPercent = windowUsedPercent
         self.windowDurationMins = windowDurationMins
@@ -31,6 +37,54 @@ public struct MetaSubscriptionUsage: Codable, Sendable, Equatable {
         self.weeklyResetsAt = weeklyResetsAt
         self.tier = tier
         self.observedAt = observedAt
+        self.blockedUntil = blockedUntil
+    }
+
+    /// Meta rejects every request on an exhausted plan (HTTP 429) without a
+    /// usage payload, so the rejection's reset time is the only reading. Nothing
+    /// is usable until then, so both windows read fully used. A block ending
+    /// within one current window is that window's limit and keeps a still-valid
+    /// prior weekly reading; a later block is the weekly limit.
+    public static func blocked(
+        until resetsAt: Date,
+        observedAt now: Date,
+        previous: MetaSubscriptionUsage?) -> MetaSubscriptionUsage
+    {
+        let duration = previous?.windowDurationMins ?? Self.defaultWindowDurationMins
+        let weeklyBlocked = resetsAt.timeIntervalSince(now) > Double(duration) * 60
+        let weekly = weeklyBlocked ? nil : previous.flatMap { $0.weeklyResetsAt > now ? $0 : nil }
+        return MetaSubscriptionUsage(
+            windowUsedPercent: 100,
+            windowDurationMins: duration,
+            windowResetsAt: resetsAt,
+            weeklyUsedPercent: weekly?.weeklyUsedPercent ?? 100,
+            weeklyResetsAt: weekly?.weeklyResetsAt ?? resetsAt,
+            tier: previous?.tier,
+            observedAt: now,
+            blockedUntil: resetsAt)
+    }
+
+    /// Reset time from a failed Muse turn when Meta reports the subscription
+    /// quota exhausted, e.g. "API error 429 [...]: Subscription quota exhausted.
+    /// Your usage window resets at 2026-10-26T00:00:00Z. (rate_limit_error)".
+    public static func quotaExhaustedResetDate(fromFailureReason reason: String) -> Date? {
+        guard reason.range(of: "quota exhausted", options: .caseInsensitive) != nil,
+              let match = reason.range(
+                  of: #"resets at \d{4}-\d{2}-\d{2}T[0-9:.]+(Z|[+-]\d{2}:?\d{2})"#,
+                  options: [.regularExpression, .caseInsensitive])
+        else {
+            return nil
+        }
+        let stamp = String(reason[match].dropFirst("resets at ".count))
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: stamp) { return date }
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: stamp)
+    }
+
+    /// False once a quota-exhausted reading's reset has passed.
+    public func isCurrent(now: Date) -> Bool {
+        self.blockedUntil.map { $0 > now } ?? true
     }
 
     /// Percent of the current window still left (provider used may exceed 100).
@@ -82,7 +136,9 @@ public struct MetaSubscriptionUsage: Codable, Sendable, Equatable {
 }
 
 /// Persisted last probe result. The probe costs one minimal Muse request, so
-/// Midas reuses this value for up to an hour instead of asking again.
+/// Midas reuses this value for up to an hour instead of asking again. A failed
+/// probe is recorded too, so it also waits an hour and resumes the same check
+/// session instead of starting a new one on every refresh.
 public enum MetaSubscriptionUsageCache {
     public static let fileName = "meta-subscription-usage-v1.json"
     /// Minimum spacing between paid probes; explicit refreshes inside the hour reuse the cache.
@@ -90,13 +146,15 @@ public enum MetaSubscriptionUsageCache {
 
     public struct Payload: Codable, Sendable, Equatable {
         public let version: Int
-        public let usage: MetaSubscriptionUsage
+        public let usage: MetaSubscriptionUsage?
         public let probeSessionID: String?
+        public let lastFailureAt: Date?
 
-        public init(usage: MetaSubscriptionUsage, probeSessionID: String?) {
+        public init(usage: MetaSubscriptionUsage?, probeSessionID: String?, lastFailureAt: Date? = nil) {
             self.version = 1
             self.usage = usage
             self.probeSessionID = probeSessionID
+            self.lastFailureAt = lastFailureAt
         }
     }
 
@@ -133,8 +191,15 @@ public enum MetaSubscriptionUsageCache {
     }
 
     public static func isFresh(_ payload: Payload, now: Date = Date()) -> Bool {
-        now.timeIntervalSince(payload.usage.observedAt) < self.freshInterval
-            && payload.usage.weeklyResetsAt > now.addingTimeInterval(-7 * 24 * 3600)
+        guard let usage = payload.usage, usage.isCurrent(now: now) else { return false }
+        return now.timeIntervalSince(usage.observedAt) < self.freshInterval
+            && usage.weeklyResetsAt > now.addingTimeInterval(-7 * 24 * 3600)
+    }
+
+    /// True while a recent failed probe should not be retried.
+    public static func isBackingOff(_ payload: Payload, now: Date = Date()) -> Bool {
+        guard let failedAt = payload.lastFailureAt else { return false }
+        return now.timeIntervalSince(failedAt) < self.freshInterval
     }
 }
 
@@ -142,8 +207,11 @@ public enum MetaSubscriptionUsageCache {
 /// (`muse serve`). A fresh host has observed nothing, so the probe resumes
 /// Midas's one dedicated check session (starting and naming it on first use)
 /// and sends a single minimal prompt; the provider's response carries the
-/// current usage, which the host republishes via `usage/changed`. Callers
-/// must throttle probes with `MetaSubscriptionUsageCache`.
+/// current usage, which the host republishes via `usage/changed`. On an
+/// exhausted plan Meta rejects that prompt and the host publishes nothing, so
+/// the failed turn's reset time is surfaced as `quotaExhausted`. Failures carry
+/// the check session (`MetaUsageProbeFailure`) so the next probe resumes it.
+/// Callers must throttle probes with `MetaSubscriptionUsageCache`.
 public enum MetaUsageProbe {
     public static func locateMuseBinary(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> String?
@@ -191,7 +259,9 @@ public enum MetaUsageProbe {
             return result
         } catch {
             client.shutdown()
-            throw error
+            throw MetaUsageProbeFailure(
+                error: (error as? MetaUsageProbeError) ?? .hostError(error.localizedDescription),
+                sessionID: client.sessionID)
         }
     }
 }
@@ -206,6 +276,8 @@ final class MetaMSPClient: @unchecked Sendable {
     private let stdinPipe = Pipe()
     private let stdoutPipe = Pipe()
     private var nextID = 1
+    /// The check session in use, kept for the caller when the probe fails.
+    private(set) var sessionID: String?
     private let lineStream: AsyncStream<Data>
     private let lineContinuation: AsyncStream<Data>.Continuation
 
@@ -330,23 +402,22 @@ final class MetaMSPClient: @unchecked Sendable {
             params: ["clientInfo": ["name": "midas", "version": "1"]]))
         self.send(["jsonrpc": "2.0", "method": "initialized", "params": [String: Any]()])
 
-        var sessionID: String?
         if let probeSessionID {
             if let resumed = try? await waitFor(id: self.request(
                 method: "session/resume",
                 params: ["commandId": MetaUsageProbe.uuid7(), "sessionId": probeSessionID])),
                 let session = (resumed["result"] as? [String: Any])?["session"] as? [String: Any]
             {
-                sessionID = (session["sessionId"] as? String) ?? probeSessionID
+                self.sessionID = (session["sessionId"] as? String) ?? probeSessionID
             }
         }
-        if sessionID == nil {
+        if self.sessionID == nil {
             let started = try await waitFor(id: self.request(
                 method: "session/start",
                 params: ["commandId": MetaUsageProbe.uuid7()]))
-            sessionID = ((started["result"] as? [String: Any])?["session"] as? [String: Any])?["sessionId"]
+            self.sessionID = ((started["result"] as? [String: Any])?["session"] as? [String: Any])?["sessionId"]
                 as? String
-            if let sessionID {
+            if let sessionID = self.sessionID {
                 _ = try? await waitFor(id: self.request(
                     method: "session/rename",
                     params: [
@@ -359,10 +430,10 @@ final class MetaMSPClient: @unchecked Sendable {
 
         // A host that has already observed usage answers without a model call.
         if let usage = try await readUsage() {
-            return (usage, sessionID)
+            return (usage, self.sessionID)
         }
 
-        guard let sessionID else { throw MetaUsageProbeError.noUsageObserved }
+        guard let sessionID = self.sessionID else { throw MetaUsageProbeError.noUsageObserved }
         _ = self.request(
             method: "turn/start",
             params: [
@@ -381,6 +452,12 @@ final class MetaMSPClient: @unchecked Sendable {
             if message["method"] as? String == "turn/completed" {
                 if let usage = try await readUsage() {
                     return (usage, sessionID)
+                }
+                let params = message["params"] as? [String: Any]
+                let reason = (params?["reason"] as? String)
+                    ?? ((params?["error"] as? [String: Any])?["message"] as? String)
+                if let reason, let resetsAt = MetaSubscriptionUsage.quotaExhaustedResetDate(fromFailureReason: reason) {
+                    throw MetaUsageProbeError.quotaExhausted(resetsAt: resetsAt)
                 }
                 throw MetaUsageProbeError.noUsageObserved
             }
@@ -405,10 +482,26 @@ final class MetaMSPClient: @unchecked Sendable {
     }
 }
 
+/// A failed probe and the check session it used, if any.
+public struct MetaUsageProbeFailure: LocalizedError, Sendable {
+    public let error: MetaUsageProbeError
+    public let sessionID: String?
+
+    public init(error: MetaUsageProbeError, sessionID: String?) {
+        self.error = error
+        self.sessionID = sessionID
+    }
+
+    public var errorDescription: String? {
+        self.error.errorDescription
+    }
+}
+
 public enum MetaUsageProbeError: LocalizedError, Sendable {
     case binaryNotFound
     case timedOut
     case noUsageObserved
+    case quotaExhausted(resetsAt: Date)
     case hostError(String)
 
     public var errorDescription: String? {
@@ -419,6 +512,8 @@ public enum MetaUsageProbeError: LocalizedError, Sendable {
             "Timed out while asking Muse for plan usage."
         case .noUsageObserved:
             "Muse did not report subscription usage."
+        case let .quotaExhausted(resetsAt):
+            "Meta reports the Muse Code plan quota exhausted until \(resetsAt.formatted())."
         case let .hostError(message):
             "Muse usage check failed: \(message)"
         }

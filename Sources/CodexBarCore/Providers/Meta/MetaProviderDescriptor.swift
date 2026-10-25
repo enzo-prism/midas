@@ -79,24 +79,54 @@ struct MetaSubscriptionFetchStrategy: ProviderFetchStrategy {
         true
     }
 
-    /// Fresh cache needs no probe. A missing or stale cache probes once; a
-    /// failed probe keeps the stale cache rather than losing the plan windows.
-    static func subscriptionUsage(now: Date) async throws -> MetaSubscriptionUsage {
-        if let cached = MetaSubscriptionUsageCache.load(), MetaSubscriptionUsageCache.isFresh(cached, now: now) {
-            return cached.usage
+    /// Fresh cache needs no probe. A missing or stale cache probes once; an
+    /// exhausted plan becomes a blocked reading that lasts until its reset. Any
+    /// other failure is recorded so the next probe waits out the same hourly
+    /// budget, and keeps the stale reading rather than losing the plan windows.
+    static func subscriptionUsage(
+        now: Date,
+        cacheRoot: URL? = nil,
+        probe: (String?) async throws -> (usage: MetaSubscriptionUsage, sessionID: String?) = {
+            try await MetaUsageProbe.fetchUsage(probeSessionID: $0)
+        }) async throws -> MetaSubscriptionUsage
+    {
+        let cached = MetaSubscriptionUsageCache.load(cacheRoot: cacheRoot)
+        if let cached, MetaSubscriptionUsageCache.isFresh(cached, now: now), let usage = cached.usage {
+            return usage
         }
-        let cached = MetaSubscriptionUsageCache.load()
+        let lastKnown = cached?.usage.flatMap { $0.isCurrent(now: now) ? $0 : nil }
+        if let cached, MetaSubscriptionUsageCache.isBackingOff(cached, now: now) {
+            if let lastKnown {
+                return lastKnown
+            }
+            throw MetaUsageProbeError.noUsageObserved
+        }
         do {
-            let probed = try await MetaUsageProbe.fetchUsage(probeSessionID: cached?.probeSessionID)
+            let probed = try await probe(cached?.probeSessionID)
             MetaSubscriptionUsageCache.save(
-                MetaSubscriptionUsageCache.Payload(usage: probed.usage, probeSessionID: probed.sessionID))
+                MetaSubscriptionUsageCache.Payload(
+                    usage: probed.usage,
+                    probeSessionID: probed.sessionID ?? cached?.probeSessionID),
+                cacheRoot: cacheRoot)
             return probed.usage
         } catch {
+            let failure = error as? MetaUsageProbeFailure
+            let sessionID = failure?.sessionID ?? cached?.probeSessionID
+            if case let .quotaExhausted(resetsAt)? = failure?.error {
+                let usage = MetaSubscriptionUsage.blocked(until: resetsAt, observedAt: now, previous: cached?.usage)
+                MetaSubscriptionUsageCache.save(
+                    MetaSubscriptionUsageCache.Payload(usage: usage, probeSessionID: sessionID),
+                    cacheRoot: cacheRoot)
+                return usage
+            }
             if ProcessInfo.processInfo.environment["MIDAS_META_PROBE_DEBUG"] == "1" {
                 FileHandle.standardError.write(Data("meta probe failed: \(error)\n".utf8))
             }
-            if let cached {
-                return cached.usage
+            MetaSubscriptionUsageCache.save(
+                MetaSubscriptionUsageCache.Payload(usage: cached?.usage, probeSessionID: sessionID, lastFailureAt: now),
+                cacheRoot: cacheRoot)
+            if let lastKnown {
+                return lastKnown
             }
             throw error
         }

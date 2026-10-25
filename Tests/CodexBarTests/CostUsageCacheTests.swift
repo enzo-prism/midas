@@ -188,7 +188,9 @@ struct CostUsageCacheTests {
         let oldPi = directory.appendingPathComponent("pi-sessions-v2.json")
         let temp = directory.appendingPathComponent(".tmp-stale.json")
         let unrelated = directory.appendingPathComponent("notes.json")
-        for url in [current, oldCodex, oldPi, temp, unrelated] {
+        let metaPlan = directory.appendingPathComponent(MetaSubscriptionUsageCache.fileName)
+        let zaiModels = directory.appendingPathComponent("zai-model-usage-v1.json")
+        for url in [current, oldCodex, oldPi, temp, unrelated, metaPlan, zaiModels] {
             try "{}".write(to: url, atomically: true, encoding: .utf8)
         }
 
@@ -201,6 +203,8 @@ struct CostUsageCacheTests {
         #expect(!FileManager.default.fileExists(atPath: oldPi.path))
         #expect(!FileManager.default.fileExists(atPath: temp.path))
         #expect(FileManager.default.fileExists(atPath: unrelated.path))
+        #expect(FileManager.default.fileExists(atPath: metaPlan.path))
+        #expect(FileManager.default.fileExists(atPath: zaiModels.path))
     }
 
     @Test
