@@ -1,5 +1,7 @@
+import AppKit
 import CodexBarCore
 import Foundation
+import SwiftUI
 import Testing
 @testable import CodexBar
 
@@ -56,6 +58,46 @@ struct MidasCompactAccessibilityTests {
         #expect(!summary.contains("59%"))
     }
 
+    @Test func singleCodexAccountUsesItsOwnQuotaAndResetCount() {
+        let provider = self.presentation(
+            provider: .codex, metrics: [self.metric("secondary", "This week", 72)], resets: "0 available")
+        let accountUsage = self.presentation(
+            provider: .codex, metrics: [self.metric("secondary", "This week", 46)], resets: "1 available")
+        let account = MidasAccountPresentation(
+            id: "work", isPrimary: false, presentation: accountUsage, displayName: "Work")
+        let summary = MidasCompactAccessibility.summary(provider, accounts: [account])
+        #expect(summary.contains("Work"))
+        #expect(summary.contains("46% left"))
+        #expect(summary.contains("1 available"))
+        #expect(!summary.contains("72% left"))
+        #expect(!summary.contains("0 available"))
+    }
+
+    @Test @MainActor func renderSingleCodexAccountWhenRequested() throws {
+        guard let output = ProcessInfo.processInfo.environment["MIDAS_CODEX_OVERVIEW_RENDER_OUTPUT"] else { return }
+        let provider = self.presentation(
+            provider: .codex, metrics: [self.metric("secondary", "This week", 72)], resets: "0 available")
+        let usage = self.presentation(
+            provider: .codex,
+            metrics: [self.metric("secondary", "This week", 46)],
+            stale: true,
+            resets: "1 available")
+        let account = MidasAccountPresentation(id: "work", isPrimary: false, presentation: usage, displayName: "Work")
+        try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
+        for scheme in [ColorScheme.light, .dark] {
+            let view = MidasCompactOverviewMetrics(item: provider, accounts: [account])
+                .padding(20).frame(width: 360, alignment: .topLeading)
+                .background(MidasTheme.background).environment(\.colorScheme, scheme)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            let image = try #require(renderer.nsImage)
+            let bitmap = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            let name = "codex-single-\(scheme == .dark ? "dark" : "light").png"
+            try png.write(to: URL(fileURLWithPath: output).appendingPathComponent(name), options: .withoutOverwriting)
+        }
+    }
+
     @Test func unavailableUsageDoesNotBecomeExhaustedOrFullCapacity() {
         let summary = MidasCompactAccessibility.summary(self.presentation(provider: .codex, metrics: []))
         #expect(summary.localizedCaseInsensitiveContains("unavailable"))
@@ -108,7 +150,8 @@ struct MidasCompactAccessibilityTests {
     private func presentation(
         provider: UsageProvider,
         metrics: [MidasQuotaMetric],
-        stale: Bool = false) -> MidasProviderPresentation
+        stale: Bool = false,
+        resets: String? = nil) -> MidasProviderPresentation
     {
         let now = Date(timeIntervalSince1970: 1_792_238_400)
         let cost = CostUsageTokenSnapshot(
@@ -126,7 +169,7 @@ struct MidasCompactAccessibilityTests {
             plan: "Pro",
             hero: metrics.first,
             metrics: Array(metrics.dropFirst()),
-            resetCreditsText: nil,
+            resetCreditsText: resets,
             resetCreditsHelp: nil,
             freshness: stale ? "Last known usage" : "Updated just now",
             error: nil,

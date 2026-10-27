@@ -4,6 +4,17 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.49.3 release candidate: account-scoped overview
+
+The compact Codex overview now names its displayed account and takes its quota, banked reset
+count, and stale warning from that same account. Separate accounts can report different reset
+balances. This release candidate is not published; see Current distribution below for the
+latest public release.
+
+The focused compact accessibility suite and synthetic light/dark render fixtures pass, as does
+strict lint. The full local run had timing failures in four unrelated tests; all 73 tests in
+the three affected suites passed when rerun together. The full run is not recorded as passing.
+
 ## 0.49.2 changes: exhausted Meta plans
 
 Version 0.49.2 (build 134) fixes the Meta card reading "100% left" while dev.meta.ai reported the

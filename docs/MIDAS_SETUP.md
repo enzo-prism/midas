@@ -33,7 +33,9 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   overview and account details. Zero means none are available; **Unavailable** means no count
   was reported. Retained stale counts are labeled **last known**. Hover the row or expand the
   account details for reported expiry information. Banked resets are separate from scheduled
-  weekly quota resets and do not change with the spend period.
+  weekly quota resets and do not change with the spend period. The overview names the account
+  whose quota and reset count it shows; a different Codex account can have a different balance.
+  The count comes from OpenAI's reported reset-credit data, not the scheduled reset timer.
 - **Automatic Codex dollars:** Midas estimates a blended dollar-per-token rate from recent
   priced local Codex history and applies it to available cloud token totals. This is an
   approximation of inference value at API rates, not an OpenAI bill or a precise cloud model

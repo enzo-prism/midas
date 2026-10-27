@@ -28,7 +28,9 @@ enum MidasCompactAccessibility {
                 parts.append(contentsOf: self.usage(account.presentation))
             }
         } else {
-            parts.append(contentsOf: self.usage(item))
+            let account = item.provider == .codex ? accounts.first : nil
+            if let account { parts.append(account.displayName ?? account.presentation.account) }
+            parts.append(contentsOf: self.usage(account?.presentation ?? item))
         }
         if item.isRefreshing { parts.append("Refreshing usage") }
         return parts.joined(separator: "; ")
@@ -96,16 +98,28 @@ struct MidasCompactOverviewMetrics: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                let metrics = MidasAccountQuotaLayout.overviewMetrics(self.item)
+                let account = self.item.provider == .codex ? self.accounts.first : nil
+                let usage = account?.presentation ?? self.item
+                if let account {
+                    Text(account.displayName ?? account.presentation.account)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1).truncationMode(.middle)
+                        .help(account.presentation.account)
+                }
+                let metrics = MidasAccountQuotaLayout.overviewMetrics(usage)
                 if metrics.count > 1 {
                     LazyVGrid(columns: self.columns, alignment: .leading, spacing: 8) {
                         ForEach(metrics) { metric in MidasCompactQuotaMetric(metric: metric) }
                     }
                 } else {
-                    self.metrics(self.item)
+                    self.metrics(usage)
                 }
-                if (self.accounts.first?.presentation ?? self.item).resetCreditsText != nil {
-                    MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.item)
+                if usage.resetCreditsText != nil {
+                    MidasBankedResetsRow(presentation: usage)
+                }
+                if account != nil, usage.isStale || usage.error != nil {
+                    Label("Last known usage", systemImage: "clock")
+                        .font(.system(size: 11)).foregroundStyle(MidasTheme.warning)
                 }
             }
         }
