@@ -32,6 +32,17 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.49.3: accurate Codex reset availability
+
+Version **0.49.3, build 135** distinguishes unused reset credits from credits that apply to
+the account's current limits. An account with one unused credit and zero applicable credits
+now shows **0 usable now**, with inventory and expiry retained in details. Older snapshots
+say **unused** until applicability is known. Single-account quota, identity, and reset state
+stay together throughout the interface.
+
+Published as [v0.49.3-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.49.3-midas.1),
+Developer ID signed, notarized, and available through both Midas update feeds.
+
 ## Midas 0.49.2: exhausted Meta plans
 
 Version **0.49.2, build 134** shows a Muse Code plan that Meta reports as exhausted as fully used

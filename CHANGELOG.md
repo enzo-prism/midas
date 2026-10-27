@@ -1,5 +1,16 @@
 # Changelog
 
+## Midas 0.49.3 — October 26, 2026
+
+- Preserve Codex's applicable reset count separately from unused credit inventory. Show
+  **0 usable now** when OpenAI reports zero applicable credits, even if unused credits exist.
+- Label inventory-only snapshots **unused**; retain reported inventory and expiry in details.
+- Keep quota, reset state, identity, and stale warnings scoped to the same single Codex account.
+- Include reset applicability in diagnostic exports and preserve older cached snapshots.
+
+Published as build 135, Developer ID signed and notarized:
+[v0.49.3-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.49.3-midas.1).
+
 ## Midas 0.49.2 — October 25, 2026
 
 - Show an exhausted Muse Code plan as fully used until Meta's reported reset. When Meta rejects the usage check with "Subscription quota exhausted", Midas now reads the reset time from that response instead of falling back to the local "busiest recorded day" estimate, which showed an empty plan as 100% left.

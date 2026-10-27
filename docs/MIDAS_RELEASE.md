@@ -4,7 +4,7 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
-## 0.49.3 release candidate: reset applicability and account scope
+## 0.49.3 changes: reset applicability and account scope
 
 Codex now preserves both unused reset inventory (`available_count`) and current applicability
 (`applicable_available_count`). The former headline discarded applicability and called unused
@@ -15,11 +15,27 @@ Old cached snapshots remain readable without inventing current applicability.
 
 The compact overview, alternate overview, and provider detail keep quota, reset state, identity,
 and stale warnings scoped to the same Codex account. Aggregate spend remains provider-level.
-This release candidate is not published; see Current distribution below for the latest public release.
+The exact binary identifies source `812055164`. The canonical suite passed 4,637 Swift Testing
+cases and 52 XCTest cases in 45 bounded groups, with no failures or timeouts. Strict lint and
+synthetic light/dark native fixtures passed. An earlier aggregate run had contention-related
+timing failures; the final grouped run passed every suite.
 
-The focused compact accessibility suite and synthetic light/dark render fixtures pass, as does
-strict lint. The full local run had timing failures in four unrelated tests; all 73 tests in
-the three affected suites passed when rerun together. The full run is not recorded as passing.
+Apple notarization submission `4d5b999c-8ac1-4158-8eab-d821d09a5c8f` was Accepted. The app and
+dSYM share arm64 UUID `1506B7BE-299A-3592-9D43-43F80628C885`. Deep strict signatures, stapling,
+and Gatekeeper checks passed. The archive and both XML feeds verify with the Midas signing
+account, whose public key matches the app's embedded key. Downloaded draft assets, anonymous
+public assets, and both actual latest-feed URLs match the prepared checksums.
+Archive SHA-256: `0b815deb70e855320548aff00c940f85d33ed0a1fde027b0f98cbc9ade90d867`.
+
+The public bundle is installed and running at `/Applications/Midas.app`. Fresh app-written
+snapshots retain unused/applicable counts separately, including one unused and zero applicable
+for the reported account. Two superseded 0.49.2 bundles and three temporary bundles were moved
+to recoverable Trash. App data, source, signed release archives, and matching debug symbols remain.
+
+Website commit `fa9eda9` reached production Ready as `dpl_GkgmDq6fKGASW4XBky4RvyijK5Sr`.
+All 18 production browser checks passed at `midas-ai.dev`; both live download links retrieve
+the verified archive. Remote CI for the source commit is tracked separately in
+[run 40463754139](https://github.com/enzo-prism/midas/actions/runs/40463754139).
 
 ## 0.49.2 changes: exhausted Meta plans
 
@@ -78,14 +94,14 @@ a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.2**, build **134**, published as the latest stable release. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.3**, build **135**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.49.2**, build **134**, tagged
-`v0.49.2-midas.1`, superseding 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.49.3**, build **135**, tagged
+`v0.49.3-midas.1`, superseding 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
