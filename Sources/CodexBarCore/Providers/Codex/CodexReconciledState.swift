@@ -41,7 +41,14 @@ public struct CodexReconciledState: Sendable {
         resetCredits: CodexResetCreditsSnapshot? = nil,
         updatedAt: Date = Date()) -> CodexReconciledState?
     {
-        let resolvedResetCredits = resetCredits ?? self.countOnlyResetCredits(
+        let resolvedResetCredits = resetCredits.map {
+            CodexResetCreditsSnapshot(
+                credits: $0.credits,
+                availableCount: $0.availableCount,
+                hasPerCreditExpiries: $0.hasPerCreditExpiries,
+                updatedAt: $0.updatedAt,
+                applicableAvailableCount: response.rateLimitResetCredits?.applicableAvailableCount)
+        } ?? self.countOnlyResetCredits(
             summary: response.rateLimitResetCredits,
             updatedAt: updatedAt)
         return self.make(
@@ -63,7 +70,10 @@ public struct CodexReconciledState: Sendable {
         updatedAt: Date) -> CodexResetCreditsSnapshot?
     {
         guard let availableCount = summary?.availableCount else { return nil }
-        return CodexResetCreditsSnapshot.countOnly(availableCount: availableCount, updatedAt: updatedAt)
+        return CodexResetCreditsSnapshot.countOnly(
+            availableCount: availableCount,
+            updatedAt: updatedAt,
+            applicableAvailableCount: summary?.applicableAvailableCount)
     }
 
     public static func fromAttachedDashboard(

@@ -89,13 +89,33 @@ struct CodexResetCreditsTests {
 
     @Test
     func `reset only OAuth response remains usable without windows or monetary credits`() throws {
-        let json = #"{"plan_type":"pro","rate_limit_reset_credits":{"available_count":2}}"#
+        let json = """
+        {"plan_type":"pro","rate_limit_reset_credits":{"available_count":2,"applicable_available_count":0}}
+        """
         let result = try CodexOAuthFetchStrategy._mapResultForTesting(
             Data(json.utf8),
             credentials: Self.credentials())
         #expect(result.usage.primary == nil)
         #expect(result.credits == nil)
         #expect(result.usage.codexResetCredits?.availableCount == 2)
+        #expect(result.usage.codexResetCredits?.applicableAvailableCount == 0)
+    }
+
+    @Test(arguments: [0, 1, 2])
+    func applicabilityControlsHeadline(applicable: Int) {
+        let snapshot = CodexResetCreditsSnapshot.countOnly(
+            availableCount: 2, updatedAt: Date(), applicableAvailableCount: applicable)
+        #expect(CodexResetCreditFormatting.countText(snapshot: snapshot) == "\(applicable) usable now")
+    }
+
+    @Test func oldSnapshotKeepsApplicabilityUnknown() throws {
+        let original = CodexResetCreditsSnapshot.countOnly(availableCount: 1, updatedAt: Date())
+        let data = try JSONEncoder().encode(original)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["applicableAvailableCount"] == nil)
+        let restored = try JSONDecoder().decode(CodexResetCreditsSnapshot.self, from: data)
+        #expect(restored.applicableAvailableCount == nil)
+        #expect(CodexResetCreditFormatting.countText(snapshot: restored) == "1 unused")
     }
 
     @Test
@@ -158,6 +178,8 @@ struct CodexResetCreditsTests {
         let snapshot = try #require(mapped)
         let resetCredits = try #require(snapshot.codexResetCredits)
         #expect(resetCredits.availableCount == 1)
+        #expect(resetCredits.applicableAvailableCount == 0)
+        #expect(CodexResetCreditFormatting.countText(snapshot: resetCredits) == "0 usable now")
         #expect(resetCredits.hasPerCreditExpiries == false)
         #expect(resetCredits.credits.isEmpty)
         // Primary/weekly mapping is unchanged by the fallback: the lone 7-day
@@ -202,6 +224,9 @@ struct CodexResetCreditsTests {
         let snapshot = state.toUsageSnapshot()
         #expect(snapshot.codexResetCredits?.hasPerCreditExpiries == true)
         #expect(snapshot.codexResetCredits?.availableCredits.count == 1)
+        #expect(snapshot.codexResetCredits?.applicableAvailableCount == 0)
+        let persisted = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(snapshot))
+        #expect(persisted.codexResetCredits?.applicableAvailableCount == 0)
     }
 
     @Test
@@ -259,7 +284,7 @@ struct CodexResetCreditsTests {
         let fallback = CodexResetCreditsSnapshot.countOnly(availableCount: 2, updatedAt: now)
         #expect(CodexResetCreditFormatting.soonestDetail(snapshot: fallback, now: now) == "Expiry times unavailable")
         let fallbackTooltip = CodexResetCreditFormatting.tooltipText(snapshot: fallback, now: now)
-        #expect(fallbackTooltip.contains("2 available"))
+        #expect(fallbackTooltip.contains("2 unused"))
         #expect(fallbackTooltip.contains("expiry times unavailable"))
 
         let empty = CodexResetCreditsSnapshot(
@@ -298,10 +323,10 @@ struct CodexResetCreditsTests {
         #expect(detail.contains("in 29d"))
         let tooltip = CodexResetCreditFormatting.tooltipText(snapshot: snapshot, now: now)
         let lines = tooltip.split(separator: "\n")
-        #expect(lines.count == 2)
-        #expect(lines[0].hasPrefix("1. Expires "))
-        #expect(lines[0].contains("in 29d"))
-        #expect(lines[1].hasPrefix("2. Expires "))
+        #expect(lines.count == 3)
+        #expect(lines[1].hasPrefix("1. Expires "))
+        #expect(lines[1].contains("in 29d"))
+        #expect(lines[2].hasPrefix("2. Expires "))
     }
 
     @Test

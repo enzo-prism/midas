@@ -47,7 +47,7 @@ enum MidasCompactAccessibility {
         } else if metrics.isEmpty {
             parts.append("Limit unavailable")
         }
-        if let resets = item.resetCreditsText { parts.append("Banked resets: \(resets)") }
+        if let resets = item.resetCreditsText { parts.append("Reset credits: \(resets)") }
         if item.isStale || item.error != nil {
             parts
                 .append(metrics.isEmpty && item.activityMetrics

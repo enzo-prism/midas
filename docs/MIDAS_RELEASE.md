@@ -4,12 +4,18 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
-## 0.49.3 release candidate: account-scoped overview
+## 0.49.3 release candidate: reset applicability and account scope
 
-The compact Codex overview now names its displayed account and takes its quota, banked reset
-count, and stale warning from that same account. Separate accounts can report different reset
-balances. This release candidate is not published; see Current distribution below for the
-latest public release.
+Codex now preserves both unused reset inventory (`available_count`) and current applicability
+(`applicable_available_count`). The former headline discarded applicability and called unused
+inventory "Banked resets" / "available". A live account returned one unused monthly credit but
+zero applicable credits. The row now says "Reset credits: 0 usable now", retains the unused
+inventory and expiry in its details, and shows "unused" when applicability is unknown.
+Old cached snapshots remain readable without inventing current applicability.
+
+The compact overview, alternate overview, and provider detail keep quota, reset state, identity,
+and stale warnings scoped to the same Codex account. Aggregate spend remains provider-level.
+This release candidate is not published; see Current distribution below for the latest public release.
 
 The focused compact accessibility suite and synthetic light/dark render fixtures pass, as does
 strict lint. The full local run had timing failures in four unrelated tests; all 73 tests in

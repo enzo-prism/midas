@@ -235,7 +235,7 @@ enum CLIRenderer {
         guard provider == .codex, let resetCredits = snapshot.codexResetCredits else { return }
         lines.append(self.labelValueLine(
             "Rate Limit Resets",
-            value: CodexResetCreditFormatting.countText(availableCount: resetCredits.availableCount),
+            value: CodexResetCreditFormatting.countText(snapshot: resetCredits),
             useColor: useColor))
         if resetCredits.availableCount <= 0 { return }
         let available = resetCredits.availableCredits

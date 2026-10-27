@@ -277,9 +277,19 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         // Reset credits ride along so the count stays visible even without windows.
         // (fromOAuth is nil here by construction — no windows — so read the
         // usage-body count directly instead of reconciling.)
-        let partialResetCredits = resetCredits
+        let partialResetCredits = resetCredits.map {
+            CodexResetCreditsSnapshot(
+                credits: $0.credits,
+                availableCount: $0.availableCount,
+                hasPerCreditExpiries: $0.hasPerCreditExpiries,
+                updatedAt: $0.updatedAt,
+                applicableAvailableCount: usageResponse.rateLimitResetCredits?.applicableAvailableCount)
+        }
             ?? usageResponse.rateLimitResetCredits?.availableCount.map {
-                CodexResetCreditsSnapshot.countOnly(availableCount: $0, updatedAt: updatedAt)
+                CodexResetCreditsSnapshot.countOnly(
+                    availableCount: $0,
+                    updatedAt: updatedAt,
+                    applicableAvailableCount: usageResponse.rateLimitResetCredits?.applicableAvailableCount)
             }
         guard credits != nil || partialResetCredits != nil else {
             throw UsageError.noRateLimitsFound

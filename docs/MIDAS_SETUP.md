@@ -29,13 +29,13 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   each account's remaining usage and reset time kept separate. Cloud availability depends on
   private ChatGPT analytics endpoints, which can change independently of Midas; this is not
   an official OpenAI billing API integration. Quota percentages are never converted into token counts.
-- **Banked resets:** each displayed Codex account has its own available reset count in the
-  overview and account details. Zero means none are available; **Unavailable** means no count
-  was reported. Retained stale counts are labeled **last known**. Hover the row or expand the
-  account details for reported expiry information. Banked resets are separate from scheduled
-  weekly quota resets and do not change with the spend period. The overview names the account
-  whose quota and reset count it shows; a different Codex account can have a different balance.
-  The count comes from OpenAI's reported reset-credit data, not the scheduled reset timer.
+- **Reset credits:** each Codex account shows the number OpenAI reports as usable for its
+  current limits. Unused credit inventory can be higher; hover or expand account details to
+  see that inventory and expiry information. If current applicability was not reported, the
+  row says **unused**, rather than claiming the credits can be used now. **Unavailable** means
+  no count was reported. Stale counts say **last known**. The account name, quota, and reset
+  count always refer to the same account. Reset credits are separate from scheduled quota
+  resets and do not change with the spend period.
 - **Automatic Codex dollars:** Midas estimates a blended dollar-per-token rate from recent
   priced local Codex history and applies it to available cloud token totals. This is an
   approximation of inference value at API rates, not an OpenAI bill or a precise cloud model

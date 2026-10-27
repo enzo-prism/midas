@@ -32,8 +32,8 @@ struct MidasBankedResetsTests {
     @Test(arguments: [0, 3, 7])
     func snapshotCountSurvivesWithoutCardOrQuotaWindows(count: Int) {
         let result = self.presentation(count: count)
-        #expect(result.resetCreditsText == "\(count) available")
-        #expect(MidasBankedResetsState.value(result) == "\(count) available")
+        #expect(result.resetCreditsText == "\(count) unused")
+        #expect(MidasBankedResetsState.value(result) == "\(count) unused")
         #expect(result.hero == nil)
         #expect(result.metrics.isEmpty)
         if count == 0 {
@@ -51,10 +51,29 @@ struct MidasBankedResetsTests {
         #expect(MidasBankedResetsState.value(self.presentation(count: nil, refreshing: true)) == "Refreshing…")
     }
 
+    @Test func unusedCreditDoesNotBecomeUsableReset() {
+        let snapshot = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            codexResetCredits: .countOnly(
+                availableCount: 1, updatedAt: self.now, applicableAvailableCount: 0),
+            updatedAt: self.now)
+        let result = MidasProviderPresentation.make(
+            provider: .codex,
+            card: nil,
+            snapshot: snapshot,
+            tokenSnapshot: nil,
+            isRefreshing: false,
+            isStale: false)
+        #expect(MidasBankedResetsState.value(result) == "0 usable now")
+        #expect(result.resetCreditsHelp?.contains("1 unused reset credit") == true)
+        #expect(result.resetCreditsHelp?.contains("0 apply") == true)
+    }
+
     @Test func retainedCountDisclosesStalenessAndSurvivesRefresh() {
-        #expect(MidasBankedResetsState.value(self.presentation(count: 3, stale: true)) == "3 available · last known")
-        #expect(MidasBankedResetsState.value(self.presentation(count: 0, stale: true)) == "0 available · last known")
-        #expect(MidasBankedResetsState.value(self.presentation(count: 7, refreshing: true)) == "7 available")
+        #expect(MidasBankedResetsState.value(self.presentation(count: 3, stale: true)) == "3 unused · last known")
+        #expect(MidasBankedResetsState.value(self.presentation(count: 0, stale: true)) == "0 unused · last known")
+        #expect(MidasBankedResetsState.value(self.presentation(count: 7, refreshing: true)) == "7 unused")
     }
 
     @Test func anotherProviderCannotBorrowCodexResetCount() {
@@ -91,7 +110,7 @@ struct MidasBankedResetsTests {
                 tokenSnapshot: nil,
                 isRefreshing: false,
                 isStale: false)
-            #expect(result.resetCreditsText == "\(count) available")
+            #expect(result.resetCreditsText == "\(count) unused")
         }
     }
 }

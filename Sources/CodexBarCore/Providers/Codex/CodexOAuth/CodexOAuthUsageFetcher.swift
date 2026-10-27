@@ -186,9 +186,8 @@ public struct CodexUsageResponse: Decodable, Sendable {
     }
 
     /// Counts embedded in the `wham/usage` body under `rate_limit_reset_credits`.
-    /// `availableCount` is the headline "N available" figure; `applicableAvailableCount`
-    /// is reported alongside it (observed 0 while nothing needs resetting) and kept for
-    /// diagnostics. Neither carries per-credit expiries.
+    /// `availableCount` is unused inventory; `applicableAvailableCount` describes credits
+    /// applicable to current limits. Neither carries per-credit expiries.
     public struct RateLimitResetCreditsSummary: Decodable, Sendable {
         public let availableCount: Int?
         public let applicableAvailableCount: Int?

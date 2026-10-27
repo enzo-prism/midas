@@ -320,33 +320,41 @@ struct MidasOverviewMetrics: View {
     var accounts: [MidasAccountPresentation] = []
 
     var body: some View {
-        let metrics = MidasAccountQuotaLayout.overviewMetrics(self.item)
+        let account = self.item.provider == .codex && self.accounts.count == 1 ? self.accounts.first : nil
+        let usage = account?.presentation ?? self.item
+        let metrics = MidasAccountQuotaLayout.overviewMetrics(usage)
         VStack(alignment: .leading, spacing: 10) {
+            if let account {
+                Text(account.displayName ?? account.presentation.account)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(account.presentation.account)
+            }
             if let spark = self.item.dgxSpark {
                 Text("\(spark.tokenText) recorded tokens · Last 30 days")
                     .font(.callout).monospacedDigit()
                 Text(spark.coverageText).font(.caption).foregroundStyle(MidasTheme.secondaryText)
             } else if self.accounts.count > 1 {
                 MidasAccountOverviewBars(accounts: self.accounts)
-            } else if !self.item.activityMetrics.isEmpty {
-                MidasCompactOverviewMetrics(item: self.item)
-                if self.item.isStale || self.item.error != nil {
+            } else if !usage.activityMetrics.isEmpty {
+                MidasCompactOverviewMetrics(item: usage)
+                if usage.isStale || usage.error != nil {
                     Text("Stale").font(.caption).foregroundStyle(MidasTheme.warning)
                 }
             } else if !metrics.isEmpty {
                 ForEach(metrics) { selected in
                     MidasAccountQuotaBar(metric: selected)
                 }
-                if self.item.isStale || self.item.error != nil {
+                if usage.isStale || usage.error != nil {
                     Text("Stale").font(.caption).foregroundStyle(MidasTheme.warning)
                 }
             } else {
-                Text(self.item.error != nil ? "Needs attention" : "Limit unavailable")
+                Text(usage.error != nil ? "Needs attention" : "Limit unavailable")
                     .font(.caption)
-                    .foregroundStyle(self.item.error != nil ? MidasTheme.warning : MidasTheme.secondaryText)
+                    .foregroundStyle(usage.error != nil ? MidasTheme.warning : MidasTheme.secondaryText)
             }
             if self.item.dgxSpark == nil, self.accounts.count <= 1 {
-                MidasBankedResetsRow(presentation: self.accounts.first?.presentation ?? self.item)
+                MidasBankedResetsRow(presentation: usage)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

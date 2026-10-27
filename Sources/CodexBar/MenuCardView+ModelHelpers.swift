@@ -337,7 +337,7 @@ extension UsageMenuCardView.Model {
             title: L("Rate Limit Resets"),
             percent: 0,
             percentStyle: percentStyle,
-            statusText: CodexResetCreditFormatting.countText(availableCount: resetCredits.availableCount),
+            statusText: CodexResetCreditFormatting.countText(snapshot: resetCredits),
             resetText: nil,
             detailText: detailText,
             detailLeftText: nil,

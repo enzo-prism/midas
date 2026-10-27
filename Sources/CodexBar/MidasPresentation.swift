@@ -389,7 +389,7 @@ struct MidasProviderPresentation {
             metrics: quotaMetrics.filter { $0.id != hero?.id },
             orbitQuota: MidasOrbitQuota.make(provider: provider, snapshot: snapshot),
             resetCreditsText: scopedResets
-                .map { CodexResetCreditFormatting.countText(availableCount: $0.availableCount) }
+                .map { CodexResetCreditFormatting.countText(snapshot: $0) }
                 ?? resetCredits?.statusText,
             resetCreditsHelp: scopedResets.map { CodexResetCreditFormatting.tooltipText(snapshot: $0) }
                 ?? resetCredits?.helpText,

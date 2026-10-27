@@ -42,7 +42,7 @@ struct MidasAccountUsageView: View {
                     Text(plan)
                 }
                 if account.presentation.provider == .codex, let help = account.presentation.resetCreditsHelp {
-                    Text("Banked resets: \(help)")
+                    Text("Reset credits: \(help)")
                 }
                 ForEach(metrics) { metric in
                     if let reset = metric.resetsAt {
@@ -472,7 +472,7 @@ struct MidasBankedResetsRow: View {
     var body: some View {
         if self.presentation.provider == .codex {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Banked resets")
+                Text("Reset credits")
                 Spacer(minLength: 8)
                 Text(MidasBankedResetsState.value(self.presentation)).monospacedDigit()
             }

@@ -46,6 +46,12 @@ Usage source picker:
   `UsageSnapshot.codexResetCredits` count. The usage body carries counts only — no expiries.
 
 ### Rate-limit reset credits (Midas)
+
+Unused inventory and current applicability are separate: `available_count` may be positive
+while `applicable_available_count` is zero. Midas persists both, headlines the applicable
+count as "usable now", and shows unused inventory plus expiries in details. Missing applicability
+stays unknown, including old cached snapshots; inventory alone is labeled "unused".
+
 - After the OAuth usage fetch, Midas makes a best-effort companion call to
   `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits` (same Bearer token and
   `ChatGPT-Account-Id` headers; base URL resolved exactly like the usage URL) and maps
@@ -55,7 +61,8 @@ Usage source picker:
   expiry times are unavailable rather than implying there are none. When the usage body
   reports no counts either, the snapshot stays nil (unknown) instead of a misleading zero.
 - Non-OAuth Codex sources (CLI RPC, web dashboard) report no reset data and leave the field nil.
-- Display: the Codex menu card shows a "Rate Limit Resets" row (`N available` plus every
+- Display: the Codex menu card shows a "Rate Limit Resets" row (`N usable now`, or `N unused`
+  when applicability is unknown, plus every
   credit's expiration date and countdown, soonest first, directly in the tab); `codexbar usage` prints the count plus
   one line per credit; `--format json` includes the snapshot; provider diagnostics export the
   count and whether expiries are known.

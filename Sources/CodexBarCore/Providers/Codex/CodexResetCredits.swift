@@ -160,6 +160,8 @@ public struct CodexResetCreditsSnapshot: Codable, Sendable, Equatable {
     /// Authoritative count (`available_count`); may exceed `availableCredits.count` when the
     /// dedicated per-credit call failed and only the usage-body count is known.
     public let availableCount: Int
+    /// Credits that apply to the account's current limits, distinct from unused inventory.
+    public let applicableAvailableCount: Int?
     /// False when built from the usage-body count fallback, which carries no per-credit expiries.
     public let hasPerCreditExpiries: Bool
     public let updatedAt: Date
@@ -168,34 +170,43 @@ public struct CodexResetCreditsSnapshot: Codable, Sendable, Equatable {
         credits: [CodexResetCredit],
         availableCount: Int,
         hasPerCreditExpiries: Bool,
-        updatedAt: Date)
+        updatedAt: Date,
+        applicableAvailableCount: Int? = nil)
     {
         self.credits = credits
         self.availableCount = availableCount
+        self.applicableAvailableCount = applicableAvailableCount
         self.hasPerCreditExpiries = hasPerCreditExpiries
         self.updatedAt = updatedAt
     }
 
     /// Count-only fallback from the `wham/usage` body (`rate_limit_reset_credits`).
-    public static func countOnly(availableCount: Int, updatedAt: Date) -> CodexResetCreditsSnapshot {
+    public static func countOnly(
+        availableCount: Int,
+        updatedAt: Date,
+        applicableAvailableCount: Int? = nil) -> CodexResetCreditsSnapshot
+    {
         CodexResetCreditsSnapshot(
             credits: [],
             availableCount: availableCount,
             hasPerCreditExpiries: false,
-            updatedAt: updatedAt)
+            updatedAt: updatedAt,
+            applicableAvailableCount: applicableAvailableCount)
     }
 
     public static func fromResponse(
         _ response: CodexResetCreditsResponse,
         fallbackAvailableCount: Int? = nil,
-        updatedAt: Date) -> CodexResetCreditsSnapshot
+        updatedAt: Date,
+        applicableAvailableCount: Int? = nil) -> CodexResetCreditsSnapshot
     {
         let available = response.credits.filter(\.isAvailable)
         return CodexResetCreditsSnapshot(
             credits: response.credits,
             availableCount: response.availableCount ?? fallbackAvailableCount ?? available.count,
             hasPerCreditExpiries: true,
-            updatedAt: updatedAt)
+            updatedAt: updatedAt,
+            applicableAvailableCount: applicableAvailableCount)
     }
 
     /// Redeemable credits, soonest expiry first.
@@ -240,6 +251,14 @@ public struct CodexResetCreditsSnapshot: Codable, Sendable, Equatable {
 /// precedent as `UsageFormatter.resetCountdownDescription` (countdowns stay unlocalized
 /// in core; the app localizes row titles via `L()`).
 public enum CodexResetCreditFormatting {
+    /// Show applicability when reported; inventory alone does not establish usability.
+    public static func countText(snapshot: CodexResetCreditsSnapshot) -> String {
+        if let applicable = snapshot.applicableAvailableCount {
+            return "\(applicable) usable now"
+        }
+        return "\(snapshot.availableCount) unused"
+    }
+
     /// Headline count, e.g. "2 available".
     public static func countText(availableCount: Int) -> String {
         "\(availableCount) available"
@@ -275,9 +294,15 @@ public enum CodexResetCreditFormatting {
         guard snapshot.availableCount > 0 else {
             return "You have no rate limit resets"
         }
+        let inventory = "OpenAI reports \(snapshot.availableCount) unused reset credit"
+            + (snapshot.availableCount == 1 ? "." : "s.")
+        let applicability = snapshot.applicableAvailableCount.map {
+            "\($0) apply to the account's current limits."
+        } ?? "Current applicability has not been reported."
+        let summary = "\(inventory) \(applicability)"
         let available = snapshot.availableCredits
         guard !available.isEmpty, snapshot.hasPerCreditExpiries else {
-            return "\(Self.countText(availableCount: snapshot.availableCount)) — expiry times unavailable"
+            return "\(summary) — expiry times unavailable"
         }
         var lines = available.enumerated().map { index, credit in
             var line = "\(index + 1). "
@@ -298,6 +323,6 @@ public enum CodexResetCreditFormatting {
         if missingCount > 0 {
             lines.append("\(missingCount) additional reset\(missingCount == 1 ? "" : "s"): expiry times unavailable")
         }
-        return lines.joined(separator: "\n")
+        return ([summary] + lines).joined(separator: "\n")
     }
 }

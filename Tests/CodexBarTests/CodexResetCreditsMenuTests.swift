@@ -19,10 +19,10 @@ struct CodexResetCreditsMenuTests {
         let snapshot = UsageSnapshot(primary: nil, secondary: nil, codexResetCredits: resets, updatedAt: now)
         let metric = try #require(UsageMenuCardView.Model.codexResetCreditsMetric(
             snapshot: snapshot, now: now, percentStyle: .left))
-        #expect(metric.statusText == "2 available")
+        #expect(metric.statusText == "2 unused")
         let lines = try #require(metric.detailText).split(separator: "\n")
-        #expect(lines.count == 2)
-        #expect(lines[0].contains(CodexResetCreditFormatting.absoluteExpiryText(now.addingTimeInterval(86400))))
-        #expect(lines[1].contains(CodexResetCreditFormatting.absoluteExpiryText(now.addingTimeInterval(86400 * 5))))
+        #expect(lines.count == 3)
+        #expect(lines[1].contains(CodexResetCreditFormatting.absoluteExpiryText(now.addingTimeInterval(86400))))
+        #expect(lines[2].contains(CodexResetCreditFormatting.absoluteExpiryText(now.addingTimeInterval(86400 * 5))))
     }
 }

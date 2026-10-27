@@ -10,6 +10,11 @@ struct MidasProviderDetailView: View {
         self.actions.accountPresentations(self.presentation.provider)
     }
 
+    private var usagePresentation: MidasProviderPresentation {
+        guard self.presentation.provider == .codex, self.accounts.count == 1 else { return self.presentation }
+        return self.accounts[0].presentation
+    }
+
     var body: some View {
         if let spark = self.presentation.dgxSpark {
             MidasDGXSparkDetailView(
@@ -26,7 +31,7 @@ struct MidasProviderDetailView: View {
             self.identity
             self.spendHeadline
             self.usageSection
-            if let error = self.presentation.error {
+            if let error = self.usagePresentation.error {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Connection needs attention", systemImage: "exclamationmark.triangle")
                         .font(.callout.weight(.medium))
@@ -41,7 +46,7 @@ struct MidasProviderDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(MidasTheme.surface, in: RoundedRectangle(cornerRadius: 12))
             }
-            if self.presentation.isStale {
+            if self.usagePresentation.isStale {
                 Label("Usage may be outdated", systemImage: "clock.badge.exclamationmark")
                     .font(.caption).foregroundStyle(MidasTheme.warning)
             }
@@ -73,7 +78,7 @@ struct MidasProviderDetailView: View {
 
     private var usageSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if self.accounts.count > 1 {
+            if self.accounts.count > 1 || (self.presentation.provider == .codex && !self.accounts.isEmpty) {
                 MidasAccountUsageView(accounts: self.accounts)
             } else {
                 self.hero
@@ -122,22 +127,22 @@ struct MidasProviderDetailView: View {
         DisclosureGroup("Account & source details") {
             VStack(alignment: .leading, spacing: 8) {
                 if self.accounts.count <= 1 {
-                    if !self.presentation.account.isEmpty { Text(self.presentation.account) }
-                    if let plan = self.presentation.plan, !plan.isEmpty { Text(plan) }
+                    if !self.usagePresentation.account.isEmpty { Text(self.usagePresentation.account) }
+                    if let plan = self.usagePresentation.plan, !plan.isEmpty { Text(plan) }
                 }
-                if let activity = self.presentation.activitySummary { Text(activity) }
-                if self.accounts.count <= 1, let resets = self.presentation.resetCreditsText {
-                    Text("Banked resets: \(resets)")
-                    if let help = self.presentation.resetCreditsHelp { Text(help) }
+                if let activity = self.usagePresentation.activitySummary { Text(activity) }
+                if self.accounts.count <= 1, let resets = self.usagePresentation.resetCreditsText {
+                    Text("Reset credits: \(resets)")
+                    if let help = self.usagePresentation.resetCreditsHelp { Text(help) }
                 }
-                ForEach(Array(self.presentation.notes.enumerated()), id: \.offset) { _, note in
+                ForEach(Array(self.usagePresentation.notes.enumerated()), id: \.offset) { _, note in
                     Text(note)
                 }
-                Text(self.presentation.freshness)
-                if let updatedAt = self.presentation.updatedAt {
+                Text(self.usagePresentation.freshness)
+                if let updatedAt = self.usagePresentation.updatedAt {
                     Text(updatedAt.formatted(date: .complete, time: .shortened))
                 }
-                if self.presentation.isRefreshing {
+                if self.usagePresentation.isRefreshing {
                     ProgressView().controlSize(.mini).accessibilityLabel("Refreshing usage")
                 }
                 Button("Refresh") { self.actions.refresh() }
