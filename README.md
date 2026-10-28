@@ -32,6 +32,16 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.49.4: your accounts, your labels
+
+Version **0.49.4, build 136** adds a permanent **Settings → Providers → Account labels** editor.
+Rename saved Codex and other provider accounts without changing their connections, quotas,
+or usage history. Names save automatically on this Mac; **Reset** restores the default.
+Custom labels also appear for single saved accounts, and privacy mode hides names and aliases.
+
+Release: [v0.49.4-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.49.4-midas.1).
+Apple Silicon, macOS 14 or later; Developer ID signed, Apple notarized, with signed Sparkle feeds.
+
 ## Midas 0.49.3: accurate Codex reset availability
 
 Version **0.49.3, build 135** distinguishes unused reset credits from credits that apply to

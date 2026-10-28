@@ -4,6 +4,28 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.49.4 changes: editable account labels
+
+Saved Codex and other provider accounts now have a permanent **Settings → Providers → Account
+labels** editor. Names save automatically, Reset restores the default, and single saved accounts
+can display a custom label. Explicit duplicate labels are preserved; automatic names still
+use identity-based disambiguation. Privacy mode hides both account identities and custom names.
+Aliases remain local preferences and do not change credentials, account IDs, quotas, or usage history.
+
+The binary identifies source `7f79af04`. The full Swift test run passed 4,632 app cases and 29
+collector cases; the additional single-account accessibility regression passed with its focused
+suite. `make check` passed. Native Codex settings verified editing, persistent storage, and Reset
+against the installed production-identity bundle. Usage sync remained healthy across five histories.
+
+Apple notarization `0fbbc6e3-29f8-4062-b35c-8721e4e09cb6` was Accepted. The app and dSYM share arm64 UUID
+`6FD93B82-AC1E-3972-9EC2-FEFDECE51B0B`. Deep strict signing, stapling, Gatekeeper, archive signing, both signed XML feeds,
+and the embedded Midas public-key match passed. Archive SHA-256:
+`309232f7edc88376201fb72d3aaf36a48a71573fd051c834c0bd7a3fa9c309af`.
+
+Anonymous public archives and both actual `/releases/latest/download/` feeds matched the
+prepared checksums before the website version and download links were updated. Published as
+[`v0.49.4-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.49.4-midas.1).
+
 ## 0.49.3 changes: reset applicability and account scope
 
 Codex now preserves both unused reset inventory (`available_count`) and current applicability
@@ -94,14 +116,14 @@ a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.3**, build **135**, published as the latest stable release. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.4**, build **136**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.49.3**, build **135**, tagged
-`v0.49.3-midas.1`, superseding 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.49.4**, build **136**, tagged
+`v0.49.4-midas.1`, superseding 0.49.3 (build 135, `v0.49.3-midas.1`), 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
@@ -706,7 +728,13 @@ pricing and optional iCloud calibration sharing, and resumable three-step onboar
    identity with its private key. Apple Development and Apple Distribution identities are not
    substitutes for outside-the-App-Store distribution. Stop binary publication if it is missing.
    Build with `APP_TEAM_ID` and `APP_IDENTITY` matching the installed Midas developer signature:
-   `APP_TEAM_ID=... APP_IDENTITY='Developer ID Application: ...' ./Scripts/package_app.sh release`.
+   Set `MIDAS_HUB_PYTHON_ROOT` to a verified standalone Python tree containing `bin/python3`;
+   release packaging verifies and bundles that runtime for sync management. Use:
+   `MIDAS_HUB_PYTHON_ROOT=/path/to/runtime APP_TEAM_ID=... APP_IDENTITY='Developer ID Application: ...' ./Scripts/package_app.sh release`.
+   Use `release` for installation and distribution: `debug` intentionally uses the separate
+   `com.designprism.midas.debug` identity and defaults. Rebuildable caches can use
+   `MIDAS_SWIFTPM_SCRATCH_PATH` and `MIDAS_WIDGET_DERIVED_DATA_PATH` on a verified build volume;
+   keep `MIDAS_APP_STAGE`, `MIDAS_APP_OUTPUT`, signed archives, and credentials internal and encrypted.
 4. Verify with `codesign --verify --deep --strict Midas.app` and inspect the timestamp/team.
 5. Create a temporary ZIP using `ditto --norsrc -c -k --keepParent`, then submit it with
    `asc notarization submit --file <zip>`. Use `asc notarization status --id <id>` until accepted.

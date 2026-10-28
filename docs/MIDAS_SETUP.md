@@ -20,6 +20,12 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
 
 ## Accounts, computers, and estimates
 
+- **Account labels:** open **Settings → Providers**, select Codex or another provider with
+  saved accounts, then edit **Account labels**. Labels save automatically and appear in the
+  menu and account details. Use up to 40 characters, leave a field blank, or choose **Reset**
+  to restore its default name. Labels are local to this Mac and are not included in usage sync.
+  Renaming never changes a sign-in, account identity, selected account, quota, or recorded usage.
+  **Hide personal info** hides custom labels too; turn it off to use the editor.
 - **Multiple Codex accounts:** enable **Settings → Display → Track all connected accounts** to
   refresh and show each account's quota together. With tracking off, the overview follows the
   selected account. Local spend history describes activity recorded on this Mac; selecting a
