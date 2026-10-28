@@ -81,6 +81,9 @@ struct MidasProviderDetailView: View {
             if self.accounts.count > 1 || (self.presentation.provider == .codex && !self.accounts.isEmpty) {
                 MidasAccountUsageView(accounts: self.accounts)
             } else {
+                if let name = self.accounts.first?.displayName {
+                    Text(name).font(.callout.weight(.semibold))
+                }
                 self.hero
                 ForEach(self.presentation.metrics) { metric in
                     MidasAccountQuotaBar(metric: metric)

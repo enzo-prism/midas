@@ -58,6 +58,17 @@ struct MidasCompactAccessibilityTests {
         #expect(!summary.contains("59%"))
     }
 
+    @Test func singleSavedAccountLabelPreservesProviderUsage() {
+        let provider = self.presentation(provider: .cursor, metrics: [self.metric("primary", "Cursor Models", 72)])
+        let unavailable = self.presentation(provider: .cursor, metrics: [], stale: true)
+        let account = MidasAccountPresentation(
+            id: "work", isPrimary: true, presentation: unavailable, displayName: "Work")
+        let summary = MidasCompactAccessibility.summary(provider, accounts: [account])
+        #expect(summary.contains("Work"))
+        #expect(summary.contains("72% left"))
+        #expect(!summary.contains("Limit unavailable"))
+    }
+
     @Test func singleCodexAccountUsesItsOwnQuotaAndResetCount() {
         let provider = self.presentation(
             provider: .codex, metrics: [self.metric("secondary", "This week", 72)], resets: "1 unused")

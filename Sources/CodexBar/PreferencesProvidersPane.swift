@@ -86,7 +86,8 @@ struct ProvidersPane: View {
                     onRefresh: {
                         self.triggerRefresh(for: provider)
                     },
-                    showsSupplementarySettingsContent: self.codexAccountsSectionState(for: provider) != nil,
+                    showsSupplementarySettingsContent: self.codexAccountsSectionState(for: provider) != nil
+                        || !self.settings.midasAccountLabelOptions(for: provider).isEmpty,
                     supplementarySettingsContent: {
                         if let state = self.codexAccountsSectionState(for: provider) {
                             CodexAccountsSectionView(
@@ -114,6 +115,9 @@ struct ProvidersPane: View {
                                         await self.addManagedCodexAccount()
                                     }
                                 })
+                        }
+                        if !self.settings.midasAccountLabelOptions(for: provider).isEmpty {
+                            MidasAccountLabelsSection(settings: self.settings, provider: provider)
                         }
                     })
             } else {

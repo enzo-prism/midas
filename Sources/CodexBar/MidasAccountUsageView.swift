@@ -142,13 +142,17 @@ enum MidasAccountNames {
             let candidate = alias.flatMap { $0.isEmpty ? nil : $0 }
                 ?? (identity.contains("@") ? String(identity.split(separator: "@", omittingEmptySubsequences: false)[0])
                     : fallback)
-            return (id: account.id, candidate: candidate.isEmpty ? fallback : candidate, fallback: fallback)
+            return (
+                id: account.id,
+                candidate: candidate.isEmpty ? fallback : candidate,
+                fallback: fallback,
+                isCustom: alias?.isEmpty == false)
         }
         let counts = Dictionary(grouping: candidates, by: { $0.candidate.lowercased() }).mapValues(\.count)
         return Dictionary(candidates.map { account in
             (
                 account.id,
-                counts[account.candidate.lowercased(), default: 0] > 1
+                !account.isCustom && counts[account.candidate.lowercased(), default: 0] > 1
                     ? account.fallback : account.candidate)
         }, uniquingKeysWith: { _, new in new })
     }
@@ -418,6 +422,9 @@ extension StatusItemController {
         let accounts = self.settings.tokenAccounts(for: provider)
         guard !accounts.isEmpty,
               accounts.count > 1 || self.settings.midasMenuBarAccountID(for: provider) != nil
+              || accounts.contains(where: {
+                  !self.settings.midasAccountLabel(for: provider, accountID: $0.id.uuidString).isEmpty
+              })
         else { return [] }
         var aliases = self.settings.midasAccountAliases
         for account in accounts where account.externalIdentifier != nil && !account.label.contains("@") {

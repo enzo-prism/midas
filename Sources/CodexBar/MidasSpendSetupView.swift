@@ -196,8 +196,8 @@ struct MidasSpendSetupView: View {
                 DisclosureGroup("Account names") {
                     ForEach(self.accounts) { account in
                         TextField(account.displayName, text: Binding(
-                            get: { self.settings.midasAccountAliases["codex:" + account.id] ?? "" },
-                            set: { self.settings.midasAccountAliases["codex:" + account.id] = String($0.prefix(40)) }))
+                            get: { self.settings.midasAccountLabel(for: .codex, accountID: account.id) },
+                            set: { self.settings.setMidasAccountLabel($0, for: .codex, accountID: account.id) }))
                             .textFieldStyle(.roundedBorder).accessibilityLabel("Short name for " + account.displayName)
                     }
                 }.font(.caption)

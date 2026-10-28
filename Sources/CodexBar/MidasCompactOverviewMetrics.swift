@@ -28,9 +28,9 @@ enum MidasCompactAccessibility {
                 parts.append(contentsOf: self.usage(account.presentation))
             }
         } else {
-            let account = item.provider == .codex ? accounts.first : nil
+            let account = accounts.first
             if let account { parts.append(account.displayName ?? account.presentation.account) }
-            parts.append(contentsOf: self.usage(account?.presentation ?? item))
+            parts.append(contentsOf: self.usage(item.provider == .codex ? account?.presentation ?? item : item))
         }
         if item.isRefreshing { parts.append("Refreshing usage") }
         return parts.joined(separator: "; ")
@@ -98,8 +98,8 @@ struct MidasCompactOverviewMetrics: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                let account = self.item.provider == .codex ? self.accounts.first : nil
-                let usage = account?.presentation ?? self.item
+                let account = self.accounts.first
+                let usage = self.item.provider == .codex ? account?.presentation ?? self.item : self.item
                 if let account {
                     Text(account.displayName ?? account.presentation.account)
                         .font(.system(size: 11, weight: .medium))
