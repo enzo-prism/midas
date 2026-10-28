@@ -26,6 +26,11 @@ Anonymous public archives and both actual `/releases/latest/download/` feeds mat
 prepared checksums before the website version and download links were updated. Published as
 [`v0.49.4-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.49.4-midas.1).
 
+Website source `c75bcb9` reached production Ready as
+`dpl_HvqtUXhm4VpbiWcogECv8FF4jtbv` on `midas-ai.dev`. All 21 local and 21 production browser
+checks passed, including the updated search/social metadata and structured app data. The legacy
+site host redirects with HTTP 308; a missing route returns HTTP 404.
+
 ## 0.49.3 changes: reset applicability and account scope
 
 Codex now preserves both unused reset inventory (`available_count`) and current applicability
