@@ -4,6 +4,20 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.49.5 changes: Claude Ultra limits and available Codex resets
+
+Verified Claude Ultra accounts (formerly Max 20x) have had no 5-hour limit since October 30,
+2026. They now show only the weekly limit, with a note explaining why; the same applies whenever
+Claude reports no 5-hour window ([PR #18](https://github.com/enzo-prism/midas/pull/18)).
+
+Codex reset credits again headline the available count. OpenAI reports
+`applicable_available_count` as 0 whenever no limit needs a reset, so the 0.49.3 headline read
+"0 usable now" for accounts holding available credits. Two connected accounts held two and one
+available credits while showing zero. The row now reads "2 available", appends "· N usable now"
+only when OpenAI reports a positive applicable count, and the tooltip states applicability
+([PR #20](https://github.com/enzo-prism/midas/pull/20)). Test UserDefaults suites no longer
+write into `~/Library/Preferences` ([PR #19](https://github.com/enzo-prism/midas/pull/19)).
+
 ## 0.49.4 changes: editable account labels
 
 Saved Codex and other provider accounts now have a permanent **Settings → Providers → Account
