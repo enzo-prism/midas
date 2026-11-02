@@ -18,6 +18,25 @@ only when OpenAI reports a positive applicable count, and the tooltip states app
 ([PR #20](https://github.com/enzo-prism/midas/pull/20)). Test UserDefaults suites no longer
 write into `~/Library/Preferences` ([PR #19](https://github.com/enzo-prism/midas/pull/19)).
 
+The binary identifies source `fe38f9fb` (PRs #18, #19, and #20 merged into `main`). On the
+merged tree, the full Swift suite ran 4,648 app tests and 29 collector tests twice. The first run
+failed only `ClaudeOAuthKeychainAccessGateTests`, which reads process-global state; the second run
+failed only the known timing-sensitive `StatusItemAnimationSignatureTests`. The keychain suite
+passed three isolated reruns. `make check` passed with zero violations.
+
+Apple notarization `8b4cbf4e-d2ec-44cd-a7ae-7e2f2a051813` was Accepted. The app and dSYM share
+arm64 UUID `19E46891-951B-3FB3-B69E-6AE79E1E2324`. Deep strict signing, stapling, Gatekeeper,
+archive signing, both signed XML feeds, and the embedded Midas public-key match passed. Archive
+SHA-256: `e9897b22c264a42efd706b6853e052d0294cff5f8c15bf12184d3c308278ee5b`.
+
+Downloaded draft assets, anonymous public assets, and both actual `/releases/latest/download/`
+feeds matched the prepared checksums before the website was updated. Published as
+[`v0.49.5-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.49.5-midas.1). The public
+bundle is installed and running at `/Applications/Midas.app` on the Mac Studio; its binary matches
+the public archive. Website source `072cffc` reached production Ready as
+`dpl_BhbxUberV31A9RgRVx83KCqphSYL` on `midas-ai.dev`. All 23 local and 23 production browser
+checks passed, and the live download link retrieves the archive above.
+
 ## 0.49.4 changes: editable account labels
 
 Saved Codex and other provider accounts now have a permanent **Settings → Providers → Account
@@ -135,14 +154,14 @@ a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.4**, build **136**, published as the latest stable release. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.49.5**, build **137**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.49.4**, build **136**, tagged
-`v0.49.4-midas.1`, superseding 0.49.3 (build 135, `v0.49.3-midas.1`), 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.49.5**, build **137**, tagged
+`v0.49.5-midas.1`, superseding 0.49.4 (build 136, `v0.49.4-midas.1`), 0.49.3 (build 135, `v0.49.3-midas.1`), 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),
