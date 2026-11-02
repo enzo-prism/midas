@@ -251,12 +251,13 @@ public struct CodexResetCreditsSnapshot: Codable, Sendable, Equatable {
 /// precedent as `UsageFormatter.resetCountdownDescription` (countdowns stay unlocalized
 /// in core; the app localizes row titles via `L()`).
 public enum CodexResetCreditFormatting {
-    /// Show applicability when reported; inventory alone does not establish usability.
+    /// Headline the redeemable inventory. OpenAI reports `applicable_available_count` as 0
+    /// whenever no limit currently needs a reset, so it only adds "usable now" when positive;
+    /// on its own it would hide credits the account still holds.
     public static func countText(snapshot: CodexResetCreditsSnapshot) -> String {
-        if let applicable = snapshot.applicableAvailableCount {
-            return "\(applicable) usable now"
-        }
-        return "\(snapshot.availableCount) unused"
+        let headline = Self.countText(availableCount: snapshot.availableCount)
+        guard let applicable = snapshot.applicableAvailableCount, applicable > 0 else { return headline }
+        return "\(headline) · \(min(applicable, snapshot.availableCount)) usable now"
     }
 
     /// Headline count, e.g. "2 available".
@@ -294,11 +295,16 @@ public enum CodexResetCreditFormatting {
         guard snapshot.availableCount > 0 else {
             return "You have no rate limit resets"
         }
-        let inventory = "OpenAI reports \(snapshot.availableCount) unused reset credit"
+        let inventory = "OpenAI reports \(snapshot.availableCount) available reset credit"
             + (snapshot.availableCount == 1 ? "." : "s.")
-        let applicability = snapshot.applicableAvailableCount.map {
-            "\($0) apply to the account's current limits."
-        } ?? "Current applicability has not been reported."
+        let applicability = switch snapshot.applicableAvailableCount {
+        case nil:
+            "Current applicability has not been reported."
+        case 0?:
+            "None apply to the account's current limits right now."
+        case let applicable?:
+            "\(min(applicable, snapshot.availableCount)) can reset a current limit now."
+        }
         let summary = "\(inventory) \(applicability)"
         let available = snapshot.availableCredits
         guard !available.isEmpty, snapshot.hasPerCreditExpiries else {
