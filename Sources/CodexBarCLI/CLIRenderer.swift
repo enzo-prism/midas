@@ -99,6 +99,12 @@ enum CLIRenderer {
             return
         }
 
+        if provider == .claude, snapshot.secondary != nil {
+            // Verified Ultra accounts have weekly limits only; their extra-usage cap is not a session window.
+            lines.append(self.labelValueLine(labels.primary, value: "no 5-hour limit", useColor: context.useColor))
+            return
+        }
+
         guard let cost = snapshot.providerCost else { return }
         // Fallback to cost/quota display if no primary rate window.
         let label = cost.currencyCode == "Quota" ? "Quota" : "Cost"

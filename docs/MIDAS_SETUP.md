@@ -61,8 +61,9 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   last known, when a refresh fails, and shows it right after launch instead of waiting for
   cursor.com. Available quota does not guarantee an API-equivalent dollar estimate.
 - **Claude:** the overview always shows two subscription limits: the **5-hour limit** and the
-  **Weekly limit**, each with % left and its reset time. If Claude reports no 5-hour window,
-  only the weekly limit is shown, labeled as weekly. Model-specific weekly limits, such as Fable,
+  **Weekly limit**, each with % left and its reset time. Verified Ultra accounts (formerly Max 20x)
+  have no 5-hour limit since October 30, 2026, so they show only the weekly limit, with a note
+  saying why; the same applies whenever Claude reports no 5-hour window. Model-specific weekly limits, such as Fable,
   appear in account details with their own remaining percentage and reset time. The all-models
   weekly limit still applies to that usage. Each saved Claude account refreshes separately without
   needing the Codex **Track all connected accounts** option.

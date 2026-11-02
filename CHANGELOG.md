@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Follow Anthropic's October 30, 2026 plan change: Max 20x is now **Ultra**, and verified Ultra
+  accounts have no 5-hour limit, only the weekly limits (all models and Fable). Midas now labels
+  `default_claude_max_20x` accounts **Claude Ultra** (Max 5x stays **Claude Max**) and keeps their
+  usage history.
+- Stop showing a stuck **5-hour limit: 0%** for accounts without one. OAuth, claude.ai, and CLI
+  sources now report no session window when the usage `limits` list has no session entry,
+  `five_hour` is null, or an Ultra account returns the 0%, no-reset stub. The weekly limit becomes
+  the overview, hero, and legacy menu-bar bar, with a short note explaining
+  why the 5-hour row is gone. Unverified Ultra accounts keep their temporary 5-hour bar.
+- Parse Claude Code's renamed **5-hour limit** row in `/usage`, and finish the CLI capture on the
+  weekly row when no session row is drawn instead of waiting for a timeout.
+- Stop copying the weekly window into the session slot when Claude reports no 5-hour window. This
+  removes the duplicate weekly bar, the "session" warnings that fired on weekly usage, and the
+  weekly readings stored in the 5-hour history series.
+
 ## Midas 0.49.3 — October 26, 2026
 
 - Preserve Codex's applicable reset count separately from unused credit inventory. Show

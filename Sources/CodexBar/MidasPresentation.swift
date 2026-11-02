@@ -553,11 +553,13 @@ enum MidasCursorLimits {
 }
 
 /// Claude's overview shows the 5-hour and all-models weekly limits; model-specific limits stay in details.
-/// Labels follow window length because the primary slot falls back to a weekly window when Claude
-/// reports no 5-hour window.
+/// Accounts without a 5-hour limit (verified Ultra, since 2026-10-30) report no primary window and show the
+/// weekly limit alone. Labels still follow window length for older snapshots whose primary slot carried a
+/// weekly window.
 enum MidasClaudeLimits {
     static let fiveHourTitle = "5-hour limit"
     static let weeklyTitle = "Weekly limit"
+    static let noFiveHourLimitHelp = "This Claude plan has no 5-hour limit. Only the weekly limits apply."
     static let limitIDs: Set<String> = ["primary", "secondary"]
     /// Server `limits[]` rows of kind `weekly_scoped`, from the OAuth, web, and CLI sources.
     static let modelWeeklyIDPrefix = "claude-weekly-scoped-"
@@ -590,7 +592,11 @@ enum MidasClaudeLimits {
             if weekly == nil { weekly = session }
             session = nil
         }
-        let limits = [session?.retitled(self.fiveHourTitle), weekly?.retitled(self.weeklyTitle)].compactMap(\.self)
+        let weeklyHelp = snapshot != nil && snapshot?.primary == nil ? self.noFiveHourLimitHelp : nil
+        let limits = [
+            session?.retitled(self.fiveHourTitle),
+            weekly?.retitled(self.weeklyTitle, helpText: weeklyHelp),
+        ].compactMap(\.self)
         let modelLimits = metrics.filter { self.isModelWeekly($0.id) }.map { metric in
             self.modelWeekly(metric, window: snapshot?.extraRateWindows?.first { $0.id == metric.id }?.window)
         }

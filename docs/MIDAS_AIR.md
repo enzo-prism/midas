@@ -44,8 +44,9 @@ sources and unpriced history. No estimate, subtotal, exclusion, or unavailable s
   details. Refresh, Settings, and More actions share one compact navigation capsule.
 - **Provider detail:** prominent token spend (API rates), recognizable logos, explicit periods and remaining capacity, reset
   information, and separate session constraints. Codex uses weekly remaining as its quota hero;
-  missing weekly data does not turn into a session metric. Claude always pins its
-  **5-hour limit** and **Weekly limit** bars in the overview (`MidasClaudeLimits`, titled by window length),
+  missing weekly data does not turn into a session metric. Claude pins its
+  **5-hour limit** and **Weekly limit** bars in the overview (`MidasClaudeLimits`, titled by window length);
+  accounts without a 5-hour limit (verified Ultra) show the weekly bar alone,
   with model-only and other extra limits available in provider details. Model-only weekly limits
   (ids `claude-weekly-scoped-*`, from `limits[]` rows of kind `weekly_scoped`) retain their reset
   times and explain that the all-models weekly limit still applies. Cursor pins its

@@ -202,7 +202,8 @@ and [monthly spend architecture](docs/MIDAS_MONTHLY_SPEND.md) for calculation ru
 Connect separate Claude accounts under **Settings → Providers → Claude → Add Claude account**.
 Midas verifies the signed-in email before saving, then refreshes each account independently and shows
 separate usage limits, reset times, and connection status. Nickname accounts **Personal** and **Business**
-if useful. Claude's overview keeps the 5-hour and all-models weekly limits prominent; model-specific
+if useful. Claude's overview keeps the 5-hour (when the plan has one; verified Ultra does not) and
+all-models weekly limits prominent; model-specific
 limits stay in account details. Claude Code dollar estimates still describe local activity once per provider.
 
 See [multiple Claude accounts](docs/MIDAS_SETUP.md#multiple-claude-accounts) for sign-in and reconnect steps.

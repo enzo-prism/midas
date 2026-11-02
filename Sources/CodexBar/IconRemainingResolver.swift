@@ -37,6 +37,10 @@ enum IconRemainingResolver {
             // Midas previews only the weekly quota; never substitute session usage or credits.
             return (primary: self.codexProjection(snapshot: snapshot).rateWindow(for: .weekly), secondary: nil)
         }
+        if style == .claude, snapshot.primary == nil {
+            // Verified Ultra accounts have no 5-hour limit: the weekly quota fills the main bar.
+            return (primary: snapshot.secondary, secondary: nil)
+        }
         return (
             primary: snapshot.primary,
             secondary: snapshot.secondary)
@@ -59,9 +63,9 @@ enum IconRemainingResolver {
                 primary: windows.first?.remainingPercent,
                 secondary: windows.dropFirst().first?.remainingPercent)
         }
-        if style == .codex {
+        if style == .codex || (style == .claude && snapshot.primary == nil) {
             let windows = self.resolvedWindows(snapshot: snapshot, style: style)
-            return (primary: windows.primary?.remainingPercent, secondary: nil)
+            return (primary: windows.primary?.remainingPercent, secondary: windows.secondary?.remainingPercent)
         }
         return (
             primary: snapshot.primary?.remainingPercent,

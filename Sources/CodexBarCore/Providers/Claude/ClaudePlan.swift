@@ -51,7 +51,12 @@ public enum ClaudePlan: String, CaseIterable, Sendable {
     }
 
     public static func fromOAuthCredentials(subscriptionType: String?, rateLimitTier: String?) -> Self? {
-        self.fromCompatibilityLoginMethod(subscriptionType)
+        // Claude Code reports `subscriptionType: "max"` for both $100 and $200 plans; only the rate-limit
+        // tier tells Ultra (formerly Max 20x) apart, so it wins whenever it names Ultra.
+        if self.fromOAuthRateLimitTier(rateLimitTier) == .ultra {
+            return .ultra
+        }
+        return self.fromCompatibilityLoginMethod(subscriptionType)
             ?? self.fromOAuthRateLimitTier(rateLimitTier)
     }
 
@@ -73,6 +78,10 @@ public enum ClaudePlan: String, CaseIterable, Sendable {
         if words.isEmpty {
             return nil
         }
+        // "Max 20x" was renamed Ultra on 2026-10-30; check it before the plain Max match.
+        if words.contains("ultra") || words.contains("20x") {
+            return .ultra
+        }
         if words.contains("max") {
             return .max
         }
@@ -84,9 +93,6 @@ public enum ClaudePlan: String, CaseIterable, Sendable {
         }
         if words.contains("enterprise") {
             return .enterprise
-        }
-        if words.contains("ultra") {
-            return .ultra
         }
         return nil
     }
@@ -125,6 +131,10 @@ public enum ClaudePlan: String, CaseIterable, Sendable {
 
     private static func fromRateLimitTier(_ rateLimitTier: String?) -> Self? {
         let tier = Self.normalized(rateLimitTier)
+        // Anthropic renamed Max 20x to Ultra but still reports the old `default_claude_max_20x` tier.
+        if tier.contains("ultra") || tier.contains("max_20x") || tier.contains("max20x") {
+            return .ultra
+        }
         if tier.contains("max") {
             return .max
         }
