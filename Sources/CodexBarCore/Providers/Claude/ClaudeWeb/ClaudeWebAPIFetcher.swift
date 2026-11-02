@@ -82,8 +82,11 @@ public enum ClaudeWebAPIFetcher {
 
     /// Claude usage data from the API
     public struct WebUsageData: Sendable {
-        public let sessionPercentUsed: Double
+        /// `five_hour` utilization, or the `limits` session entry's percent; nil when the payload has neither.
+        public let sessionPercentUsed: Double?
         public let sessionResetsAt: Date?
+        /// Whether a full `limits` list names a session limit; nil when the payload has no full list.
+        public let sessionLimitListed: Bool?
         public let weeklyPercentUsed: Double?
         public let weeklyResetsAt: Date?
         public let opusPercentUsed: Double?
@@ -94,8 +97,9 @@ public enum ClaudeWebAPIFetcher {
         public let loginMethod: String?
 
         public init(
-            sessionPercentUsed: Double,
+            sessionPercentUsed: Double?,
             sessionResetsAt: Date?,
+            sessionLimitListed: Bool? = nil,
             weeklyPercentUsed: Double?,
             weeklyResetsAt: Date?,
             opusPercentUsed: Double?,
@@ -107,6 +111,7 @@ public enum ClaudeWebAPIFetcher {
         {
             self.sessionPercentUsed = sessionPercentUsed
             self.sessionResetsAt = sessionResetsAt
+            self.sessionLimitListed = sessionLimitListed
             self.weeklyPercentUsed = weeklyPercentUsed
             self.weeklyResetsAt = weeklyResetsAt
             self.opusPercentUsed = opusPercentUsed
@@ -217,6 +222,7 @@ public enum ClaudeWebAPIFetcher {
             usage = WebUsageData(
                 sessionPercentUsed: usage.sessionPercentUsed,
                 sessionResetsAt: usage.sessionResetsAt,
+                sessionLimitListed: usage.sessionLimitListed,
                 weeklyPercentUsed: usage.weeklyPercentUsed,
                 weeklyResetsAt: usage.weeklyResetsAt,
                 opusPercentUsed: usage.opusPercentUsed,
@@ -230,6 +236,7 @@ public enum ClaudeWebAPIFetcher {
             usage = WebUsageData(
                 sessionPercentUsed: usage.sessionPercentUsed,
                 sessionResetsAt: usage.sessionResetsAt,
+                sessionLimitListed: usage.sessionLimitListed,
                 weeklyPercentUsed: usage.weeklyPercentUsed,
                 weeklyResetsAt: usage.weeklyResetsAt,
                 opusPercentUsed: usage.opusPercentUsed,
@@ -243,6 +250,7 @@ public enum ClaudeWebAPIFetcher {
             usage = WebUsageData(
                 sessionPercentUsed: usage.sessionPercentUsed,
                 sessionResetsAt: usage.sessionResetsAt,
+                sessionLimitListed: usage.sessionLimitListed,
                 weeklyPercentUsed: usage.weeklyPercentUsed,
                 weeklyResetsAt: usage.weeklyResetsAt,
                 opusPercentUsed: usage.opusPercentUsed,
@@ -485,15 +493,29 @@ public enum ClaudeWebAPIFetcher {
         var sessionPercent: Double?
         var sessionResets: Date?
         if let fiveHour = json["five_hour"] as? [String: Any] {
-            if let utilization = fiveHour["utilization"] as? Int {
-                sessionPercent = Double(utilization)
-            }
+            sessionPercent = Self.percentValue(from: fiveHour["utilization"])
             if let resetsAt = fiveHour["resets_at"] as? String {
                 sessionResets = self.parseISO8601Date(resetsAt)
             }
         }
-        // Enterprise/credit-based accounts return null for five_hour; treat as 0% rather than an error.
-        let resolvedSessionPercent = sessionPercent ?? 0.0
+        // Enterprise/credit-based accounts and verified Ultra accounts return null for five_hour; the
+        // `limits` list, when present, says whether a session limit exists at all.
+        var sessionLimitListed: Bool?
+        if let limits = json["limits"] as? [[String: Any]] {
+            let kinds = limits.map { $0["kind"] as? String }
+            let sessionEntry = limits.first {
+                ClaudeSessionLimitPolicy.isSessionLimitEntry(
+                    kind: $0["kind"] as? String,
+                    group: $0["group"] as? String)
+            }
+            if ClaudeSessionLimitPolicy.isCompleteLimitsList(kinds: kinds) {
+                sessionLimitListed = sessionEntry != nil
+            }
+            if sessionPercent == nil, let sessionEntry {
+                sessionPercent = Self.percentValue(from: sessionEntry["percent"])
+                sessionResets = (sessionEntry["resets_at"] as? String).flatMap(self.parseISO8601Date)
+            }
+        }
 
         // Parse seven_day (weekly) usage
         var weeklyPercent: Double?
@@ -521,8 +543,9 @@ public enum ClaudeWebAPIFetcher {
         let extraUsageCost = ClaudeWebExtraUsageCost.parse(from: json["extra_usage"])
 
         return WebUsageData(
-            sessionPercentUsed: resolvedSessionPercent,
+            sessionPercentUsed: sessionPercent,
             sessionResetsAt: sessionResets,
+            sessionLimitListed: sessionLimitListed,
             weeklyPercentUsed: weeklyPercent,
             weeklyResetsAt: weeklyResets,
             opusPercentUsed: opusPercent,

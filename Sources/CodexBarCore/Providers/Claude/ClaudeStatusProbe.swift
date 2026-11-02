@@ -209,7 +209,7 @@ public struct ClaudeStatusProbe: Sendable {
         let usagePanelText = latestUsagePanel ?? clean
         let labelContext = LabelSearchContext(text: usagePanelText)
 
-        var sessionPct = self.extractPercent(labelSubstring: "Current session", context: labelContext)
+        var sessionPct = self.extractPercent(labelSubstrings: Self.sessionLabels, context: labelContext)
         var weeklyPct = self.extractPercent(labelSubstring: "Current week (all models)", context: labelContext)
         var opusPct = self.extractPercent(
             labelSubstrings: [
@@ -227,17 +227,29 @@ public struct ClaudeStatusProbe: Sendable {
             labelContext.contains("currentweek")
             || compactContext.contains("currentweek")
         let hasOpusLabel = labelContext.contains("opus") || labelContext.contains("sonnet")
+        // Verified Ultra accounts have no 5-hour limit, so their panel starts at the weekly rows. Only treat the
+        // first percentage as the session when a row sits above the weekly row (PTY captures can garble the
+        // session label itself), or when no row labels are found at all.
+        let hasSessionLabel = Self.sessionLabels.contains {
+            labelContext.contains(Self.normalizedForLabelSearch($0))
+        }
+        let expectsSession = hasSessionLabel || !hasWeeklyLabel || Self.hasPercentRowAboveWeekly(labelContext)
 
-        if sessionPct == nil || (hasWeeklyLabel && weeklyPct == nil) || (hasOpusLabel && opusPct == nil) {
+        if (expectsSession && sessionPct == nil) || (hasWeeklyLabel && weeklyPct == nil)
+            || (hasOpusLabel && opusPct == nil)
+        {
             let ordered = self.allPercents(usagePanelText)
-            if sessionPct == nil, ordered.indices.contains(0) { sessionPct = ordered[0] }
-            if hasWeeklyLabel, weeklyPct == nil, ordered.indices.contains(1) { weeklyPct = ordered[1] }
-            if hasOpusLabel, opusPct == nil, ordered.indices.contains(2) { opusPct = ordered[2] }
+            let offset = expectsSession ? 0 : -1
+            if expectsSession, sessionPct == nil, ordered.indices.contains(0) { sessionPct = ordered[0] }
+            if hasWeeklyLabel, weeklyPct == nil, ordered.indices.contains(1 + offset) {
+                weeklyPct = ordered[1 + offset]
+            }
+            if hasOpusLabel, opusPct == nil, ordered.indices.contains(2 + offset) { opusPct = ordered[2 + offset] }
         }
 
         let identity = Self.parseIdentity(usageText: clean, statusText: statusClean)
 
-        guard let sessionPct else {
+        guard sessionPct != nil || weeklyPct != nil else {
             Self.dumpIfNeeded(
                 enabled: shouldDump,
                 reason: "missing session label",
@@ -252,7 +264,9 @@ public struct ClaudeStatusProbe: Sendable {
             throw ClaudeStatusProbeError.parseFailed("Missing Current session.")
         }
 
-        let sessionReset = self.extractReset(labelSubstring: "Current session", context: labelContext)
+        let sessionReset = sessionPct == nil
+            ? nil
+            : self.extractReset(labelSubstrings: Self.sessionLabels, context: labelContext)
         let weeklyReset = hasWeeklyLabel
             ? self.extractReset(labelSubstring: "Current week (all models)", context: labelContext)
             : nil
@@ -282,6 +296,16 @@ public struct ClaudeStatusProbe: Sendable {
             opusResetDescription: opusReset,
             rawText: text + (statusText ?? ""),
             extraRateWindows: extraRateWindows)
+    }
+
+    /// Row labels for the 5-hour window in `/usage`; newer Claude Code builds call it the "5-hour limit".
+    static let sessionLabels = ["Current session", "5-hour limit"]
+
+    private static func hasPercentRowAboveWeekly(_ context: LabelSearchContext) -> Bool {
+        guard let weeklyIndex = context.normalizedLines.firstIndex(where: { $0.contains("currentweek") }) else {
+            return false
+        }
+        return context.lines.prefix(weeklyIndex).contains { self.percentFromLine($0) != nil }
     }
 
     public static func parseIdentity(usageText: String?, statusText: String?) -> ClaudeAccountIdentity {
@@ -353,6 +377,7 @@ public struct ClaudeStatusProbe: Sendable {
     private static func usageOutputLooksRelevant(_ text: String) -> Bool {
         let normalized = TextParsing.stripANSICodes(text).lowercased().filter { !$0.isWhitespace }
         return normalized.contains("currentsession")
+            || normalized.contains("5-hourlimit")
             || normalized.contains("currentweek")
             || normalized.contains("loadingusage")
             || normalized.contains("failedtoloadusagedata")
@@ -523,7 +548,8 @@ public struct ClaudeStatusProbe: Sendable {
         // Only real session/week labels and actual percentage values count as quota data.
         // `loadingusage` is not quota data — a mixed loading+subscription PTY capture should
         // surface the subscription error, not a still-loading stall.
-        let hasQuotaData = normalized.contains("currentsession") || normalized.contains("currentweek")
+        let hasQuotaData = normalized.contains("currentsession") || normalized.contains("5-hourlimit")
+            || normalized.contains("currentweek")
             || normalized.contains("%used") || normalized.contains("%left") || normalized.contains("%remaining")
             || normalized.contains("%available")
         return !hasQuotaData
@@ -533,7 +559,8 @@ public struct ClaudeStatusProbe: Sendable {
     private static func allPercents(_ text: String) -> [Int] {
         let lines = text.components(separatedBy: .newlines)
         let normalized = text.lowercased().filter { !$0.isWhitespace }
-        let hasUsageWindows = normalized.contains("currentsession") || normalized.contains("currentweek")
+        let hasUsageWindows = normalized.contains("currentsession") || normalized.contains("5-hourlimit")
+            || normalized.contains("currentweek")
         let hasLoading = normalized.contains("loadingusage")
         let hasUsagePercentKeywords = normalized.contains("used") || normalized.contains("left")
             || normalized.contains("remaining") || normalized.contains("available")
@@ -967,10 +994,14 @@ public struct ClaudeStatusProbe: Sendable {
         }
     }
 
+    /// True once the panel shows a percentage under a session row, or under the weekly row for accounts
+    /// without a 5-hour limit (the session row, when there is one, is drawn above it).
     private static func usageCaptureHasSessionValue(_ normalizedText: String) -> Bool {
-        guard let labelRange = normalizedText.range(of: "currentsession") else { return false }
-        let tail = normalizedText[labelRange.upperBound...]
-        return tail.range(of: #"[0-9]{1,3}(?:\.[0-9]+)?%"#, options: .regularExpression) != nil
+        ["currentsession", "5-hourlimit", "currentweek"].contains { label in
+            guard let labelRange = normalizedText.range(of: label) else { return false }
+            let tail = normalizedText[labelRange.upperBound...]
+            return tail.range(of: #"[0-9]{1,3}(?:\.[0-9]+)?%"#, options: .regularExpression) != nil
+        }
     }
 
     private static func usageCaptureHasSubscriptionNotice(_ normalizedText: String) -> Bool {

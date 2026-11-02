@@ -78,8 +78,14 @@ Admin API key setup:
   - `Authorization: Bearer <access_token>`
   - `anthropic-beta: oauth-2025-04-20`
 - Mapping:
-  - `five_hour` → session window.
-  - `seven_day` → weekly window; also becomes the primary fallback when `five_hour` is absent or has no utilization.
+  - `five_hour` (or the `limits[]` row with `group: "session"`) → session window, unless the account has no
+    5-hour limit (`ClaudeSessionLimitPolicy`). Since 2026-10-30 verified Ultra accounts (Max 20x renamed;
+    the tier is still `default_claude_max_20x`) have weekly limits only. No session window is reported when a
+    full `limits[]` list (one with a `weekly_all` row) has no session row, when `five_hour` is null or has no
+    utilization, or when an Ultra account returns the 0%, no-reset stub. An idle Pro/Max session returns the
+    same stub and keeps its 0% bar; an unverified Ultra account's temporary limit shows once a window starts.
+  - `seven_day` → weekly window. It is never copied into the session slot. Without a session or `seven_day`
+    window, `seven_day_oauth_apps` / `seven_day_sonnet` / `seven_day_opus` stand in for the weekly window.
   - `seven_day_sonnet` / `seven_day_opus` → model-specific weekly window.
   - `limits[]` rows with `kind: "weekly_scoped"` and `scope.model.display_name` → model-only weekly windows
     (`claude-weekly-scoped-<model>`, titled "Fable only" etc.). Classification uses `kind`, never the label;
@@ -138,7 +144,8 @@ Admin API key setup:
   3) Send `/usage`, wait for rendered panel; send Enter retries if needed.
   4) Optionally send `/status` to extract identity fields.
 - Parsing (`ClaudeStatusProbe`):
-  - Strips ANSI, locates "Current session" + "Current week" headers.
+  - Strips ANSI, locates "Current session" (newer builds: "5-hour limit") + "Current week" headers. A panel
+    with no row above "Current week (all models)" has no 5-hour limit, so its first percentage is weekly.
   - Any other "Current week (<Model>)" block (e.g. "Current week (Fable)") becomes a model-only weekly window
     with the same `claude-weekly-scoped-<model>` id as the API paths. A garbled redraw of
     "Current week (all models)" (edit distance ≤ 2) is ignored instead of becoming a bogus extra bar.

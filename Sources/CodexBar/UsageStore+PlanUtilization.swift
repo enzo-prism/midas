@@ -563,7 +563,9 @@ extension UsageStore {
                 let normalizedLoginMethod = identity.loginMethod?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .lowercased()
-                let normalizedPlan = ClaudePlan.fromCompatibilityLoginMethod(identity.loginMethod)?.rawValue
+                // Ultra is the renamed Max 20x plan: keep its history under the key it had as Max.
+                let normalizedPlan = ClaudePlan.fromCompatibilityLoginMethod(identity.loginMethod)
+                    .map { $0 == .ultra ? ClaudePlan.max.rawValue : $0.rawValue }
                 let organizationDiscriminator: String? =
                     if let normalizedOrganization, !normalizedOrganization.isEmpty {
                         "org:\(normalizedOrganization)"
