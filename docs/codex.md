@@ -47,10 +47,12 @@ Usage source picker:
 
 ### Rate-limit reset credits (Midas)
 
-Unused inventory and current applicability are separate: `available_count` may be positive
-while `applicable_available_count` is zero. Midas persists both, headlines the applicable
-count as "usable now", and shows unused inventory plus expiries in details. Missing applicability
-stays unknown, including old cached snapshots; inventory alone is labeled "unused".
+Available inventory and current applicability are separate: `available_count` may be positive
+while `applicable_available_count` is zero. OpenAI reports zero applicable credits whenever no
+limit currently needs a reset, so applicability alone hid credits the account still holds.
+Midas persists both and headlines the available count ("2 available"). A positive applicable
+count is appended ("2 available · 1 usable now"); the tooltip states applicability, including
+when it is zero or unknown (old cached snapshots).
 
 - After the OAuth usage fetch, Midas makes a best-effort companion call to
   `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits` (same Bearer token and
@@ -61,8 +63,8 @@ stays unknown, including old cached snapshots; inventory alone is labeled "unuse
   expiry times are unavailable rather than implying there are none. When the usage body
   reports no counts either, the snapshot stays nil (unknown) instead of a misleading zero.
 - Non-OAuth Codex sources (CLI RPC, web dashboard) report no reset data and leave the field nil.
-- Display: the Codex menu card shows a "Rate Limit Resets" row (`N usable now`, or `N unused`
-  when applicability is unknown, plus every
+- Display: the Codex menu card shows a "Rate Limit Resets" row (`N available`, plus
+  `· M usable now` when OpenAI reports a positive applicable count, plus every
   credit's expiration date and countdown, soonest first, directly in the tab); `codexbar usage` prints the count plus
   one line per credit; `--format json` includes the snapshot; provider diagnostics export the
   count and whether expiries are known.

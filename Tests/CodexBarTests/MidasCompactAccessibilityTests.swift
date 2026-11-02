@@ -71,28 +71,28 @@ struct MidasCompactAccessibilityTests {
 
     @Test func singleCodexAccountUsesItsOwnQuotaAndResetCount() {
         let provider = self.presentation(
-            provider: .codex, metrics: [self.metric("secondary", "This week", 72)], resets: "1 unused")
+            provider: .codex, metrics: [self.metric("secondary", "This week", 72)], resets: "2 available")
         let accountUsage = self.presentation(
-            provider: .codex, metrics: [self.metric("secondary", "This week", 46)], resets: "0 usable now")
+            provider: .codex, metrics: [self.metric("secondary", "This week", 46)], resets: "1 available")
         let account = MidasAccountPresentation(
             id: "work", isPrimary: false, presentation: accountUsage, displayName: "Work")
         let summary = MidasCompactAccessibility.summary(provider, accounts: [account])
         #expect(summary.contains("Work"))
         #expect(summary.contains("46% left"))
-        #expect(summary.contains("0 usable now"))
+        #expect(summary.contains("1 available"))
         #expect(!summary.contains("72% left"))
-        #expect(!summary.contains("1 unused"))
+        #expect(!summary.contains("2 available"))
     }
 
     @Test @MainActor func renderSingleCodexAccountWhenRequested() throws {
         guard let output = ProcessInfo.processInfo.environment["MIDAS_CODEX_OVERVIEW_RENDER_OUTPUT"] else { return }
         let provider = self.presentation(
-            provider: .codex, metrics: [self.metric("secondary", "This week", 72)], resets: "1 unused")
+            provider: .codex, metrics: [self.metric("secondary", "This week", 72)], resets: "2 available")
         let usage = self.presentation(
             provider: .codex,
             metrics: [self.metric("secondary", "This week", 46)],
             stale: true,
-            resets: "0 usable now")
+            resets: "1 available")
         let account = MidasAccountPresentation(id: "work", isPrimary: false, presentation: usage, displayName: "Work")
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         for scheme in [ColorScheme.light, .dark] {

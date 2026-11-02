@@ -19,7 +19,7 @@ struct CodexResetCreditsMenuTests {
         let snapshot = UsageSnapshot(primary: nil, secondary: nil, codexResetCredits: resets, updatedAt: now)
         let metric = try #require(UsageMenuCardView.Model.codexResetCreditsMetric(
             snapshot: snapshot, now: now, percentStyle: .left))
-        #expect(metric.statusText == "2 unused")
+        #expect(metric.statusText == "2 available")
         let lines = try #require(metric.detailText).split(separator: "\n")
         #expect(lines.count == 3)
         #expect(lines[1].contains(CodexResetCreditFormatting.absoluteExpiryText(now.addingTimeInterval(86400))))

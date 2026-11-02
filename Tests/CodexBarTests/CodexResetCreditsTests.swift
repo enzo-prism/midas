@@ -101,11 +101,44 @@ struct CodexResetCreditsTests {
         #expect(result.usage.codexResetCredits?.applicableAvailableCount == 0)
     }
 
-    @Test(arguments: [0, 1, 2])
-    func applicabilityControlsHeadline(applicable: Int) {
+    @Test(arguments: [(0, "2 available"), (1, "2 available · 1 usable now"), (2, "2 available · 2 usable now")])
+    func applicabilityOnlyAddsToAvailableHeadline(applicable: Int, expected: String) {
         let snapshot = CodexResetCreditsSnapshot.countOnly(
             availableCount: 2, updatedAt: Date(), applicableAvailableCount: applicable)
-        #expect(CodexResetCreditFormatting.countText(snapshot: snapshot) == "\(applicable) usable now")
+        #expect(CodexResetCreditFormatting.countText(snapshot: snapshot) == expected)
+    }
+
+    /// Mirrors the two connected accounts that showed "0 usable now": a Pro account with two
+    /// available full resets at 76% weekly use, and a free account with one monthly reset at 0%.
+    /// OpenAI reported `applicable_available_count: 0` for both because no limit was exhausted.
+    @Test(arguments: [(2, "2 available"), (1, "1 available")])
+    func availableCreditsStayVisibleWhenNoLimitNeedsReset(count: Int, expected: String) {
+        let now = Date(timeIntervalSince1970: 1_793_000_000)
+        let credits = (0..<count).map { index in
+            CodexResetCredit(
+                id: "RateLimitResetCredit_\(index)",
+                resetType: "codex_rate_limits",
+                status: "available",
+                expiresAt: now.addingTimeInterval(Double(index + 5) * 86400),
+                title: "Full reset",
+                isSupportedByPlan: true)
+        }
+        let snapshot = CodexResetCreditsSnapshot.fromResponse(
+            CodexResetCreditsResponse(credits: credits, availableCount: count),
+            updatedAt: now,
+            applicableAvailableCount: 0)
+        #expect(CodexResetCreditFormatting.countText(snapshot: snapshot) == expected)
+        #expect(!CodexResetCreditFormatting.countText(snapshot: snapshot).contains("0 usable"))
+        let tooltip = CodexResetCreditFormatting.tooltipText(snapshot: snapshot, now: now)
+        #expect(tooltip.contains("None apply to the account's current limits right now."))
+        #expect(tooltip.split(separator: "\n").count == count + 1)
+    }
+
+    @Test func applicableCountNeverExceedsAvailableInventory() {
+        let snapshot = CodexResetCreditsSnapshot.countOnly(
+            availableCount: 1, updatedAt: Date(), applicableAvailableCount: 3)
+        #expect(CodexResetCreditFormatting.countText(snapshot: snapshot) == "1 available · 1 usable now")
+        #expect(CodexResetCreditFormatting.tooltipText(snapshot: snapshot).contains("1 can reset a current limit now."))
     }
 
     @Test func oldSnapshotKeepsApplicabilityUnknown() throws {
@@ -115,7 +148,7 @@ struct CodexResetCreditsTests {
         #expect(json["applicableAvailableCount"] == nil)
         let restored = try JSONDecoder().decode(CodexResetCreditsSnapshot.self, from: data)
         #expect(restored.applicableAvailableCount == nil)
-        #expect(CodexResetCreditFormatting.countText(snapshot: restored) == "1 unused")
+        #expect(CodexResetCreditFormatting.countText(snapshot: restored) == "1 available")
     }
 
     @Test
@@ -179,7 +212,7 @@ struct CodexResetCreditsTests {
         let resetCredits = try #require(snapshot.codexResetCredits)
         #expect(resetCredits.availableCount == 1)
         #expect(resetCredits.applicableAvailableCount == 0)
-        #expect(CodexResetCreditFormatting.countText(snapshot: resetCredits) == "0 usable now")
+        #expect(CodexResetCreditFormatting.countText(snapshot: resetCredits) == "1 available")
         #expect(resetCredits.hasPerCreditExpiries == false)
         #expect(resetCredits.credits.isEmpty)
         // Primary/weekly mapping is unchanged by the fallback: the lone 7-day
@@ -284,7 +317,7 @@ struct CodexResetCreditsTests {
         let fallback = CodexResetCreditsSnapshot.countOnly(availableCount: 2, updatedAt: now)
         #expect(CodexResetCreditFormatting.soonestDetail(snapshot: fallback, now: now) == "Expiry times unavailable")
         let fallbackTooltip = CodexResetCreditFormatting.tooltipText(snapshot: fallback, now: now)
-        #expect(fallbackTooltip.contains("2 unused"))
+        #expect(fallbackTooltip.contains("2 available"))
         #expect(fallbackTooltip.contains("expiry times unavailable"))
 
         let empty = CodexResetCreditsSnapshot(

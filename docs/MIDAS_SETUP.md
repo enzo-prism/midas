@@ -35,10 +35,10 @@ remain collapsed until needed. Privacy mode hides account identities in setup.
   each account's remaining usage and reset time kept separate. Cloud availability depends on
   private ChatGPT analytics endpoints, which can change independently of Midas; this is not
   an official OpenAI billing API integration. Quota percentages are never converted into token counts.
-- **Reset credits:** each Codex account shows the number OpenAI reports as usable for its
-  current limits. Unused credit inventory can be higher; hover or expand account details to
-  see that inventory and expiry information. If current applicability was not reported, the
-  row says **unused**, rather than claiming the credits can be used now. **Unavailable** means
+- **Reset credits:** each Codex account shows how many reset credits OpenAI reports as
+  available. When a credit can reset one of the account's current limits, the row adds
+  **usable now**; while no limit needs a reset, it shows the available count alone. Hover or
+  expand account details for applicability and each credit's expiry. **Unavailable** means
   no count was reported. Stale counts say **last known**. The account name, quota, and reset
   count always refer to the same account. Reset credits are separate from scheduled quota
   resets and do not change with the spend period.
