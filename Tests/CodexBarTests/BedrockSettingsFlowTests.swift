@@ -9,8 +9,8 @@ struct BedrockSettingsFlowTests {
     @Test
     func `settings store maps Bedrock credentials into provider environment`() throws {
         let suite = "BedrockSettingsFlowTests-settings-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let settings = SettingsStore(
             userDefaults: defaults,
@@ -47,8 +47,8 @@ struct BedrockSettingsFlowTests {
     @Test
     func `bedrock availability requires secret access key`() throws {
         let suite = "BedrockSettingsFlowTests-missing-secret-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -74,8 +74,8 @@ struct BedrockSettingsFlowTests {
     @Test
     func `profile mode maps profile into provider environment and is available`() throws {
         let suite = "BedrockSettingsFlowTests-profile-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

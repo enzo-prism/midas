@@ -8,9 +8,9 @@ struct CodexBarConfigMigratorTests {
     @Test
     func `legacy secret migration completion flag skips repeated scans`() throws {
         let suite = "CodexBarConfigMigratorTests-skip-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
 
         let secrets = CountingLegacySecretStore()
         let accountStore = CountingTokenAccountStore()
@@ -34,9 +34,9 @@ struct CodexBarConfigMigratorTests {
     @Test
     func `legacy migration completion waits for successful cleanup`() throws {
         let suite = "CodexBarConfigMigratorTests-cleanup-failure-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
 
         let secrets = CountingLegacySecretStore(token: "legacy-token", throwOnStore: true)
         let accountStore = CountingTokenAccountStore()
@@ -60,9 +60,9 @@ struct CodexBarConfigMigratorTests {
     @Test
     func `legacy stores are kept when migrated config save fails`() throws {
         let suite = "CodexBarConfigMigratorTests-save-failure-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
 
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-tests", isDirectory: true)

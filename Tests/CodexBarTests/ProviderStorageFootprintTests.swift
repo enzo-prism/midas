@@ -323,8 +323,8 @@ struct ProviderStorageFootprintTests {
         try Data(repeating: 1, count: 32).write(to: sessions.appendingPathComponent("session.jsonl"))
 
         let suite = "ProviderStorageFootprintTests-storage-refresh-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -363,8 +363,8 @@ struct ProviderStorageFootprintTests {
         try Data(repeating: 1, count: 32).write(to: sessions.appendingPathComponent("session.jsonl"))
 
         let suite = "ProviderStorageFootprintTests-identity-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -411,8 +411,8 @@ struct ProviderStorageFootprintTests {
         try Data(repeating: 1, count: 16).write(to: codexHome.appendingPathComponent("session.jsonl"))
 
         let suite = "ProviderStorageFootprintTests-storage-opt-in-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -451,8 +451,8 @@ struct ProviderStorageFootprintTests {
         try FileManager.default.createDirectory(at: codexHome, withIntermediateDirectories: true)
 
         let suite = "ProviderStorageFootprintTests-storage-in-flight-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -496,8 +496,8 @@ struct ProviderStorageFootprintTests {
         try Data(repeating: 2, count: 32).write(to: secondManagedHome.appendingPathComponent("session.jsonl"))
 
         let suite = "ProviderStorageFootprintTests-managed-refresh-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

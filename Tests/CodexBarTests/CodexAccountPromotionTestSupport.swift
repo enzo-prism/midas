@@ -38,8 +38,8 @@ final class CodexAccountPromotionTestContainer {
         try FileManager.default.createDirectory(at: self.managedHomesURL, withIntermediateDirectories: true)
         _ = try self.fileStore.ensureFileExists()
 
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
+        let defaults = TestUserDefaults.suite(suiteName)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suiteName))
         defaults.set(true, forKey: "providerDetectionCompleted")
         self.settings = SettingsStore(
             userDefaults: defaults,
@@ -75,7 +75,7 @@ final class CodexAccountPromotionTestContainer {
         self.settings._test_managedCodexAccountStoreURL = nil
         self.settings._test_liveSystemCodexAccount = nil
         self.settings._test_codexReconciliationEnvironment = nil
-        self.settings.userDefaults.removePersistentDomain(forName: self.suiteName)
+        self.settings.userDefaults.removePersistentDomain(forName: TestUserDefaults.domain(self.suiteName))
         try? FileManager.default.removeItem(at: self.rootURL)
     }
 

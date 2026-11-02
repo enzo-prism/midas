@@ -185,8 +185,8 @@ struct AzureOpenAIMenuDescriptorTests {
     @Test
     func `azure openai deployment detail appears in menu`() throws {
         let suite = "AzureOpenAIMenuDescriptorTests-menu"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,

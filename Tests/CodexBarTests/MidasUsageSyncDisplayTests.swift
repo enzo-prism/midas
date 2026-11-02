@@ -196,7 +196,7 @@ struct MidasUsageSyncDisplayTests {
         let store: UsageStore
 
         init() {
-            let defaults = UserDefaults(suiteName: self.suite)!
+            let defaults = TestUserDefaults.suite(self.suite)!
             let settings = SettingsStore(
                 userDefaults: defaults,
                 configStore: testConfigStore(suiteName: self.suite),
@@ -214,7 +214,7 @@ struct MidasUsageSyncDisplayTests {
         }
 
         func cleanup() {
-            UserDefaults(suiteName: self.suite)?.removePersistentDomain(forName: self.suite)
+            TestUserDefaults.suite(self.suite)?.removePersistentDomain(forName: TestUserDefaults.domain(self.suite))
         }
     }
 }

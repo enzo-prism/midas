@@ -8,8 +8,8 @@ struct TerminalAppTests {
     @MainActor
     func `default is terminal`() throws {
         let suite = "TerminalAppTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let store = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -22,8 +22,8 @@ struct TerminalAppTests {
     @MainActor
     func `setting terminal app persists it`() throws {
         let suite = "TerminalAppTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let store = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -38,7 +38,7 @@ struct TerminalAppTests {
     @MainActor
     func `invalid stored value falls back to terminal`() throws {
         let suite = "TerminalAppTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
+        let defaults = try #require(TestUserDefaults.suite(suite))
         defaults.set("nonexistent", forKey: "terminalApp")
         let store = SettingsStore(
             userDefaults: defaults,

@@ -70,7 +70,7 @@ struct MidasSyncRenderTests {
 
         init() throws {
             let suite = "MidasSyncRender-" + UUID().uuidString
-            let defaults = try #require(UserDefaults(suiteName: suite))
+            let defaults = try #require(TestUserDefaults.suite(suite))
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             self.suite = suite
@@ -83,7 +83,7 @@ struct MidasSyncRenderTests {
         }
 
         func cleanup() {
-            self.defaults.removePersistentDomain(forName: self.suite)
+            self.defaults.removePersistentDomain(forName: TestUserDefaults.domain(self.suite))
             try? FileManager.default.removeItem(at: self.directory)
         }
     }

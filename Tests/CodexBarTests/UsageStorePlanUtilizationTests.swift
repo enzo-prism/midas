@@ -1091,10 +1091,10 @@ extension UsageStorePlanUtilizationTests {
     @MainActor
     static func makeStore() -> UsageStore {
         let suiteName = "UsageStorePlanUtilizationTests-\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
+        guard let defaults = TestUserDefaults.suite(suiteName) else {
             fatalError("Failed to create isolated UserDefaults suite for tests")
         }
-        defaults.removePersistentDomain(forName: suiteName)
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suiteName))
         let configStore = testConfigStore(suiteName: suiteName)
         let planHistoryStore = testPlanUtilizationHistoryStore(suiteName: suiteName)
         let temporaryRoot = FileManager.default.temporaryDirectory.standardizedFileURL.path

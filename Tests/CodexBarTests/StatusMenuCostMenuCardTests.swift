@@ -95,8 +95,8 @@ struct StatusMenuCostMenuCardTests {
 
     private func makeSettings() -> SettingsStore {
         let suite = "StatusMenuCostMenuCardTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = TestUserDefaults.suite(suite)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         return SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

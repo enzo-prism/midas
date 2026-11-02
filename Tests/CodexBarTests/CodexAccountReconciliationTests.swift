@@ -7,8 +7,8 @@ import Testing
 struct CodexAccountReconciliationTests {
     @MainActor
     private static func makeSettings(suite: String) throws -> SettingsStore {
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(true, forKey: "providerDetectionCompleted")
         let settings = SettingsStore(
             userDefaults: defaults,

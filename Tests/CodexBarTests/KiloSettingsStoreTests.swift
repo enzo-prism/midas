@@ -7,8 +7,8 @@ import Testing
 struct KiloSettingsStoreTests {
     private func makeSettings() throws -> SettingsStore {
         let suite = "KiloSettingsStoreTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         return SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

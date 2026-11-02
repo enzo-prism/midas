@@ -26,7 +26,7 @@ struct SettingsWindowControllerTests {
 
     @Test
     func `opens by creating once then reusing the retained window`() throws {
-        let selection = try PreferencesSelection(onboardingDefaults: #require(UserDefaults(suiteName: #function)))
+        let selection = try PreferencesSelection(onboardingDefaults: #require(TestUserDefaults.suite(#function)))
         var creations = 0
         var presented: [NSWindow] = []
         let controller = self.makeController(
@@ -47,7 +47,7 @@ struct SettingsWindowControllerTests {
 
     @Test
     func `requested tab replaces the current selection`() throws {
-        let selection = try PreferencesSelection(onboardingDefaults: #require(UserDefaults(suiteName: #function)))
+        let selection = try PreferencesSelection(onboardingDefaults: #require(TestUserDefaults.suite(#function)))
         let controller = self.makeController(selection: selection)
 
         controller.open(tab: .about)

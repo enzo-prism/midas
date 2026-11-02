@@ -28,8 +28,8 @@ struct SettingsStoreTests {
     @Test
     func `default refresh frequency is five minutes`() throws {
         let suite = "SettingsStoreTests-default"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -46,8 +46,8 @@ struct SettingsStoreTests {
     @Test
     func `repairs unrecognized refresh frequency raw value`() throws {
         let suite = "SettingsStoreTests-invalid-refresh"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set("legacyValue", forKey: "refreshFrequency")
         let configStore = testConfigStore(suiteName: suite)
 
@@ -64,8 +64,8 @@ struct SettingsStoreTests {
     @Test
     func `persists refresh frequency across instances`() throws {
         let suite = "SettingsStoreTests-persist"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -75,7 +75,7 @@ struct SettingsStoreTests {
 
         storeA.refreshFrequency = .fifteenMinutes
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -89,8 +89,8 @@ struct SettingsStoreTests {
     @Test
     func `weekly confetti setting defaults off and persists`() throws {
         let suite = "SettingsStoreTests-weekly-confetti"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -101,7 +101,7 @@ struct SettingsStoreTests {
         #expect(storeA.confettiOnWeeklyLimitResetsEnabled == false)
         storeA.confettiOnWeeklyLimitResetsEnabled = true
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -114,8 +114,8 @@ struct SettingsStoreTests {
     @Test
     func `provider storage setting defaults off and persists`() throws {
         let suite = "SettingsStoreTests-provider-storage"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -127,7 +127,7 @@ struct SettingsStoreTests {
         #expect(defaultsA.bool(forKey: "providerStorageFootprintsEnabled") == false)
         storeA.providerStorageFootprintsEnabled = true
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -140,8 +140,8 @@ struct SettingsStoreTests {
     @Test
     func `provider changelog links setting defaults off and persists`() throws {
         let suite = "SettingsStoreTests-provider-changelog-links"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -153,7 +153,7 @@ struct SettingsStoreTests {
         #expect(defaultsA.bool(forKey: "providerChangelogLinksEnabled") == false)
         storeA.providerChangelogLinksEnabled = true
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -166,8 +166,8 @@ struct SettingsStoreTests {
     @Test
     func `persists selected menu provider across instances`() throws {
         let suite = "SettingsStoreTests-selectedMenuProvider"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -177,7 +177,7 @@ struct SettingsStoreTests {
 
         storeA.selectedMenuProvider = .claude
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -190,8 +190,8 @@ struct SettingsStoreTests {
     @Test
     func `persists merged menu last selected was overview across instances`() throws {
         let suite = "SettingsStoreTests-merged-last-overview"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -201,7 +201,7 @@ struct SettingsStoreTests {
 
         storeA.mergedMenuLastSelectedWasOverview = true
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -214,8 +214,8 @@ struct SettingsStoreTests {
     @Test
     func `merged overview selected providers persists and normalizes across instances`() throws {
         let suite = "SettingsStoreTests-merged-overview-selection"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -226,7 +226,7 @@ struct SettingsStoreTests {
         storeA.mergedOverviewSelectedProviders = [.opencode, .codex, .opencode, .claude]
         #expect(storeA.mergedOverviewSelectedProviders == [.opencode, .codex, .claude])
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -239,8 +239,8 @@ struct SettingsStoreTests {
     @Test
     func `merged overview selected providers ignores invalid raw values`() throws {
         let suite = "SettingsStoreTests-merged-overview-invalid-raw"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(["codex", "unknown-provider", "claude", "codex"], forKey: "mergedOverviewSelectedProviders")
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
@@ -255,8 +255,8 @@ struct SettingsStoreTests {
     @Test
     func `resolved merged overview providers defaults to first three when selection empty`() throws {
         let suite = "SettingsStoreTests-merged-overview-default-first-three"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -273,8 +273,8 @@ struct SettingsStoreTests {
     @Test
     func `resolved merged overview providers honors explicit empty selection`() throws {
         let suite = "SettingsStoreTests-merged-overview-explicit-empty"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -292,8 +292,8 @@ struct SettingsStoreTests {
     @Test
     func `resolved merged overview providers uses provider order not selection order`() throws {
         let suite = "SettingsStoreTests-merged-overview-order"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -311,8 +311,8 @@ struct SettingsStoreTests {
     @Test
     func `reconcile merged overview selection removes unavailable without auto fill`() throws {
         let suite = "SettingsStoreTests-merged-overview-reconcile"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -332,8 +332,8 @@ struct SettingsStoreTests {
     @Test
     func `reconcile merged overview selection does not clobber stored preference when three or fewer`() throws {
         let suite = "SettingsStoreTests-merged-overview-three-or-fewer"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -355,8 +355,8 @@ struct SettingsStoreTests {
         throws
     {
         let suite = "SettingsStoreTests-merged-overview-three-or-fewer-subset"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -376,8 +376,8 @@ struct SettingsStoreTests {
     @Test
     func `merged overview selection allows deselecting providers when three or fewer`() throws {
         let suite = "SettingsStoreTests-merged-overview-deselect-three-or-fewer"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -400,8 +400,8 @@ struct SettingsStoreTests {
     @Test
     func `merged overview selection applies when same active set is reordered`() throws {
         let suite = "SettingsStoreTests-merged-overview-ordered-context"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -424,8 +424,8 @@ struct SettingsStoreTests {
     @Test
     func `merged overview selection allows deselecting providers when more than three active`() throws {
         let suite = "SettingsStoreTests-merged-overview-deselect-subset"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -448,8 +448,8 @@ struct SettingsStoreTests {
     @Test
     func `reconcile merged overview selection preserves stored subset when active drops to three or fewer`() throws {
         let suite = "SettingsStoreTests-merged-overview-preserve-subset-across-drop"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -482,8 +482,8 @@ struct SettingsStoreTests {
     @Test
     func `reconcile merged overview selection clears preference when no providers active`() throws {
         let suite = "SettingsStoreTests-merged-overview-clear-on-empty-active"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -508,8 +508,8 @@ struct SettingsStoreTests {
     @Test
     func `persists open code workspace ID across instances`() throws {
         let suite = "SettingsStoreTests-opencode-workspace"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -518,7 +518,7 @@ struct SettingsStoreTests {
 
         storeA.opencodeWorkspaceID = "wrk_01KEJ50SHK9YR41HSRSJ6QTFCM"
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -531,8 +531,8 @@ struct SettingsStoreTests {
     func `defaults session quota notifications to enabled`() throws {
         let key = "sessionQuotaNotificationsEnabled"
         let suite = "SettingsStoreTests-sessionQuotaNotifications"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -546,8 +546,8 @@ struct SettingsStoreTests {
     @Test
     func `defaults quota warnings to disabled with global thresholds and sound`() throws {
         let suite = "SettingsStoreTests-quota-warning-defaults"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -571,8 +571,8 @@ struct SettingsStoreTests {
     @Test
     func `global quota warning windows persist independently`() throws {
         let suite = "SettingsStoreTests-quota-warning-window-enabled"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -590,8 +590,8 @@ struct SettingsStoreTests {
     @Test
     func `sanitizes invalid quota warning thresholds from defaults`() throws {
         let suite = "SettingsStoreTests-quota-warning-sanitize"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set([120, 20, 20, -5, 50], forKey: "quotaWarningThresholds")
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
@@ -615,8 +615,8 @@ struct SettingsStoreTests {
     @Test
     func `provider quota warning override resolves before global thresholds`() throws {
         let suite = "SettingsStoreTests-quota-warning-provider-override"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -637,8 +637,8 @@ struct SettingsStoreTests {
     @Test
     func `global quota warning thresholds resolve independently by window`() throws {
         let suite = "SettingsStoreTests-quota-warning-window-thresholds"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -658,8 +658,8 @@ struct SettingsStoreTests {
     @Test
     func `provider quota warning windows override global enablement independently`() throws {
         let suite = "SettingsStoreTests-quota-warning-provider-window-override"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -684,8 +684,8 @@ struct SettingsStoreTests {
     @Test
     func `defaults claude usage source to auto`() throws {
         let suite = "SettingsStoreTests-claude-source"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -700,8 +700,8 @@ struct SettingsStoreTests {
     @Test
     func `defaults codex usage source to auto`() throws {
         let suite = "SettingsStoreTests-codex-source"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -716,8 +716,8 @@ struct SettingsStoreTests {
     @Test
     func `defaults kilo usage source to auto`() throws {
         let suite = "SettingsStoreTests-kilo-source"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -732,8 +732,8 @@ struct SettingsStoreTests {
     @Test
     func `persists kilo usage source across instances`() throws {
         let suite = "SettingsStoreTests-kilo-source-persist"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -743,7 +743,7 @@ struct SettingsStoreTests {
 
         storeA.kiloUsageDataSource = .cli
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -756,8 +756,8 @@ struct SettingsStoreTests {
     @Test
     func `kilo extras only apply in auto mode`() throws {
         let suite = "SettingsStoreTests-kilo-extras"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -779,8 +779,8 @@ struct SettingsStoreTests {
     @MainActor
     func `apply external config does not broadcast`() throws {
         let suite = "SettingsStoreTests-external-config"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let store = SettingsStore(
             userDefaults: defaults,
@@ -823,8 +823,8 @@ struct SettingsStoreTests {
     @Test
     func `persists zai API region across instances`() throws {
         let suite = "SettingsStoreTests-zai-region"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -833,7 +833,7 @@ struct SettingsStoreTests {
 
         storeA.zaiAPIRegion = .bigmodelCN
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -845,8 +845,8 @@ struct SettingsStoreTests {
     @Test
     func `persists mini max API region across instances`() throws {
         let suite = "SettingsStoreTests-minimax-region"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let storeA = SettingsStore(
             userDefaults: defaultsA,
@@ -855,7 +855,7 @@ struct SettingsStoreTests {
 
         storeA.minimaxAPIRegion = .chinaMainland
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -867,8 +867,8 @@ struct SettingsStoreTests {
     @Test
     func `defaults open AI web access to disabled`() throws {
         let suite = "SettingsStoreTests-openai-web"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(false, forKey: "debugDisableKeychainAccess")
         let configStore = testConfigStore(suiteName: suite)
 
@@ -888,8 +888,8 @@ struct SettingsStoreTests {
     @Test
     func `infers open AI web access enabled for legacy configured codex cookies`() throws {
         let suite = "SettingsStoreTests-openai-web-legacy"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.removeObject(forKey: "openAIWebAccessEnabled")
         defaults.set(false, forKey: "debugDisableKeychainAccess")
         let configStore = testConfigStore(suiteName: suite)
@@ -913,8 +913,8 @@ struct SettingsStoreTests {
     @Test
     func `imports legacy open AI web access defaults key`() throws {
         let suite = "SettingsStoreTests-openai-web-legacy-key"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.removeObject(forKey: "openAIWebAccessEnabled")
         defaults.set(false, forKey: "openAIWebAccess")
         defaults.set(false, forKey: "debugDisableKeychainAccess")
@@ -936,8 +936,8 @@ struct SettingsStoreTests {
     @Test
     func `infers open AI web access enabled for legacy codex config with implicit auto cookies`() throws {
         let suite = "SettingsStoreTests-openai-web-legacy-implicit-auto"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.removeObject(forKey: "openAIWebAccessEnabled")
         defaults.set(false, forKey: "debugDisableKeychainAccess")
         let configStore = testConfigStore(suiteName: suite)
@@ -961,8 +961,8 @@ struct SettingsStoreTests {
     @Test
     func `disabling open AI web access turns codex cookie source off`() throws {
         let suite = "SettingsStoreTests-openai-web-toggle"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(false, forKey: "debugDisableKeychainAccess")
         let configStore = testConfigStore(suiteName: suite)
 
@@ -987,8 +987,8 @@ struct SettingsStoreTests {
     @Test
     func `open AI web battery saver persists separately from extras availability`() throws {
         let suite = "SettingsStoreTests-openai-web-battery-saver"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(false, forKey: "debugDisableKeychainAccess")
         let configStore = testConfigStore(suiteName: suite)
 
@@ -1010,8 +1010,8 @@ struct SettingsStoreTests {
     @Test
     func `menu observation token updates on defaults change`() async throws {
         let suite = "SettingsStoreTests-observation-defaults"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1037,8 +1037,8 @@ struct SettingsStoreTests {
     @Test
     func `menu observation token ignores merged switcher selection churn`() async throws {
         let suite = "SettingsStoreTests-observation-switcher-selection"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1065,8 +1065,8 @@ struct SettingsStoreTests {
     @Test
     func `menu observation token updates on per-window quota threshold changes`() async throws {
         let suite = "SettingsStoreTests-observation-quota-threshold-windows"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1099,8 +1099,8 @@ struct SettingsStoreTests {
     @Test
     func `menu observation token updates on weekly progress work days changes`() async throws {
         let suite = "SettingsStoreTests-observation-weekly-progress-work-days"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1126,8 +1126,8 @@ struct SettingsStoreTests {
     @Test
     func `config backed settings trigger observation`() async throws {
         let suite = "SettingsStoreTests-observation-config"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1153,8 +1153,8 @@ struct SettingsStoreTests {
     @Test
     func `menu observation token updates on codex active source change`() async throws {
         let suite = "SettingsStoreTests-observation-codex-active-source"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1180,8 +1180,8 @@ struct SettingsStoreTests {
     @Test
     func `provider order defaults to all cases`() throws {
         let suite = "SettingsStoreTests-providerOrder-default"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1196,8 +1196,8 @@ struct SettingsStoreTests {
     @Test
     func `provider order persists and appends new providers`() throws {
         let suite = "SettingsStoreTests-providerOrder-persist"
-        let defaultsA = try #require(UserDefaults(suiteName: suite))
-        defaultsA.removePersistentDomain(forName: suite)
+        let defaultsA = try #require(TestUserDefaults.suite(suite))
+        defaultsA.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         // Partial list to mimic "older version" missing providers.
@@ -1221,7 +1221,7 @@ struct SettingsStoreTests {
         let antigravityIndex = try #require(storeA.orderedProviders().firstIndex(of: .antigravity))
         storeA.moveProvider(fromOffsets: IndexSet(integer: antigravityIndex), toOffset: 0)
 
-        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let defaultsB = try #require(TestUserDefaults.suite(suite))
         let storeB = SettingsStore(
             userDefaults: defaultsB,
             configStore: configStore,
@@ -1234,8 +1234,8 @@ struct SettingsStoreTests {
     @Test
     func `setting alibaba API key enables provider`() throws {
         let suite = "SettingsStoreTests-alibaba-enable-on-token"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let store = SettingsStore(
@@ -1255,8 +1255,8 @@ struct SettingsStoreTests {
     @Test
     func `alibaba provider auto enables on startup when token exists`() throws {
         let suite = "SettingsStoreTests-alibaba-auto-enable-startup"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let config = CodexBarConfig(providers: [

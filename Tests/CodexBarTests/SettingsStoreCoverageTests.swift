@@ -8,8 +8,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `provider ordering and caching`() throws {
         let suite = "SettingsStoreCoverageTests-ordering"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let config = CodexBarConfig(providers: [
             ProviderConfig(id: .zai),
@@ -102,8 +102,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `multi account menu layout persists and bridges legacy show all token accounts`() throws {
         let suite = "SettingsStoreCoverageTests-multi-account-layout"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let initial = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
@@ -122,8 +122,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `legacy show all token accounts migrates to stacked layout`() throws {
         let suite = "SettingsStoreCoverageTests-legacy-token-account-layout"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(true, forKey: "showAllTokenAccountsInMenu")
         let configStore = testConfigStore(suiteName: suite)
 
@@ -198,8 +198,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `copilot enterprise host persists in provider config`() throws {
         let suite = "SettingsStoreCoverageTests-copilot-enterprise-host"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let first = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
 
@@ -368,8 +368,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `keychain disable forces manual cookie sources`() throws {
         let suite = "SettingsStoreCoverageTests-keychain"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let settings = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
 
@@ -392,8 +392,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `claude keychain prompt mode persists across store reload`() throws {
         let suite = "SettingsStoreCoverageTests-claude-keychain-prompt-mode"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let first = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
@@ -409,8 +409,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `claude keychain prompt mode invalid raw falls back to only on user action`() throws {
         let suite = "SettingsStoreCoverageTests-claude-keychain-prompt-mode-invalid"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set("invalid-mode", forKey: "claudeOAuthKeychainPromptMode")
         let configStore = testConfigStore(suiteName: suite)
 
@@ -427,8 +427,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `claude keychain read strategy persists across store reload`() throws {
         let suite = "SettingsStoreCoverageTests-claude-keychain-read-strategy"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let first = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
@@ -444,8 +444,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `claude keychain read strategy invalid raw falls back to security framework`() throws {
         let suite = "SettingsStoreCoverageTests-claude-keychain-read-strategy-invalid"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set("invalid-strategy", forKey: "claudeOAuthKeychainReadStrategy")
         let configStore = testConfigStore(suiteName: suite)
 
@@ -519,8 +519,8 @@ struct SettingsStoreCoverageTests {
     @Test
     func `weekly progress work days defaults to nil and persists across store reload`() throws {
         let suite = "SettingsStoreCoverageTests-weekly-progress-work-days"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let fresh = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
@@ -549,8 +549,8 @@ struct SettingsStoreCoverageTests {
     }
 
     private static func makeSettingsStore(suiteName: String = "SettingsStoreCoverageTests") -> SettingsStore {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
+        let defaults = TestUserDefaults.suite(suiteName)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suiteName))
         defaults.set(false, forKey: "debugDisableKeychainAccess")
         let configStore = testConfigStore(suiteName: suiteName)
         return Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)

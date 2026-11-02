@@ -16,8 +16,8 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged render signature changes when unified icon style changes`() throws {
         let suite = "StatusItemAnimationSignatureTests-merged-style-signature"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -80,8 +80,8 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged brand percent reapplies title when cached render is skipped`() throws {
         let suite = "StatusItemAnimationSignatureTests-merged-brand-percent-title-restore"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,
@@ -141,8 +141,8 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged icon render defers while merged menu is tracking`() async throws {
         let suite = "StatusItemAnimationSignatureTests-merged-icon-defers-during-tracking"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,
@@ -266,8 +266,8 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged fallback provider follows enabled provider order`() throws {
         let suite = "StatusItemAnimationSignatureTests-merged-provider-order"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -314,8 +314,8 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged icon follows overview provider order when first overview provider is loading`() {
         let suite = "StatusItemAnimationSignatureTests-merged-overview-provider-order"
-        let defaults = UserDefaults(suiteName: suite)
-        defaults?.removePersistentDomain(forName: suite)
+        let defaults = TestUserDefaults.suite(suite)
+        defaults?.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults ?? .standard,
             configStore: testConfigStore(suiteName: "StatusItemAnimationSignatureTests-merged-overview-provider-order"),
@@ -372,8 +372,8 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `split provider icon skips unchanged render signature`() throws {
         let suite = "StatusItemAnimationSignatureTests-split-provider-signature"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

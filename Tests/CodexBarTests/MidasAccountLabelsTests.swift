@@ -7,8 +7,8 @@ import Testing
 struct MidasAccountLabelsTests {
     @Test func labelsPersistPerProviderAndResetWithoutChangingConnections() throws {
         let suite = "MidasAccountLabels-" + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let settings = self.settings(defaults: defaults, suite: suite)
         let id = UUID()
         settings.addTokenAccount(provider: .claude, label: "Personal", token: "fixture-token")
@@ -27,8 +27,8 @@ struct MidasAccountLabelsTests {
 
     @Test func editingSupportsSpacesAndLimitsWholeCharacters() throws {
         let suite = "MidasAccountLabels-" + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let settings = self.settings(defaults: defaults, suite: suite)
         settings.setMidasAccountLabel("Business ", for: .codex, accountID: "one")
         #expect(settings.midasAccountLabel(for: .codex, accountID: "one") == "Business ")
@@ -50,8 +50,8 @@ struct MidasAccountLabelsTests {
 
     @Test func savedAccountEditorKeepsIdentityAndOriginalNicknameSeparate() throws {
         let suite = "MidasAccountLabels-" + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let settings = self.settings(defaults: defaults, suite: suite)
         settings.addTokenAccount(
             provider: .claude, label: "Personal", token: "fixture-token", externalIdentifier: "alex@example.com")

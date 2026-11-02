@@ -8,8 +8,8 @@ struct MenuDescriptorOpenAIAPITests {
     @Test
     func `openai api admin usage appears in descriptor summaries`() throws {
         let suite = "MenuDescriptorOpenAIAPITests-admin-summary"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,

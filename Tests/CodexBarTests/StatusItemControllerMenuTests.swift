@@ -135,8 +135,8 @@ struct StatusItemControllerMenuTests {
     @MainActor
     func `update menu action installs prepared update instead of checking again`() throws {
         let suite = "StatusItemControllerMenuTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

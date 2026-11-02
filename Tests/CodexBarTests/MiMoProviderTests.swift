@@ -390,8 +390,8 @@ struct MiMoProviderTests {
     @MainActor
     func `menu descriptor renders balance providers without duplicate prefix`(provider: UsageProvider) throws {
         let suite = "MiMoProviderTests-menu-balance-\(provider.rawValue)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,

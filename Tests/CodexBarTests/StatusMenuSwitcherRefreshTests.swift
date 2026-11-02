@@ -348,8 +348,8 @@ struct StatusMenuSwitcherRefreshTests {
 
     private static func makeSettings() -> SettingsStore {
         let suite = "StatusMenuSwitcherRefreshTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = TestUserDefaults.suite(suite)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(true, forKey: "providerDetectionCompleted")
         return SettingsStore(
             userDefaults: defaults,

@@ -8,8 +8,8 @@ struct UsageStorePathDebugTests {
     @Test
     func `refresh path debug info populates snapshot`() async throws {
         let suite = "UsageStorePathDebugTests-path"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let settings = SettingsStore(
             userDefaults: defaults,
@@ -38,8 +38,8 @@ struct UsageStorePathDebugTests {
     @Test
     func `automatic startup skips background work in tests`() throws {
         let suite = "UsageStorePathDebugTests-automatic-startup"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -60,8 +60,8 @@ struct UsageStorePathDebugTests {
     @Test
     func `deepseek debug log includes selected token account`() async throws {
         let suite = "UsageStorePathDebugTests-deepseek-debug-token-account"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let settings = SettingsStore(
             userDefaults: defaults,
@@ -83,8 +83,8 @@ struct UsageStorePathDebugTests {
     @Test
     func `meta debug log reports key status and sessions root`() async throws {
         let suite = "UsageStorePathDebugTests-meta-debug-log"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let settings = SettingsStore(
             userDefaults: defaults,

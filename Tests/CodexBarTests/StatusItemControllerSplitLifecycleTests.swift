@@ -17,8 +17,8 @@ struct StatusItemControllerSplitLifecycleTests {
 
     private func makeSettings() -> SettingsStore {
         let suite = "StatusItemControllerSplitLifecycleTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = TestUserDefaults.suite(suite)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         return SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -126,9 +126,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight leaves fresh install placement unset`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-missing-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
 
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
 
@@ -139,9 +139,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight preserves missing new key when legacy item placement exists`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-legacy-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         defaults.set(42, forKey: "NSStatusItem Preferred Position Item-0")
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
 
@@ -157,9 +157,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight clears suspicious matching legacy placement`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-legacy-high-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         defaults.set(11298, forKey: "NSStatusItem Preferred Position Item-0")
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
 
@@ -176,9 +176,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight preserves missing new key when mixed legacy placements exist`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-legacy-mixed-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         defaults.set(42, forKey: "NSStatusItem Preferred Position Item-0")
         defaults.set(11298, forKey: "NSStatusItem Preferred Position Item-1")
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
@@ -196,9 +196,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight clears provider matching suspicious legacy placement`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-provider-mixed-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         defaults.set(42, forKey: "NSStatusItem Preferred Position Item-0")
         defaults.set(11298, forKey: "NSStatusItem Preferred Position Item-1")
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-codex")
@@ -217,9 +217,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight leaves provider key unset when only merged legacy placement exists`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-provider-single-legacy-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         defaults.set(42, forKey: "NSStatusItem Preferred Position Item-0")
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-codex")
 
@@ -235,9 +235,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight preserves provider key with matching legacy placement`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-provider-matching-legacy-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         defaults.set(42, forKey: "NSStatusItem Preferred Position Item-0")
         defaults.set(58, forKey: "NSStatusItem Preferred Position Item-1")
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-codex")
@@ -255,9 +255,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight clears suspicious high position`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-high-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
         defaults.set(11298, forKey: key)
 
@@ -272,9 +272,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight clears old forced zero position`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-zero-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
         defaults.set(0, forKey: key)
 
@@ -286,9 +286,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight clears malformed position`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-malformed-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
         defaults.set("not-a-position", forKey: key)
 
@@ -300,9 +300,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight preserves reasonable position`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-preserve-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
         defaults.set(42, forKey: key)
 
@@ -314,9 +314,9 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item placement preflight preserves large display position`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-placement-preserve-large-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let key = MenuBarStatusItemPlacementPreflight.preferredPositionKey(autosaveName: "codexbar-merged")
         defaults.set(2500, forKey: key)
 
@@ -331,15 +331,15 @@ struct StatusItemControllerSplitLifecycleTests {
     @Test
     func `status item defaults repair removes stale hidden Control Center keys once`() throws {
         let suite = "StatusItemControllerSplitLifecycleTests-repair-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(false, forKey: "NSStatusItem VisibleCC Item-0")
         defaults.set(0, forKey: "NSStatusItem VisibleCC Item-12")
         defaults.set(false, forKey: "NSStatusItem VisibleCC codexbar-merged")
         defaults.set(true, forKey: "NSStatusItem VisibleCC Item-1")
         defaults.set(false, forKey: "NSStatusItem VisibleCC com.apple.clock")
         defer {
-            defaults.removePersistentDomain(forName: suite)
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         }
 
         let repairedKeys = MenuBarStatusItemDefaultsRepair.repairHiddenVisibilityDefaultsIfNeeded(defaults: defaults)

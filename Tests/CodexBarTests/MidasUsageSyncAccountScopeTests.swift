@@ -77,7 +77,7 @@ struct MidasUsageSyncAccountScopeTests {
                 Self.account(email: "duplicate@example.com", home: self.firstHome.path + "/../first"),
             ]
             self.suite = "MidasUsageSyncAccountScopeTests-\(UUID().uuidString)"
-            let defaults = UserDefaults(suiteName: self.suite)!
+            let defaults = TestUserDefaults.suite(self.suite)!
             self.settings = SettingsStore(
                 userDefaults: defaults,
                 configStore: testConfigStore(suiteName: self.suite),
@@ -149,7 +149,7 @@ struct MidasUsageSyncAccountScopeTests {
 
         func cleanup() {
             self.settings._test_codexAccountSnapshotLoader = nil
-            UserDefaults(suiteName: self.suite)?.removePersistentDomain(forName: self.suite)
+            TestUserDefaults.suite(self.suite)?.removePersistentDomain(forName: TestUserDefaults.domain(self.suite))
             try? FileManager.default.removeItem(at: self.root)
         }
     }

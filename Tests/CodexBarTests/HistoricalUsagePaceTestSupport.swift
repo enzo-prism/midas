@@ -276,8 +276,8 @@ extension HistoricalUsagePaceTests {
         suite: String,
         historicalUsageHistoryStore: HistoricalUsageHistoryStore) throws -> UsageStore
     {
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

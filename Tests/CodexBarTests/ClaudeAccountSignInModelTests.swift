@@ -92,10 +92,10 @@ struct ClaudeAccountSignInModelTests {
     @Test(arguments: [false, true])
     func `checked account save enables Claude and failed save restores disabled state`(blockWrite: Bool) async throws {
         let suite = "ClaudeAccountSignInModelTests-" + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
+        let defaults = try #require(TestUserDefaults.suite(suite))
         let configStore = testConfigStore(suiteName: suite)
         defer {
-            defaults.removePersistentDomain(forName: suite)
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
             try? FileManager.default.removeItem(at: configStore.fileURL.deletingLastPathComponent())
         }
         try configStore.save(CodexBarConfig(providers: [ProviderConfig(id: .claude, enabled: false)]))
