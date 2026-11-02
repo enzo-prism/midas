@@ -8,8 +8,8 @@ struct ZaiAvailabilityTests {
     @Test
     func `enables zai when token exists in store`() throws {
         let suite = "ZaiAvailabilityTests-token"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let tokenStore = StubZaiTokenStore(token: "zai-test-token")
@@ -32,8 +32,8 @@ struct ZaiAvailabilityTests {
     @Test
     func `enables zai when token exists in token accounts`() throws {
         let suite = "ZaiAvailabilityTests-token-accounts"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
 
         let settings = SettingsStore(

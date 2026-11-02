@@ -659,7 +659,7 @@ struct MidasHubCoordinatorTests {
 
         init() throws {
             self.suite = "MidasHubCoordinatorTests-" + UUID().uuidString
-            self.defaults = try #require(UserDefaults(suiteName: self.suite))
+            self.defaults = try #require(TestUserDefaults.suite(self.suite))
             guard let path = Darwin.realpath(FileManager.default.temporaryDirectory.path, nil) else {
                 throw POSIXError(.ENOENT)
             }
@@ -737,7 +737,7 @@ struct MidasHubCoordinatorTests {
         }
 
         func cleanup() {
-            self.defaults.removePersistentDomain(forName: self.suite)
+            self.defaults.removePersistentDomain(forName: TestUserDefaults.domain(self.suite))
             try? FileManager.default.removeItem(at: self.directory)
         }
     }

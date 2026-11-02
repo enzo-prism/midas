@@ -50,8 +50,8 @@ struct ClaudeDebugDiagnosticsTests {
         try Data(credsJSON.utf8).write(to: credentialsURL)
 
         let store = try await MainActor.run { () -> UsageStore in
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defaults.removePersistentDomain(forName: suite)
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
             let configStore = testConfigStore(suiteName: suite)
             let settings = SettingsStore(
                 userDefaults: defaults,
@@ -100,8 +100,8 @@ struct ClaudeDebugDiagnosticsTests {
         let missingCredentialsURL = tempDir.appendingPathComponent("missing-credentials.json")
 
         let store = try await MainActor.run { () -> UsageStore in
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defaults.removePersistentDomain(forName: suite)
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
             let configStore = testConfigStore(suiteName: suite)
             let settings = SettingsStore(
                 userDefaults: defaults,
@@ -179,8 +179,8 @@ struct ClaudeDebugDiagnosticsTests {
         let missingCredentialsURL = tempDir.appendingPathComponent("missing-credentials.json")
 
         let store = try await MainActor.run { () -> UsageStore in
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defaults.removePersistentDomain(forName: suite)
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
             let configStore = testConfigStore(suiteName: suite)
             let settings = SettingsStore(
                 userDefaults: defaults,
@@ -237,8 +237,8 @@ struct ClaudeDebugDiagnosticsTests {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let missingCredentialsURL = tempDir.appendingPathComponent("missing-credentials.json")
         let store = try await MainActor.run { () -> UsageStore in
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defaults.removePersistentDomain(forName: suite)
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
             let configStore = testConfigStore(suiteName: suite)
             let settings = SettingsStore(
                 userDefaults: defaults,
@@ -312,8 +312,8 @@ struct ClaudeDebugDiagnosticsTests {
         deniedStore.deniedUntil = Date(timeIntervalSinceNow: 300)
 
         let store = try await MainActor.run { () -> UsageStore in
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defaults.removePersistentDomain(forName: suite)
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
             let configStore = testConfigStore(suiteName: suite)
             let settings = SettingsStore(
                 userDefaults: defaults,
@@ -371,8 +371,8 @@ struct ClaudeDebugDiagnosticsTests {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let missingCredentialsURL = tempDir.appendingPathComponent("missing-credentials.json")
         let storeAndSettings = try await MainActor.run { () -> (UsageStore, SettingsStore) in
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defaults.removePersistentDomain(forName: suite)
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
             let configStore = testConfigStore(suiteName: suite)
             let settings = SettingsStore(
                 userDefaults: defaults,

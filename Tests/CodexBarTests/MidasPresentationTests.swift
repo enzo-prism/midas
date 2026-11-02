@@ -202,8 +202,8 @@ struct MidasPresentationTests {
         guard let output = ProcessInfo.processInfo.environment["MIDAS_PREVIEW_OUTPUT"] else { return }
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         let suite = "MidasSurfacePreview-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),
@@ -320,8 +320,8 @@ struct MidasPresentationTests {
               let seconds = Double(requested), seconds.isFinite, seconds > 0
         else { return }
         let suite = "MidasInteractivePreview-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

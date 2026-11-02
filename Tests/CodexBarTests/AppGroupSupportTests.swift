@@ -53,12 +53,12 @@ struct AppGroupSupportTests {
         let currentSuite = "AppGroupSupportTests-current-\(UUID().uuidString)"
         let legacySuite = "AppGroupSupportTests-legacy-\(UUID().uuidString)"
 
-        let standardDefaults = try #require(UserDefaults(suiteName: standardSuite))
-        let currentDefaults = try #require(UserDefaults(suiteName: currentSuite))
-        let legacyDefaults = try #require(UserDefaults(suiteName: legacySuite))
-        standardDefaults.removePersistentDomain(forName: standardSuite)
-        currentDefaults.removePersistentDomain(forName: currentSuite)
-        legacyDefaults.removePersistentDomain(forName: legacySuite)
+        let standardDefaults = try #require(TestUserDefaults.suite(standardSuite))
+        let currentDefaults = try #require(TestUserDefaults.suite(currentSuite))
+        let legacyDefaults = try #require(TestUserDefaults.suite(legacySuite))
+        standardDefaults.removePersistentDomain(forName: TestUserDefaults.domain(standardSuite))
+        currentDefaults.removePersistentDomain(forName: TestUserDefaults.domain(currentSuite))
+        legacyDefaults.removePersistentDomain(forName: TestUserDefaults.domain(legacySuite))
 
         legacyDefaults.set(true, forKey: "debugDisableKeychainAccess")
         legacyDefaults.set(UsageProvider.cursor.rawValue, forKey: "widgetSelectedProvider")
@@ -106,12 +106,12 @@ struct AppGroupSupportTests {
         let currentSuite = "AppGroupSupportTests-current-existing-\(UUID().uuidString)"
         let legacySuite = "AppGroupSupportTests-legacy-existing-\(UUID().uuidString)"
 
-        let standardDefaults = try #require(UserDefaults(suiteName: standardSuite))
-        let currentDefaults = try #require(UserDefaults(suiteName: currentSuite))
-        let legacyDefaults = try #require(UserDefaults(suiteName: legacySuite))
-        standardDefaults.removePersistentDomain(forName: standardSuite)
-        currentDefaults.removePersistentDomain(forName: currentSuite)
-        legacyDefaults.removePersistentDomain(forName: legacySuite)
+        let standardDefaults = try #require(TestUserDefaults.suite(standardSuite))
+        let currentDefaults = try #require(TestUserDefaults.suite(currentSuite))
+        let legacyDefaults = try #require(TestUserDefaults.suite(legacySuite))
+        standardDefaults.removePersistentDomain(forName: TestUserDefaults.domain(standardSuite))
+        currentDefaults.removePersistentDomain(forName: TestUserDefaults.domain(currentSuite))
+        legacyDefaults.removePersistentDomain(forName: TestUserDefaults.domain(legacySuite))
 
         currentDefaults.set(false, forKey: "debugDisableKeychainAccess")
         currentDefaults.set(UsageProvider.codex.rawValue, forKey: "widgetSelectedProvider")

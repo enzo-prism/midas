@@ -40,8 +40,8 @@ struct MidasOnboardingTests {
 
     @Test @MainActor func cleanPreferencesAndDeferredProgressSurviveRelaunch() throws {
         let suite = "MidasOnboarding-" + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let clean = PreferencesSelection(onboardingDefaults: defaults)
         #expect(!clean.spendSetupPending)
         #expect(clean.spendSetupStep == .services)

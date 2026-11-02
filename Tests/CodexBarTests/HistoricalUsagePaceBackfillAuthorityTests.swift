@@ -288,8 +288,8 @@ extension HistoricalUsagePaceTests {
     @Test
     func `usage store falls back to linear when history disabled or insufficient`() throws {
         let suite = "HistoricalUsagePaceTests-usage-store"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

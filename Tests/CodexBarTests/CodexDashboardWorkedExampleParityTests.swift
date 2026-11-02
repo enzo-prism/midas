@@ -382,8 +382,8 @@ struct CodexDashboardWorkedExampleParityTests {
     }
 
     private func makeAppStore(suite: String) -> UsageStore {
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = TestUserDefaults.suite(suite)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

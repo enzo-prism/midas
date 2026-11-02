@@ -173,7 +173,7 @@ private final class MigrationDomainTestDefaults: UserDefaults, @unchecked Sendab
     init?(testSuiteName: String) {
         guard testSuiteName.hasPrefix("MidasIdentityMigrationTests-") else { return nil }
         self.testSuiteName = testSuiteName
-        super.init(suiteName: testSuiteName)
+        super.init(suiteName: TestUserDefaults.domain(testSuiteName))
     }
 
     override func persistentDomain(forName domainName: String) -> [String: Any]? {
@@ -188,7 +188,7 @@ private final class MigrationDomainTestDefaults: UserDefaults, @unchecked Sendab
         if domainName == self.testSuiteName {
             // Migration-version flags use the isolated suite's ordinary key API.
             // Only this constructor-pinned test suite may reach CFPreferences.
-            super.removePersistentDomain(forName: self.testSuiteName)
+            super.removePersistentDomain(forName: TestUserDefaults.domain(self.testSuiteName))
         } else {
             _ = self.domainLock.withLock { self.domains.removeValue(forKey: domainName) }
         }

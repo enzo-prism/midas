@@ -211,8 +211,8 @@ struct ProviderSettingsDescriptorTests {
     }
 
     private func makeSettingsFixture(suite: String) throws -> ProviderSettingsFixture {
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

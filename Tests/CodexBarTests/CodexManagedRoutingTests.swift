@@ -766,8 +766,8 @@ struct CodexManagedRoutingTests {
     }
 
     private func makeSettingsStore(suite: String) -> SettingsStore {
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = TestUserDefaults.suite(suite)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         return SettingsStore(
             userDefaults: defaults,

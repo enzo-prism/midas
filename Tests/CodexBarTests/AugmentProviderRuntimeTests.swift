@@ -9,8 +9,8 @@ struct AugmentProviderRuntimeTests {
     @Test
     func `repeated stop only reports a running keepalive once`() throws {
         let suite = "AugmentProviderRuntimeTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite),

@@ -44,8 +44,8 @@ struct MidasCodexEstimateTests {
 
     @Test func migrationPreservesExplicitChoices() throws {
         let suite = "MidasCodexEstimate-" + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         #expect(MidasCodexEstimateMode.load(from: defaults) == .automatic)
         defaults.set(
             0.75,

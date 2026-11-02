@@ -629,9 +629,9 @@ struct MidasUsageSyncCoordinatorTests {
         try await mini.connect(folder: folder)
         await mini.syncNow()
         let oldID = first.defaults.string(forKey: "midasUsageSyncDeviceID")
-        second.defaults.setPersistentDomain(
-            first.defaults.persistentDomain(forName: first.suite) ?? [:],
-            forName: second.suite)
+        for (key, value) in first.defaults.persistentDomain(forName: TestUserDefaults.domain(first.suite)) ?? [:] {
+            second.defaults.set(value, forKey: key)
+        }
         try FileManager.default.copyItem(at: first.cache, to: second.cache)
         let notebook = second.coordinator(
             restore: true,
@@ -736,7 +736,7 @@ struct MidasUsageSyncCoordinatorTests {
 
         init() throws {
             self.suite = "MidasUsageSyncCoordinatorTests-" + UUID().uuidString
-            self.defaults = try #require(UserDefaults(suiteName: self.suite))
+            self.defaults = try #require(TestUserDefaults.suite(self.suite))
             guard let path = Darwin.realpath(FileManager.default.temporaryDirectory.path, nil) else {
                 throw POSIXError(.ENOENT)
             }
@@ -796,7 +796,7 @@ struct MidasUsageSyncCoordinatorTests {
         }
 
         func cleanup() {
-            self.defaults.removePersistentDomain(forName: self.suite)
+            self.defaults.removePersistentDomain(forName: TestUserDefaults.domain(self.suite))
             try? FileManager.default.removeItem(at: self.directory)
         }
     }

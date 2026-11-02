@@ -9,8 +9,8 @@ struct DeepgramProviderTests {
     @Test
     func `deepgram field kinds and bindings`() throws {
         let suite = "DeepgramProviderTests-field-kinds"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         let configStore = testConfigStore(suiteName: suite)
         let settings = SettingsStore(
             userDefaults: defaults,

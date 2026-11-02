@@ -8,7 +8,7 @@ import Testing
 struct MidasMenuBarAccountRefreshTests {
     @Test func pinnedTokenAccountRefreshesWithoutTrackingAllOrChangingActiveAccount() throws {
         let (settings, defaults, suite, store) = try self.makeStore()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let accounts = self.tokenAccounts()
         #expect(!store.shouldFetchAllTokenAccounts(provider: .openai, accounts: accounts))
         settings.setMidasMenuBarAccountID(accounts[7].id.uuidString, for: .openai)
@@ -22,7 +22,7 @@ struct MidasMenuBarAccountRefreshTests {
 
     @Test func survivingPinnedTokenAccountKeepsRefreshing() throws {
         let (settings, defaults, suite, store) = try self.makeStore()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let account = self.tokenAccounts()[0]
         #expect(!store.shouldFetchAllTokenAccounts(provider: .openai, accounts: [account]))
         settings.setMidasMenuBarAccountID(account.id.uuidString, for: .openai)
@@ -33,7 +33,7 @@ struct MidasMenuBarAccountRefreshTests {
 
     @Test func survivingPinnedCodexAccountKeepsRefreshing() throws {
         let (settings, defaults, suite, store) = try self.makeStore()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         #expect(!store.shouldFetchCodexAccountSnapshots(accountCount: 1))
         settings.setMidasMenuBarAccountID("managed:fixture", for: .codex)
         #expect(store.shouldFetchCodexAccountSnapshots(accountCount: 1))
@@ -46,7 +46,7 @@ struct MidasMenuBarAccountRefreshTests {
 
     @Test func refreshLimitKeepsBothActiveAndPinnedTokenAccounts() throws {
         let (settings, defaults, suite, store) = try self.makeStore()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let accounts = self.tokenAccounts()
         settings.setMidasMenuBarAccountID(accounts[7].id.uuidString, for: .openai)
         let limited = store.limitedTokenAccounts(accounts, selected: accounts[6], provider: .openai)
@@ -58,7 +58,7 @@ struct MidasMenuBarAccountRefreshTests {
 
     @Test func refreshLimitKeepsBothActiveAndPinnedCodexAccounts() throws {
         let (settings, defaults, suite, store) = try self.makeStore()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let accounts = (0..<8).map { index in
             CodexVisibleAccount(
                 id: "fixture-\(index)",
@@ -88,7 +88,7 @@ struct MidasMenuBarAccountRefreshTests {
 
     private func makeStore() throws -> (SettingsStore, UserDefaults, String, UsageStore) {
         let suite = "MidasMenuBarAccountRefreshTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
+        let defaults = try #require(TestUserDefaults.suite(suite))
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite, reset: false),

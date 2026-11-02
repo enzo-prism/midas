@@ -6,8 +6,8 @@ import Testing
 @MainActor
 struct UsageStoreSessionQuotaTransitionTests {
     private func makeSettings(suiteName: String) -> SettingsStore {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
+        let defaults = TestUserDefaults.suite(suiteName)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suiteName))
         return SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suiteName),

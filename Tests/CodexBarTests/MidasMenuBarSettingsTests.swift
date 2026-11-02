@@ -9,7 +9,7 @@ import Testing
 struct MidasMenuBarSettingsTests {
     @Test func defaultsChooseLedgerWithoutChangingLegacyPreferences() throws {
         let (settings, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         #expect(settings.midasMenuBarMode == .ledger)
         #expect(settings.midasMenuBarFocusProvider == .codex)
         #expect(!settings.midasMenuBarHideSpend)
@@ -21,7 +21,7 @@ struct MidasMenuBarSettingsTests {
 
     @Test func allPreferencesPersistAndReload() throws {
         let (settings, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         settings.midasTrackAllAccounts = true
         settings.midasSpendPeriodSelection = "2026-08"
         settings.midasAccountAliases = ["codex:fixture": "Personal"]
@@ -42,7 +42,7 @@ struct MidasMenuBarSettingsTests {
 
     @Test func menuBarAccountSelectionPersistsIndependentlyOfAuthenticationAndTracking() throws {
         let (settings, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let activeSource = settings.codexActiveSource
         let tracksAll = settings.midasTrackAllAccounts
         settings.setMidasMenuBarAccountID("business", for: .codex)
@@ -60,7 +60,7 @@ struct MidasMenuBarSettingsTests {
 
     @Test func menuBarAccountSelectionParticipatesInMenuObservation() throws {
         let (settings, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let flag = ObservationFlag()
         withObservationTracking {
             _ = settings.menuObservationToken
@@ -73,7 +73,7 @@ struct MidasMenuBarSettingsTests {
 
     @Test func invalidStoredValuesHaveSafeDefaults() throws {
         let (_, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         defaults.set("future-style", forKey: "midasMenuBarMode")
         defaults.set("missing-provider", forKey: "midasMenuBarFocusProvider")
         let reloaded = self.store(defaults: defaults, suite: suite)
@@ -83,7 +83,7 @@ struct MidasMenuBarSettingsTests {
 
     @Test func preferencesParticipateInObservation() throws {
         let (settings, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let flag = ObservationFlag()
         withObservationTracking {
             _ = settings.midasMenuBarMode
@@ -105,8 +105,8 @@ struct MidasMenuBarSettingsTests {
     @Test func orbitMigrationPromotesNewAndLedgerMidasDefaultsOnlyOnce() throws {
         for initial in [nil, "ledger"] as [String?] {
             let suite = "MidasOrbitMigration-\(UUID().uuidString)"
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defer { defaults.removePersistentDomain(forName: suite) }
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
             if let initial { defaults.set(initial, forKey: "midasMenuBarMode") }
             defaults.set("meta", forKey: "midasMenuBarFocusProvider")
             #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: true) == .orbit)
@@ -119,8 +119,8 @@ struct MidasMenuBarSettingsTests {
     @Test func orbitMigrationPreservesExplicitAlternativeModes() throws {
         for initial in [MidasMenuBarMode.focus, .constellation, .legacy, .orbit] {
             let suite = "MidasOrbitPreservation-\(UUID().uuidString)"
-            let defaults = try #require(UserDefaults(suiteName: suite))
-            defer { defaults.removePersistentDomain(forName: suite) }
+            let defaults = try #require(TestUserDefaults.suite(suite))
+            defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
             defaults.set(initial.rawValue, forKey: "midasMenuBarMode")
             #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: true) == initial)
             #expect(defaults.bool(forKey: "midasMenuBarOrbitMigrationCompleted"))
@@ -129,8 +129,8 @@ struct MidasMenuBarSettingsTests {
 
     @Test func nonMidasLaunchDoesNotConsumeOrbitMigration() throws {
         let suite = "MidasOrbitOtherBundle-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: false) == .ledger)
         #expect(!defaults.bool(forKey: "midasMenuBarOrbitMigrationCompleted"))
         #expect(SettingsStore.loadMidasMenuBarMode(userDefaults: defaults, isMidasApp: true) == .orbit)
@@ -138,7 +138,7 @@ struct MidasMenuBarSettingsTests {
 
     private func makeSettings() throws -> (SettingsStore, UserDefaults, String) {
         let suite = "MidasMenuBarSettingsTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
+        let defaults = try #require(TestUserDefaults.suite(suite))
         return (self.store(defaults: defaults, suite: suite), defaults, suite)
     }
 
@@ -171,7 +171,7 @@ struct MidasMenuBarSettingsTests {
 extension MidasMenuBarSettingsTests {
     @Test func selectingManagedCodexAccountPreservesLocalHistoryScope() throws {
         let (settings, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let account = ManagedCodexAccount(
             id: UUID(),
             email: "managed@example.com",
@@ -219,7 +219,7 @@ extension MidasMenuBarSettingsTests {
 
     @Test func trackingAllAccountsDoesNotDependOnMenuLayout() throws {
         let (settings, defaults, suite) = try self.makeSettings()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         settings.multiAccountMenuLayout = .segmented
         settings.midasTrackAllAccounts = true
         let store = UsageStore(

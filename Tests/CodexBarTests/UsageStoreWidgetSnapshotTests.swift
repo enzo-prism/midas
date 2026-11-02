@@ -8,8 +8,8 @@ struct UsageStoreWidgetSnapshotTests {
     @Test
     func `widget snapshot includes antigravity tertiary usage row`() async throws {
         let suite = "UsageStoreWidgetSnapshotTests-antigravity-tertiary"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,
@@ -161,8 +161,8 @@ struct UsageStoreWidgetSnapshotTests {
     }
 
     private static func makeStore(suite: String) throws -> (UsageStore, SettingsStore) {
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,

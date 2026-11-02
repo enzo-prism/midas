@@ -189,8 +189,8 @@ struct MenuBarVisibilityWatcherTests {
 
     @Test
     func `guidance shows once then repeats after a day`() throws {
-        let defaults = try #require(UserDefaults(suiteName: "MenuBarVisibilityWatcherTests"))
-        defaults.removePersistentDomain(forName: "MenuBarVisibilityWatcherTests")
+        let defaults = try #require(TestUserDefaults.suite("MenuBarVisibilityWatcherTests"))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain("MenuBarVisibilityWatcherTests"))
         let now = Date(timeIntervalSince1970: 1000)
 
         #expect(MenuBarVisibilityWatcher.shouldShowGuidance(defaults: defaults, now: now))

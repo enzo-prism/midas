@@ -9,8 +9,8 @@ import Testing
 struct CodexAccountMenuDisplaySnapshotTests {
     private func makeSettings() -> SettingsStore {
         let suite = "CodexAccountMenuDisplaySnapshotTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = TestUserDefaults.suite(suite)!
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
         defaults.set(true, forKey: "providerDetectionCompleted")
         let settings = SettingsStore(
             userDefaults: defaults,

@@ -8,8 +8,8 @@ struct MenuDescriptorAntigravityTests {
     @Test
     func `antigravity menu does not add unavailable notes for missing families`() throws {
         let suite = "MenuDescriptorAntigravityTests-missing-gemini"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite))
 
         let settings = SettingsStore(
             userDefaults: defaults,

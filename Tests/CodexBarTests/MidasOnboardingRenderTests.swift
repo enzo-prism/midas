@@ -11,8 +11,8 @@ struct MidasOnboardingRenderTests {
         guard let output = ProcessInfo.processInfo.environment["MIDAS_ONBOARDING_PREVIEW_OUTPUT"] else { return }
         try FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
         let suite = "MidasOnboardingRender-" + UUID().uuidString
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
         let settings = SettingsStore(
             userDefaults: defaults,
             configStore: testConfigStore(suiteName: suite, reset: false),
