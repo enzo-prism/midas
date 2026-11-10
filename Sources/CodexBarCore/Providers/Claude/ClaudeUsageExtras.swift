@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 /// Extra facts Claude's usage response carries beside the limit windows: saved limit resets,
