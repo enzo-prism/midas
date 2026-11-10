@@ -54,6 +54,12 @@ enum CLIRenderer {
             useColor: context.useColor,
             now: now,
             lines: &lines)
+        self.appendClaudeExtrasLines(
+            provider: provider,
+            snapshot: snapshot,
+            useColor: context.useColor,
+            now: now,
+            lines: &lines)
         self.appendIdentityAndNotes(
             provider: provider,
             snapshot: snapshot,
@@ -263,6 +269,31 @@ enum CLIRenderer {
                 detail += " — \(title)"
             }
             lines.append(self.subtleLine(detail, useColor: useColor))
+        }
+    }
+
+    /// Claude's saved limit resets, usage-credit state and weekly breakdowns.
+    private static func appendClaudeExtrasLines(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        now: Date,
+        lines: inout [String])
+    {
+        guard provider == .claude, let extras = snapshot.claudeUsageExtras else { return }
+        if let resets = extras.limitResets, resets.eligible || !resets.grants.isEmpty {
+            lines.append(self.labelValueLine(
+                "Limit Resets",
+                value: ClaudeUsageExtrasFormatting.limitResetsCountText(resets, now: now),
+                useColor: useColor))
+            if resets.availableCount(at: now) > 0 {
+                lines.append(self.subtleLine(
+                    ClaudeUsageExtrasFormatting.limitResetsHelpText(resets, now: now),
+                    useColor: useColor))
+            }
+        }
+        for note in ClaudeUsageExtrasFormatting.noteLines(extras) {
+            lines.append(self.subtleLine(note, useColor: useColor))
         }
     }
 

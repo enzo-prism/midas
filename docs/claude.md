@@ -92,6 +92,11 @@ Admin API key setup:
     `is_active` only marks Claude's headline row, so it is not a filter. Surface-scoped rows
     (`scope.surface`) and generic `All models` scopes stay out; the latter stay in the main weekly row.
     The web API (`claude.ai/api/organizations/{org}/usage`) returns the same `limits[]` shape.
+  - Both usage requests add `?cedar_ember=1`, which asks for saved limit resets (`cedar_ember.grants[]`:
+    `resets_left`, `starts_at`, `ends_at`, `clears`, `paused`, `usable_now`). The opt-in is undocumented; a
+    rejected request is retried once without it. `ClaudeUsageExtrasParser` also reads `spend` / `extra_usage`
+    (usage-credit state), `seven_day_breakdown` (usage by product) and `weekly_scoped_shares`. Saved resets
+    are live-only and are never written to caches or sync.
   - Midas Air shows only the 5-hour and total weekly limits in the overview. Model-only weekly
     windows remain in provider details as "<Model> weekly limit". The Orbit ring uses total weekly
     remaining capacity, with an unknown ring when that reading is missing.

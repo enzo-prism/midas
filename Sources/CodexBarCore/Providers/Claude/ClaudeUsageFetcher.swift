@@ -20,6 +20,8 @@ public struct ClaudeUsageSnapshot: Sendable {
     public let opus: RateWindow?
     public let extraRateWindows: [NamedRateWindow]
     public let providerCost: ProviderCostSnapshot?
+    /// Saved limit resets, usage-credit state and weekly breakdowns; nil for sources that cannot report them.
+    public let extras: ClaudeUsageExtras?
     public let updatedAt: Date
     public let accountEmail: String?
     public let accountOrganization: String?
@@ -33,12 +35,14 @@ public struct ClaudeUsageSnapshot: Sendable {
         opus: RateWindow?,
         extraRateWindows: [NamedRateWindow] = [],
         providerCost: ProviderCostSnapshot? = nil,
+        extras: ClaudeUsageExtras? = nil,
         updatedAt: Date,
         accountEmail: String?,
         accountOrganization: String?,
         loginMethod: String?,
         rawText: String?)
     {
+        self.extras = extras
         self.primary = primary
         self.primaryWindowKind = primaryWindowKind
         self.secondary = secondary
@@ -971,6 +975,7 @@ extension ClaudeUsageFetcher {
                     opus: nil,
                     extraRateWindows: Self.oauthExtraRateWindows(from: usage),
                     providerCost: providerCost,
+                    extras: usage.extras,
                     updatedAt: Date(),
                     accountEmail: nil,
                     accountOrganization: nil,
@@ -991,6 +996,7 @@ extension ClaudeUsageFetcher {
             opus: modelSpecific,
             extraRateWindows: extraRateWindows,
             providerCost: providerCost,
+            extras: usage.extras,
             updatedAt: Date(),
             accountEmail: nil,
             accountOrganization: nil,
@@ -1172,6 +1178,7 @@ extension ClaudeUsageFetcher {
             opus: opus,
             extraRateWindows: webData.extraRateWindows,
             providerCost: webData.extraUsageCost,
+            extras: webData.extras,
             updatedAt: Date(),
             accountEmail: webData.accountEmail,
             accountOrganization: webData.accountOrganization,
@@ -1320,7 +1327,10 @@ extension ClaudeUsageFetcher {
                 primary: snapshot.extraRateWindows,
                 web: webData.extraRateWindows)
             let mergedProviderCost = snapshot.providerCost ?? webData.extraUsageCost
-            if mergedProviderCost != snapshot.providerCost || mergedExtraRateWindows != snapshot.extraRateWindows {
+            let mergedExtras = snapshot.extras ?? webData.extras
+            if mergedProviderCost != snapshot.providerCost || mergedExtraRateWindows != snapshot.extraRateWindows
+                || mergedExtras != snapshot.extras
+            {
                 return ClaudeUsageSnapshot(
                     primary: snapshot.primary,
                     primaryWindowKind: snapshot.primaryWindowKind,
@@ -1328,6 +1338,7 @@ extension ClaudeUsageFetcher {
                     opus: snapshot.opus,
                     extraRateWindows: mergedExtraRateWindows,
                     providerCost: mergedProviderCost,
+                    extras: mergedExtras,
                     updatedAt: snapshot.updatedAt,
                     accountEmail: snapshot.accountEmail,
                     accountOrganization: snapshot.accountOrganization,

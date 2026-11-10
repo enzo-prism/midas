@@ -92,6 +92,8 @@ public enum ClaudeWebAPIFetcher {
         public let opusPercentUsed: Double?
         public let extraRateWindows: [NamedRateWindow]
         public let extraUsageCost: ProviderCostSnapshot?
+        /// Saved limit resets, usage-credit state and weekly breakdowns from the same response.
+        public let extras: ClaudeUsageExtras?
         public let accountOrganization: String?
         public let accountEmail: String?
         public let loginMethod: String?
@@ -105,10 +107,12 @@ public enum ClaudeWebAPIFetcher {
             opusPercentUsed: Double?,
             extraRateWindows: [NamedRateWindow],
             extraUsageCost: ProviderCostSnapshot?,
+            extras: ClaudeUsageExtras? = nil,
             accountOrganization: String?,
             accountEmail: String?,
             loginMethod: String?)
         {
+            self.extras = extras
             self.sessionPercentUsed = sessionPercentUsed
             self.sessionResetsAt = sessionResetsAt
             self.sessionLimitListed = sessionLimitListed
@@ -228,6 +232,7 @@ public enum ClaudeWebAPIFetcher {
                 opusPercentUsed: usage.opusPercentUsed,
                 extraRateWindows: usage.extraRateWindows,
                 extraUsageCost: extra,
+                extras: usage.extras,
                 accountOrganization: usage.accountOrganization,
                 accountEmail: usage.accountEmail,
                 loginMethod: usage.loginMethod)
@@ -242,6 +247,7 @@ public enum ClaudeWebAPIFetcher {
                 opusPercentUsed: usage.opusPercentUsed,
                 extraRateWindows: usage.extraRateWindows,
                 extraUsageCost: usage.extraUsageCost,
+                extras: usage.extras,
                 accountOrganization: usage.accountOrganization,
                 accountEmail: account.email,
                 loginMethod: account.loginMethod)
@@ -256,6 +262,7 @@ public enum ClaudeWebAPIFetcher {
                 opusPercentUsed: usage.opusPercentUsed,
                 extraRateWindows: usage.extraRateWindows,
                 extraUsageCost: usage.extraUsageCost,
+                extras: usage.extras,
                 accountOrganization: name,
                 accountEmail: usage.accountEmail,
                 loginMethod: usage.loginMethod)
@@ -459,29 +466,59 @@ public enum ClaudeWebAPIFetcher {
         sessionKey: String,
         logger: ((String) -> Void)? = nil) async throws -> WebUsageData
     {
-        let url = URL(string: "\(baseURL)/organizations/\(orgId)/usage")!
-        var request = URLRequest(url: url)
+        // Saved limit resets are only included when asked for. The opt-in is undocumented, so a
+        // response that rejects it is retried once without it; the usage windows matter more.
+        var result = try await self.requestUsageData(
+            orgId: orgId,
+            sessionKey: sessionKey,
+            includeLimitResets: true)
+        logger?("Usage API status: \(result.statusCode)")
+        if Self.shouldRetryWithoutLimitResets(statusCode: result.statusCode) {
+            result = try await self.requestUsageData(
+                orgId: orgId,
+                sessionKey: sessionKey,
+                includeLimitResets: false)
+            logger?("Usage API status without limit resets: \(result.statusCode)")
+        }
+
+        switch result.statusCode {
+        case 200:
+            return try self.parseUsageResponse(result.data, logger: logger)
+        case 401, 403:
+            throw FetchError.unauthorized
+        default:
+            throw FetchError.serverError(statusCode: result.statusCode)
+        }
+    }
+
+    /// A sign-in failure or rate limit is not caused by the opt-in; retrying would only double the request.
+    static func shouldRetryWithoutLimitResets(statusCode: Int) -> Bool {
+        switch statusCode {
+        case 200, 401, 429: false
+        default: true
+        }
+    }
+
+    private static func requestUsageData(
+        orgId: String,
+        sessionKey: String,
+        includeLimitResets: Bool) async throws -> (statusCode: Int, data: Data)
+    {
+        var components = URLComponents(string: "\(baseURL)/organizations/\(orgId)/usage")!
+        if includeLimitResets {
+            components.queryItems = [ClaudeUsageExtrasParser.limitResetsQueryItem]
+        }
+        var request = URLRequest(url: components.url!)
         request.setValue("sessionKey=\(sessionKey)", forHTTPHeaderField: "Cookie")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpMethod = "GET"
         request.timeoutInterval = 15
 
         let (data, response) = try await ProviderHTTPClient.shared.data(for: request)
-
         guard let httpResponse = response as? HTTPURLResponse else {
             throw FetchError.invalidResponse
         }
-
-        logger?("Usage API status: \(httpResponse.statusCode)")
-
-        switch httpResponse.statusCode {
-        case 200:
-            return try self.parseUsageResponse(data, logger: logger)
-        case 401, 403:
-            throw FetchError.unauthorized
-        default:
-            throw FetchError.serverError(statusCode: httpResponse.statusCode)
-        }
+        return (httpResponse.statusCode, data)
     }
 
     private static func parseUsageResponse(_ data: Data, logger: ((String) -> Void)? = nil) throws -> WebUsageData {
@@ -551,6 +588,7 @@ public enum ClaudeWebAPIFetcher {
             opusPercentUsed: opusPercent,
             extraRateWindows: extraRateParse.windows,
             extraUsageCost: extraUsageCost,
+            extras: ClaudeUsageExtrasParser.parse(json: json),
             accountOrganization: nil,
             accountEmail: nil,
             loginMethod: nil)

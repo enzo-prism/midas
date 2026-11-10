@@ -135,7 +135,7 @@ struct MidasProviderDetailView: View {
                 }
                 if let activity = self.usagePresentation.activitySummary { Text(activity) }
                 if self.accounts.count <= 1, let resets = self.usagePresentation.resetCreditsText {
-                    Text("Reset credits: \(resets)")
+                    Text("\(self.usagePresentation.resetCreditsLabel): \(resets)")
                     if let help = self.usagePresentation.resetCreditsHelp { Text(help) }
                 }
                 ForEach(Array(self.usagePresentation.notes.enumerated()), id: \.offset) { _, note in

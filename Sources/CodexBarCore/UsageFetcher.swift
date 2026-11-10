@@ -142,6 +142,9 @@ public struct UsageSnapshot: Codable, Sendable {
     /// On-demand Codex rate-limit reset credits (count + per-credit expiries). Codex only;
     /// nil for other providers and for non-OAuth Codex sources that cannot report it.
     public let codexResetCredits: CodexResetCreditsSnapshot?
+    /// Claude's saved limit resets, usage-credit state and weekly breakdowns. Claude only. Saved
+    /// resets are never persisted (see `ClaudeUsageExtras`), so a decoded snapshot has none.
+    public let claudeUsageExtras: ClaudeUsageExtras?
     public let subscriptionExpiresAt: Date?
     public let subscriptionRenewsAt: Date?
     public let updatedAt: Date
@@ -164,6 +167,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case metaActivity
         case metaUsage
         case codexResetCredits
+        case claudeUsageExtras
         case subscriptionExpiresAt
         case subscriptionRenewsAt
         case updatedAt
@@ -193,6 +197,7 @@ public struct UsageSnapshot: Codable, Sendable {
         metaActivity: MetaActivitySnapshot? = nil,
         metaUsage: MetaSubscriptionUsage? = nil,
         codexResetCredits: CodexResetCreditsSnapshot? = nil,
+        claudeUsageExtras: ClaudeUsageExtras? = nil,
         subscriptionExpiresAt: Date? = nil,
         subscriptionRenewsAt: Date? = nil,
         updatedAt: Date,
@@ -217,6 +222,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.metaActivity = metaActivity
         self.metaUsage = metaUsage
         self.codexResetCredits = codexResetCredits
+        self.claudeUsageExtras = claudeUsageExtras
         self.subscriptionExpiresAt = subscriptionExpiresAt
         self.subscriptionRenewsAt = subscriptionRenewsAt
         self.updatedAt = updatedAt
@@ -252,6 +258,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.codexResetCredits = try container.decodeIfPresent(
             CodexResetCreditsSnapshot.self,
             forKey: .codexResetCredits)
+        self.claudeUsageExtras = try? container.decodeIfPresent(ClaudeUsageExtras.self, forKey: .claudeUsageExtras)
         self.subscriptionExpiresAt = try container.decodeIfPresent(Date.self, forKey: .subscriptionExpiresAt)
         self.subscriptionRenewsAt = try container.decodeIfPresent(Date.self, forKey: .subscriptionRenewsAt)
         self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
@@ -292,6 +299,7 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.metaActivity, forKey: .metaActivity)
         try container.encodeIfPresent(self.metaUsage, forKey: .metaUsage)
         try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
+        try container.encodeIfPresent(self.claudeUsageExtras, forKey: .claudeUsageExtras)
         try container.encodeIfPresent(self.subscriptionExpiresAt, forKey: .subscriptionExpiresAt)
         try container.encodeIfPresent(self.subscriptionRenewsAt, forKey: .subscriptionRenewsAt)
         try container.encode(self.updatedAt, forKey: .updatedAt)
@@ -401,6 +409,7 @@ public struct UsageSnapshot: Codable, Sendable {
             metaActivity: self.metaActivity,
             metaUsage: self.metaUsage,
             codexResetCredits: self.codexResetCredits,
+            claudeUsageExtras: self.claudeUsageExtras,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,
             updatedAt: self.updatedAt,
@@ -429,6 +438,7 @@ public struct UsageSnapshot: Codable, Sendable {
             metaActivity: self.metaActivity,
             metaUsage: self.metaUsage,
             codexResetCredits: self.codexResetCredits,
+            claudeUsageExtras: self.claudeUsageExtras,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,
             updatedAt: self.updatedAt,
@@ -471,6 +481,7 @@ public struct UsageSnapshot: Codable, Sendable {
             metaActivity: self.metaActivity,
             metaUsage: self.metaUsage,
             codexResetCredits: self.codexResetCredits,
+            claudeUsageExtras: self.claudeUsageExtras,
             subscriptionExpiresAt: self.subscriptionExpiresAt,
             subscriptionRenewsAt: self.subscriptionRenewsAt,
             updatedAt: self.updatedAt,

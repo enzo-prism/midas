@@ -238,6 +238,11 @@ struct MidasSpendPresentation {
 
 /// Read-only adaptation of the existing, account-sanitized card and semantic quota projection.
 struct MidasProviderPresentation {
+    /// Each vendor's own name for its saved resets.
+    var resetCreditsLabel: String {
+        self.provider == .claude ? "Limit resets" : "Reset credits"
+    }
+
     let provider: UsageProvider
     let name: String
     let account: String
@@ -367,6 +372,8 @@ struct MidasProviderPresentation {
         let financialSummary = card?.providerCost?.spendLine ?? creditsText
         let resetCredits = card?.metrics.first { $0.id == "codex-reset-credits" }
         let scopedResets = provider == .codex ? snapshot?.codexResetCredits : nil
+        let claudeExtras = provider == .claude ? snapshot?.claudeUsageExtras : nil
+        let claudeResets = claudeExtras?.limitResets.flatMap { $0.eligible || !$0.grants.isEmpty ? $0 : nil }
         let unknownQuotaNotes: [String] = provider == .codex ? (card?.metrics.compactMap { metric in
             guard metric.id != "codex-reset-credits", let status = metric.statusText else { return nil }
             return "\(metric.title): \(status)"
@@ -390,13 +397,16 @@ struct MidasProviderPresentation {
             orbitQuota: MidasOrbitQuota.make(provider: provider, snapshot: snapshot),
             resetCreditsText: scopedResets
                 .map { CodexResetCreditFormatting.countText(snapshot: $0) }
+                ?? claudeResets.map { ClaudeUsageExtrasFormatting.limitResetsCountText($0) }
                 ?? resetCredits?.statusText,
             resetCreditsHelp: scopedResets.map { CodexResetCreditFormatting.tooltipText(snapshot: $0) }
+                ?? claudeResets.map { ClaudeUsageExtrasFormatting.limitResetsHelpText($0) }
                 ?? resetCredits?.helpText,
             freshness: freshness,
             error: error,
             placeholder: provider == .codex ? "Weekly usage unavailable" : card?.placeholder,
-            notes: (card?.usageNotes ?? []) + unknownQuotaNotes + providerNotes,
+            notes: (card?.usageNotes ?? []) + unknownQuotaNotes + providerNotes
+                + (claudeExtras.map(ClaudeUsageExtrasFormatting.noteLines) ?? []),
             financialSummary: financialSummary,
             financialLabel: card?.providerCost?.title ?? (creditsText == nil ? nil : "Credits"),
             activitySummary: provider == .meta
@@ -664,9 +674,12 @@ enum MidasOrbitQuota {
             }
         case .cursor:
             // Missing billing dates retain Cursor's canonical monthly-total contract.
-            // Explicit durations must describe a calendar month (allowing daylight saving changes).
+            // Explicit durations must describe a calendar month (allowing daylight saving changes),
+            // or the week of a unified plan's shared pool.
             if let total = snapshot.primary,
-               total.windowMinutes.map({ ((28 * 24 * 60 - 60)...(31 * 24 * 60 + 60)).contains($0) }) ?? true
+               total.windowMinutes.map({
+                   $0 == self.weekMinutes || ((28 * 24 * 60 - 60)...(31 * 24 * 60 + 60)).contains($0)
+               }) ?? true
             {
                 selected = ("primary", total)
             } else {
@@ -690,7 +703,9 @@ enum MidasOrbitQuota {
         let window = selected.window
         return MidasQuotaMetric(
             id: selected.id,
-            title: provider == .cursor || selected.id == self.codexMonthlyID ? "Monthly limit" : "Weekly limit",
+            title: selected.id == self.codexMonthlyID
+                || (provider == .cursor && window.windowMinutes != self.weekMinutes)
+                ? "Monthly limit" : "Weekly limit",
             remainingPercent: min(100, max(0, window.remainingPercent)),
             resetText: window.resetsAt.map {
                 "Resets \(UsageFormatter.resetCountdownDescription(from: $0, now: Date()))"

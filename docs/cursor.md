@@ -68,6 +68,24 @@ The storage detail lists measured paths and their sizes. CodexBar does not delet
 - Provider cost: Extra usage USD. A capped individual budget wins; team accounts without a user cap use the shared team on-demand budget.
 - Reset: billing cycle end date.
 
+## Unified plans (weekly pool)
+
+Plans introduced on 2026-10-12 (`membershipType` `unified_*`, and `isUnified: true` with
+`cursorPlanName` on `get-sand-usage-status`) include one weekly pool shared by Cursor, Grok Bot, and
+Bugbot. On these plans `usage-summary` still returns a monthly plan block, but it always reads 0% used.
+
+- The headline (**Total**, and the Orbit ring's **Weekly limit**) is the weekly pool: `usagePercent`
+  and `nextResetTimestampUtc` from `get-sand-usage-status`.
+- The **Cursor Models** pool row and the separate **Grok Bot** row are hidden: both repeat the weekly
+  figure, the first with a monthly reset that does not apply.
+- If the weekly reading is missing, the headline is unknown instead of the empty monthly plan. The
+  unavailable Grok Bot row stays so the last known reading can be kept.
+- The plan shows as "Cursor Ultra" (from `cursorPlanName`, or the `unified_` suffix).
+- Not yet shown: the per-product split (Grok Bot / Cursor / Bugbot) and additional-usage dollars,
+  which come from the newer dashboard at grok.com.
+
+Legacy monthly plans keep the behavior below.
+
 ## Dashboard pools (Cursor Models / Other Models / Grok Bot)
 
 The menu card and `codexbar usage --provider cursor` show usage-left rows in

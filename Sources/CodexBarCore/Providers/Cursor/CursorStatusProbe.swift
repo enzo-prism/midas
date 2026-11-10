@@ -397,145 +397,6 @@ public struct CursorPeriodUsage: Codable, Sendable {
     }
 }
 
-/// Grok Bot weekly window from `POST /api/dashboard/get-sand-usage-status` (body `{}`).
-/// Absent for plans without the Grok feature.
-public struct CursorSandUsageStatus: Codable, Sendable {
-    public let currentPeriodStart: String?
-    /// ISO-8601 weekly reset (e.g. the dashboard's "Resets Sep 8").
-    public let nextResetTimestampUtc: String?
-    /// Weekly usage percent (e.g. 91.27 means 91.27% used).
-    public let usagePercent: Double?
-    public let hasAvailableUsage: Bool?
-    public let hasNonZeroIncludedLimit: Bool?
-    public let grokPlanLabel: String?
-    /// Current responses report the allowance as `includedLimitZero` (true = no included allowance);
-    /// older ones used `hasNonZeroIncludedLimit`.
-    public let includedLimitZero: Bool?
-    /// ISO-8601 end of a Grok Bot trial allowance. A trial end is not a recurring weekly reset.
-    public let sandTrialExpiresAt: String?
-
-    public init(
-        currentPeriodStart: String? = nil,
-        nextResetTimestampUtc: String? = nil,
-        usagePercent: Double? = nil,
-        hasAvailableUsage: Bool? = nil,
-        hasNonZeroIncludedLimit: Bool? = nil,
-        grokPlanLabel: String? = nil,
-        includedLimitZero: Bool? = nil,
-        sandTrialExpiresAt: String? = nil)
-    {
-        self.currentPeriodStart = currentPeriodStart
-        self.nextResetTimestampUtc = nextResetTimestampUtc
-        self.usagePercent = usagePercent
-        self.hasAvailableUsage = hasAvailableUsage
-        self.hasNonZeroIncludedLimit = hasNonZeroIncludedLimit
-        self.grokPlanLabel = grokPlanLabel
-        self.includedLimitZero = includedLimitZero
-        self.sandTrialExpiresAt = sandTrialExpiresAt
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case currentPeriodStart
-        case nextResetTimestampUtc
-        case usagePercent
-        case hasAvailableUsage
-        case hasNonZeroIncludedLimit
-        case grokPlanLabel
-        case includedLimitZero
-        case sandTrialExpiresAt
-    }
-
-    /// Tolerates the shapes the dashboard has used: percents as numbers or numeric strings, dates as ISO-8601
-    /// strings or epoch numbers, and flags as booleans or 0/1. One odd field must not hide the whole row.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.currentPeriodStart = Self.lenientDate(container, .currentPeriodStart)
-        self.nextResetTimestampUtc = Self.lenientDate(container, .nextResetTimestampUtc)
-        self.usagePercent = Self.lenientNumber(container, .usagePercent)
-        self.hasAvailableUsage = Self.lenientBool(container, .hasAvailableUsage)
-        self.hasNonZeroIncludedLimit = Self.lenientBool(container, .hasNonZeroIncludedLimit)
-        self.grokPlanLabel = try? container.decodeIfPresent(String.self, forKey: .grokPlanLabel)
-        self.includedLimitZero = Self.lenientBool(container, .includedLimitZero)
-        self.sandTrialExpiresAt = Self.lenientDate(container, .sandTrialExpiresAt)
-    }
-
-    private static func lenientNumber(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> Double? {
-        if let value = try? container.decodeIfPresent(Double.self, forKey: key) { return value }
-        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
-            return Double(text.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        return nil
-    }
-
-    private static func lenientBool(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> Bool? {
-        if let value = try? container.decodeIfPresent(Bool.self, forKey: key) { return value }
-        if let value = try? container.decodeIfPresent(Int.self, forKey: key) { return value != 0 }
-        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
-            switch text.lowercased() {
-            case "true", "1": return true
-            case "false", "0": return false
-            default: return nil
-            }
-        }
-        return nil
-    }
-
-    /// Normalizes epoch seconds or milliseconds to the ISO-8601 text the rest of the model expects.
-    private static func lenientDate(_ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> String? {
-        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
-            guard let epoch = Double(text) else { return text }
-            return Self.isoString(epoch: epoch)
-        }
-        if let epoch = try? container.decodeIfPresent(Double.self, forKey: key) {
-            return Self.isoString(epoch: epoch)
-        }
-        return nil
-    }
-
-    private static func isoString(epoch: Double) -> String? {
-        guard epoch.isFinite, epoch > 0 else { return nil }
-        let seconds = epoch > 100_000_000_000 ? epoch / 1000 : epoch
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: Date(timeIntervalSince1970: seconds))
-    }
-
-    public struct Allowance: Equatable, Sendable {
-        public let usedPercent: Double
-        /// Weekly reset for an included allowance; nil for a trial.
-        public let resetsAt: Date?
-        /// End of a trial allowance; nil for an included allowance.
-        public let trialEndsAt: Date?
-    }
-
-    /// The Grok Bot allowance to show, or nil when the account has none.
-    ///
-    /// Included allowances keep their weekly reset. An unexpired trial shows its end date instead of a reset.
-    /// A zero included allowance with no live trial is hidden rather than drawn as an empty bar.
-    /// Payloads that report neither allowance field keep the previous behavior and show any usage percent.
-    /// When Cursor says no usage is left (`hasAvailableUsage: false`), the allowance is exhausted even if the
-    /// reported percent lags behind or is missing.
-    public func allowance(now: Date = Date()) -> Allowance? {
-        let exhausted = self.hasAvailableUsage == false
-        guard let reported = self.usagePercent ?? (exhausted ? 100 : nil), reported.isFinite else { return nil }
-        let used = exhausted ? 100 : max(0, min(100, reported))
-        let hasIncluded = self.includedLimitZero.map { !$0 } ?? self.hasNonZeroIncludedLimit
-        let trialEnd = Self.parseDate(self.sandTrialExpiresAt)
-        if hasIncluded == true || (hasIncluded == nil && trialEnd == nil) {
-            return Allowance(usedPercent: used, resetsAt: Self.parseDate(self.nextResetTimestampUtc), trialEndsAt: nil)
-        }
-        guard let trialEnd, trialEnd > now else { return nil }
-        return Allowance(usedPercent: used, resetsAt: nil, trialEndsAt: trialEnd)
-    }
-
-    private static func parseDate(_ text: String?) -> Date? {
-        guard let text, !text.isEmpty else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
-    }
-}
-
 // MARK: - Cursor Usage API Models (Legacy Request-Based Plans)
 
 /// Response from `/api/usage?user=ID` endpoint for legacy request-based plans.
@@ -638,6 +499,11 @@ public struct CursorStatusSnapshot: Sendable {
     /// Why Grok Bot usage could not be read on this refresh, when the account may have an allowance but Cursor
     /// did not answer. Nil when usage was read or the plan has no Grok Bot allowance.
     public let grokBotUnavailableReason: String?
+    /// True on a unified plan, whose included usage is one weekly pool shared by Cursor, Grok Bot and
+    /// Bugbot. The monthly plan figures are then vestigial (always 0% used).
+    public let isUnifiedWeeklyPlan: Bool
+    /// Display tier of a unified plan (e.g. "Ultra"), when the dashboard reports it.
+    public let unifiedPlanName: String?
 
     /// Whether this is a legacy request-based plan (vs token-based)
     public var isLegacyRequestPlan: Bool {
@@ -686,8 +552,12 @@ public struct CursorStatusSnapshot: Sendable {
         grokBotWeeklyUsedPercent: Double? = nil,
         grokBotWeeklyReset: Date? = nil,
         grokBotTrialEndsAt: Date? = nil,
-        grokBotUnavailableReason: String? = nil)
+        grokBotUnavailableReason: String? = nil,
+        isUnifiedWeeklyPlan: Bool = false,
+        unifiedPlanName: String? = nil)
     {
+        self.isUnifiedWeeklyPlan = isUnifiedWeeklyPlan
+        self.unifiedPlanName = unifiedPlanName
         self.planPercentUsed = planPercentUsed
         self.autoPercentUsed = autoPercentUsed
         self.apiPercentUsed = apiPercentUsed
@@ -735,11 +605,26 @@ public struct CursorStatusSnapshot: Sendable {
             start: self.billingCycleStart,
             end: self.billingCycleEnd)
 
-        let primary = RateWindow(
-            usedPercent: primaryUsedPercent,
-            windowMinutes: billingCycleWindowMinutes,
-            resetsAt: self.billingCycleEnd,
-            resetDescription: self.billingCycleEnd.map { Self.formatResetDate($0) })
+        // A unified plan's included usage is the weekly pool the dashboard calls "Weekly included
+        // usage". Its monthly plan block always reads 0% used, so showing that would claim a full
+        // allowance; without a weekly reading the limit is unknown instead.
+        let unifiedWeekly = self.isUnifiedWeeklyPlan && self.grokBotTrialEndsAt == nil
+            ? self.grokBotWeeklyUsedPercent : nil
+        let primary: RateWindow? = if let unifiedWeekly {
+            RateWindow(
+                usedPercent: unifiedWeekly,
+                windowMinutes: 7 * 24 * 60,
+                resetsAt: self.grokBotWeeklyReset,
+                resetDescription: self.grokBotWeeklyReset.map { Self.formatResetDate($0) })
+        } else if self.isUnifiedWeeklyPlan {
+            nil
+        } else {
+            RateWindow(
+                usedPercent: primaryUsedPercent,
+                windowMinutes: billingCycleWindowMinutes,
+                resetsAt: self.billingCycleEnd,
+                resetDescription: self.billingCycleEnd.map { Self.formatResetDate($0) })
+        }
 
         // Secondary/Tertiary (Auto and API bars) are intentionally dropped: the Cursor
         // tab shows Total plus the dashboard pool rows (Cursor Models, Other Models,
@@ -808,7 +693,9 @@ public struct CursorStatusSnapshot: Sendable {
         // Dashboard pool rows (cursor.com/dashboard/usage): usage-left for the Cursor Models
         // pool, the Other Models pool, and the Grok Bot weekly window. Each renders only when
         // its dashboard endpoint reported a percent, so other plans keep their layout untouched.
-        if let cursorPool = self.cursorModelsUsedPercent {
+        // On a unified plan this pool is the same weekly figure as the headline, with a monthly reset
+        // that does not apply.
+        if let cursorPool = self.cursorModelsUsedPercent, !self.isUnifiedWeeklyPlan {
             extraWindows = (extraWindows ?? []) + [NamedRateWindow(
                 id: "cursor-pool-models",
                 title: "Cursor Models",
@@ -828,7 +715,9 @@ public struct CursorStatusSnapshot: Sendable {
                     resetsAt: self.billingCycleEnd,
                     resetDescription: self.billingCycleEnd.map { Self.formatResetDate($0) }))]
         }
-        if let grokWeekly = self.grokBotWeeklyUsedPercent {
+        if unifiedWeekly != nil {
+            // The weekly pool is the headline; a separate Grok Bot row would repeat it.
+        } else if let grokWeekly = self.grokBotWeeklyUsedPercent {
             // Included allowances are weekly ("Weekly usage" on the dashboard). A trial allowance ends
             // once instead of resetting, so it carries its end date rather than a weekly reset.
             let trialEnd = self.grokBotTrialEndsAt
@@ -858,7 +747,8 @@ public struct CursorStatusSnapshot: Sendable {
             providerID: .cursor,
             accountEmail: self.accountEmail,
             accountOrganization: nil,
-            loginMethod: self.membershipType.map { Self.formatMembershipType($0) })
+            loginMethod: self.unifiedPlanName.flatMap { $0.isEmpty ? nil : "Cursor \($0)" }
+                ?? self.membershipType.map { Self.formatMembershipType($0) })
         return UsageSnapshot(
             primary: primary,
             secondary: secondary,
@@ -902,6 +792,9 @@ public struct CursorStatusSnapshot: Sendable {
             "Cursor Hobby"
         case "team":
             "Cursor Team"
+        case let unified where unified.hasPrefix("unified_"):
+            // `unified_ultra` is the 2026-10-12 plan family; the tier is the part people know.
+            "Cursor \(unified.dropFirst("unified_".count).capitalized)"
         default:
             "Cursor \(type.capitalized)"
         }
@@ -1774,7 +1667,18 @@ public struct CursorStatusProbe: Sendable {
             grokBotWeeklyUsedPercent: grokBotAllowance?.usedPercent,
             grokBotWeeklyReset: grokBotAllowance?.resetsAt,
             grokBotTrialEndsAt: grokBotAllowance?.trialEndsAt,
-            grokBotUnavailableReason: grokBotAllowance == nil && sandStatus == nil ? sandFailure : nil)
+            grokBotUnavailableReason: grokBotAllowance == nil && sandStatus == nil ? sandFailure : nil,
+            isUnifiedWeeklyPlan: Self.isUnifiedPlan(
+                membershipType: summary.membershipType,
+                sandStatus: sandStatus),
+            unifiedPlanName: sandStatus?.cursorPlanName)
+    }
+
+    /// The dashboard says so directly; the membership type (`unified_ultra`) covers a refresh where
+    /// the dashboard call failed.
+    static func isUnifiedPlan(membershipType: String?, sandStatus: CursorSandUsageStatus?) -> Bool {
+        if let flag = sandStatus?.isUnified { return flag }
+        return membershipType?.lowercased().hasPrefix("unified") ?? false
     }
 }
 

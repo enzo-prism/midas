@@ -1000,6 +1000,7 @@ extension UsageStore {
             deepgramUsage: snapshot.deepgramUsage,
             cursorRequests: snapshot.cursorRequests,
             codexResetCredits: snapshot.codexResetCredits,
+            claudeUsageExtras: snapshot.claudeUsageExtras,
             subscriptionExpiresAt: snapshot.subscriptionExpiresAt,
             subscriptionRenewsAt: snapshot.subscriptionRenewsAt,
             updatedAt: snapshot.updatedAt,

@@ -169,13 +169,17 @@ struct MidasOrbitQuotaTests {
                     28,
                     minutes: minutes)).orbitQuota?.remainingPercent == 72)
         }
-        for minutes in [300, 10080, 365 * 1440] {
+        for minutes in [300, 365 * 1440] {
             #expect(self.item(
                 .cursor,
                 primary: self.window(
                     28,
                     minutes: minutes)).orbitQuota == nil)
         }
+        // A unified plan's shared pool is a week, and is titled as one.
+        let weekly = self.item(.cursor, primary: self.window(28, minutes: 10080)).orbitQuota
+        #expect(weekly?.remainingPercent == 72)
+        #expect(weekly?.title == "Weekly limit")
     }
 
     @Test func knownZeroFullAndInvalidReadingsStayDistinctAcrossProviders() {

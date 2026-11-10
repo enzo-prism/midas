@@ -45,22 +45,35 @@ enum ClaudeOAuthUsageFetcher {
             throw ClaudeOAuthFetchError.rateLimited(retryAfter: blockedUntil)
         }
 
-        guard let url = URL(string: baseURL + usagePath) else {
+        guard let url = URL(string: baseURL + usagePath),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+            throw ClaudeOAuthFetchError.invalidResponse
+        }
+        // Saved limit resets are only included when asked for; see `shouldRetryWithoutLimitResets`.
+        components.queryItems = [ClaudeUsageExtrasParser.limitResetsQueryItem]
+        guard let optInURL = components.url else {
             throw ClaudeOAuthFetchError.invalidResponse
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 30
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // OAuth usage endpoint currently requires the beta header.
-        request.setValue(Self.betaHeader, forHTTPHeaderField: "anthropic-beta")
-        request.setValue(Self.claudeCodeUserAgent(), forHTTPHeaderField: "User-Agent")
+        func makeRequest(_ url: URL) -> URLRequest {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = 30
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            // OAuth usage endpoint currently requires the beta header.
+            request.setValue(Self.betaHeader, forHTTPHeaderField: "anthropic-beta")
+            request.setValue(Self.claudeCodeUserAgent(), forHTTPHeaderField: "User-Agent")
+            return request
+        }
 
         do {
-            let response = try await ProviderHTTPClient.shared.response(for: request)
+            var response = try await ProviderHTTPClient.shared.response(for: makeRequest(optInURL))
+            if Self.shouldRetryWithoutLimitResets(statusCode: response.statusCode) {
+                response = try await ProviderHTTPClient.shared.response(for: makeRequest(url))
+            }
             let data = response.data
             switch response.statusCode {
             case 200:
@@ -88,9 +101,21 @@ enum ClaudeOAuthUsageFetcher {
         }
     }
 
+    /// The opt-in is undocumented. A rejection of it is retried once without it so the usage windows
+    /// survive; a sign-in failure or rate limit is not caused by it and is surfaced as-is.
+    static func shouldRetryWithoutLimitResets(statusCode: Int) -> Bool {
+        switch statusCode {
+        case 400, 403, 404, 422: true
+        case 500...599: true
+        default: false
+        }
+    }
+
     static func decodeUsageResponse(_ data: Data) throws -> OAuthUsageResponse {
         let decoder = JSONDecoder()
-        return try decoder.decode(OAuthUsageResponse.self, from: data)
+        var usage = try decoder.decode(OAuthUsageResponse.self, from: data)
+        usage.extras = ClaudeUsageExtrasParser.parse(data: data)
+        return usage
     }
 
     static func parseISO8601Date(_ string: String?) -> Date? {
@@ -152,6 +177,8 @@ struct OAuthUsageResponse: Decodable {
     /// windows): a flat list of limit entries, each optionally naming the model it scopes
     /// to via `scope.model.display_name` (e.g. "Fable" during a promotional access window).
     let limits: [OAuthLimitEntry]?
+    /// Saved limit resets, usage-credit state and weekly breakdowns, parsed from the raw body.
+    var extras: ClaudeUsageExtras?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DynamicCodingKey.self)
