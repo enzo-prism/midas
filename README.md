@@ -47,6 +47,8 @@ report today.
   (`.jsonl.zst`) are read again, using the bundled zstd decoder (BSD license,
   `Sources/CZstdDecoder/LICENSE`).
 
+Release: [v0.50.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.50.0-midas.1).
+Apple Silicon, macOS 14 or later; Developer ID signed, Apple notarized, with signed Sparkle feeds.
 See [the changelog](CHANGELOG.md) and [release verification](docs/MIDAS_RELEASE.md).
 
 ## Midas 0.49.4: your accounts, your labels

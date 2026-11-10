@@ -4,6 +4,43 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.50.0 changes: Claude limit resets, Cursor weekly pool, Codex spend accuracy
+
+Claude's usage response carries saved limit resets when asked for them (`?cedar_ember=1`). Midas
+now shows how many are available, which limit each refills, and when they expire, plus
+usage-credit state, usage by product, and Fable's share of the week. Saved resets are never cached
+or synced. On Cursor's unified plans (2026-10-12) the shared weekly pool is the headline limit and
+Orbit ring; the monthly total, which always read 100% left, is hidden. Codex spend prices Fast
+usage from each rollout's `thread_settings_applied` tier and reads compressed rollouts
+(`.jsonl.zst`) with a bundled zstd decoder (facebook/zstd 1.5.7, BSD; its license ships in
+`Contents/Resources/ThirdPartyLicenses`). All changes merged as
+[PR #21](https://github.com/enzo-prism/midas/pull/21).
+
+Live readings before publication, on the Mac Studio: Claude showed 3 available resets with the
+kinds and expiries claude.ai listed; Cursor showed the weekly pool with the dashboard's reset;
+the 30-day Codex estimate moved from $919.04 to $1,415.55 (Fast pricing, then 26 compressed
+rollouts). Known gap: Codex subagent rollouts share their parent's `session_id` and are still
+dropped as already-seen sessions.
+
+The binary identifies source `6d8bf07c`, which `main` was fast-forwarded to. `make check` passed
+with zero violations. The full Swift suite ran 4,666 app tests and 29 collector tests on a heavily
+loaded machine (load average above 60); the only failures were the timing-sensitive
+`PathBuilderTests` and `StatusItemAnimationSignatureTests`, which passed in isolated reruns. Linux
+CLI builds and the usage-sync Python checks passed in CI; the macOS `lint-build-test` job was still
+queued when the release was published.
+
+Apple notarization `1fc6d903-b467-4a81-9371-d25e48b8c0f0` was Accepted. The app and dSYM share
+arm64 UUID `61B47F3E-0FDC-3CD0-8BF2-477B1CE03502`. Deep strict signing, stapling, Gatekeeper,
+archive signing, and both signed XML feeds passed. Archive SHA-256:
+`4d061cf18587bd19170f25638ece8cd8498fb253b755a7c8eb92df2fca2fd76a`.
+
+Downloaded draft assets, anonymous public assets, and both actual `/releases/latest/download/`
+feeds matched the prepared checksums before the website was updated. Published as
+[`v0.50.0-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.50.0-midas.1). The public
+bundle is installed and running at `/Applications/Midas.app` on the Mac Studio; its binary matches
+the public archive. Website source `0b4b652` reached production on `midas-ai.dev`. All 23 local and
+23 production browser checks passed, and the live download link retrieves the archive above.
+
 ## 0.49.5 changes: Claude Ultra limits and available Codex resets
 
 Verified Claude Ultra accounts (formerly Max 20x) have had no 5-hour limit since October 30,
@@ -154,14 +191,14 @@ a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.49.5**, build **137**, published as the latest stable release. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.50.0**, build **138**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.49.5**, build **137**, tagged
-`v0.49.5-midas.1`, superseding 0.49.4 (build 136, `v0.49.4-midas.1`), 0.49.3 (build 135, `v0.49.3-midas.1`), 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.50.0**, build **138**, tagged
+`v0.50.0-midas.1`, superseding 0.49.5 (build 137, `v0.49.5-midas.1`), 0.49.4 (build 136, `v0.49.4-midas.1`), 0.49.3 (build 135, `v0.49.3-midas.1`), 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),

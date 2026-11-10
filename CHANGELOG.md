@@ -21,7 +21,8 @@
   on claude.ai cannot reappear. Resets are redeemed in Claude under Settings › Usage, not in Midas.
 - Show Claude's usage-credit state (on or off and why, balance, auto-reload), this week's usage by
   product, and how much of the weekly limit Fable may use, in the provider's account details.
-Build 138.
+Build 138. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.50.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.50.0-midas.1).
 
 ## Midas 0.49.5 — November 1, 2026
 
