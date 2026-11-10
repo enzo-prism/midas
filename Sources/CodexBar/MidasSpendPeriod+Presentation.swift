@@ -67,7 +67,8 @@ extension StatusItemController {
         } else if result.provider == .codex, self.settings.midasCloudUsageEnabled {
             "OpenAI daily dates use UTC."
         } else if result.provider == .cursor {
-            "Cursor account history uses UTC days."
+            "Cursor account history uses UTC days. On unified plans, plan-included usage is valued at the "
+                + "current week’s rate per token, so earlier days are approximate."
         } else if original.isBilled {
             "Cost report days use UTC; the latest hours can still be settling."
         } else {

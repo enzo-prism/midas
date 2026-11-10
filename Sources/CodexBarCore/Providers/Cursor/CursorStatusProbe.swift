@@ -1099,13 +1099,28 @@ public struct CursorStatusProbe: Sendable {
             baseURL: self.baseURL,
             transport: self.urlSession,
             timeout: self.timeout)
+        let dailyFetcher = CursorDailyUsageFetcher(
+            baseURL: self.baseURL,
+            transport: self.urlSession,
+            timeout: self.timeout)
         func run(_ cookieHeader: String) async throws -> CursorCostReport {
-            let result = try await fetcher.fetchUsage(
+            // Unified plans report usage through the v2 daily feed; their usage-events list is no
+            // longer written to. Legacy plans, which the v2 feed does not serve, keep usage events.
+            let v2Result = try await dailyFetcher.fetchUsage(
                 cookieHeader: cookieHeader,
                 since: since,
                 until: until,
-                calendar: calendar,
                 logger: logger)
+            let result: CursorCostFetchResult = if let v2Result {
+                v2Result
+            } else {
+                try await fetcher.fetchUsage(
+                    cookieHeader: cookieHeader,
+                    since: since,
+                    until: until,
+                    calendar: calendar,
+                    logger: logger)
+            }
             // The session is resolved independently of the status fetch, so record whose history this is.
             // Best effort: an unknown account is never matched against, or cached for, a known one.
             let accountEmail = try? await self.fetchUserInfo(cookieHeader: cookieHeader).email

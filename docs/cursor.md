@@ -131,6 +131,30 @@ is involved. Requires a Cursor web session (browser cookies or manual header);
 with cookies off it explains how to enable them. Included in the
 multi-provider TOTAL at face value.
 
+## Spend on unified plans (v2 daily feed)
+
+Unified plans stopped writing to `get-filtered-usage-events` on 2026-10-13, so Midas reads the
+endpoints the dashboard now uses (`CursorDailyUsageFetcher`):
+
+- `GET /api/dashboard/v2/usage-status?scope=user`: `weeklyIncludedUsage` (`usedCents`, `budgetCents`,
+  `periodStart`, `resetsAt`) and this month's billed additional usage.
+- `POST /api/dashboard/v2/query-daily-usage` (`scope: user`, ISO `startTime`/`endTime`,
+  `groupBy: ["product"]`): per UTC day and product, `tokens`, `includedTokens`, and `contractedCost`
+  (what Cursor billed).
+
+Tokens and billed cost are exact. Plan-included usage has a dollar value only for the current week,
+so each day's included tokens are valued at **this week's value per included token**
+(`usedCents` divided by the included tokens since `periodStart`; the day the week began counts for
+the share after the start time). Earlier days are therefore approximate: a different model or cache
+mix that week would have had a different rate. A week needs at least 1M included tokens and $0.25 of
+included value before its rate is used; until then the last observed rate
+(`cursor-included-rate-v1.json`, kept 21 days) applies. With no rate at all, days with included usage
+have no dollar value and the total shows as partial. `meteredCostUSD` is the billed amount only.
+
+The daily rows are per product (`cursor`, `grok-bot`, `bugbot`), not per model: the v2 feed has no
+model dimension. Accounts the v2 feed does not serve (no `weeklyIncludedUsage`) keep the usage-events
+path below. A 401 from the v2 feed is a sign-in failure, as on the other endpoints.
+
 ## Midas spend estimate reliability
 
 - `CursorUsageEventsFetcher` re-reads the whole window (3 attempts in total) when

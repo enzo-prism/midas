@@ -32,6 +32,13 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.50.1: Cursor spend on unified plans
+
+Version **0.50.1, build 139** fixes Cursor spend for accounts on Cursor's unified plans, where the
+30-day figure had fallen to a few cents. Midas reads Cursor's daily usage feed: tokens and billed
+cost are exact, and plan-included usage is valued at the current week's rate per token, so earlier
+days are approximate. See [docs/cursor.md](docs/cursor.md).
+
 ## Midas 0.50.0: closer to what each vendor reports
 
 Version **0.50.0, build 138** brings the readings in line with what Claude, Cursor, and Codex

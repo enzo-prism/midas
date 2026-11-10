@@ -1,5 +1,14 @@
 # Changelog
 
+## Midas 0.50.1 — November 10, 2026
+
+- Fix Cursor spend on unified plans. Cursor stopped writing these accounts' usage to the request
+  list Midas read, so the 30-day figure fell to a few cents. Midas now reads the dashboard's daily
+  usage feed: exact tokens and billed cost per day, with plan-included usage valued at the current
+  week's rate per token (an estimate for earlier days; see `docs/cursor.md`). Legacy plans are unchanged.
+
+Build 139.
+
 ## Midas 0.50.0 — November 10, 2026
 
 - Read Codex sessions that Codex has compressed in place (`.jsonl.zst`). Midas bundles the reference
