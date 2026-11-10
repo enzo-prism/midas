@@ -1,6 +1,29 @@
 # Changelog
 
-## Unreleased
+## Midas 0.50.0 — November 10, 2026
+
+- Read Codex sessions that Codex has compressed in place (`.jsonl.zst`). Midas bundles the reference
+  zstd decoder (facebook/zstd 1.5.7, BSD) because macOS has none, decompresses an archive to a private
+  temporary file only while parsing it, and keeps no plain copy. A rollout present in both forms is
+  counted once, from the plain file; an unreadable archive contributes nothing instead of failing the scan.
+- Price Codex **Fast** usage from the session files. Each rollout records the service tier in its
+  `thread_settings_applied` events; Midas previously looked for it only in a Codex log database that
+  no longer carries it, so Fast requests were priced as standard. Models without built-in priority
+  rates (GPT-5.6 and GPT-6 families) use their Fast multiplier on the standard price.
+- Follow Cursor's unified plans (introduced October 12, 2026): the weekly included-usage pool shared
+  by Cursor, Grok Bot and Bugbot is now Cursor's headline limit and menu-bar ring, with its weekly
+  reset. The monthly plan total, which always read 100% left on these plans, and the duplicate pool
+  rows are no longer shown; a missing weekly reading shows as unknown. The plan reads
+  **Cursor Ultra** instead of `Unified_Ultra`. Legacy monthly plans are unchanged.
+- Show Claude's saved **limit resets**: how many are available, which limit each refills (5-hour,
+  weekly, or Fable), and when they expire. Midas asks the usage endpoint for them and falls back to the
+  plain request if that is rejected. Saved resets are never cached or synced, so a reset already used
+  on claude.ai cannot reappear. Resets are redeemed in Claude under Settings › Usage, not in Midas.
+- Show Claude's usage-credit state (on or off and why, balance, auto-reload), this week's usage by
+  product, and how much of the weekly limit Fable may use, in the provider's account details.
+Build 138.
+
+## Midas 0.49.5 — November 1, 2026
 
 - Follow Anthropic's October 30, 2026 plan change: Max 20x is now **Ultra**, and verified Ultra
   accounts have no 5-hour limit, only the weekly limits (all models and Fable). Midas now labels

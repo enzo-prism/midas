@@ -32,6 +32,23 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.50.0: closer to what each vendor reports
+
+Version **0.50.0, build 138** brings the readings in line with what Claude, Cursor, and Codex
+report today.
+
+- **Claude limit resets.** The Claude row shows saved limit resets (for example **3 available**),
+  which limit each one refills, and when they expire. Account details add usage-credit state,
+  this week's usage by product, and Fable's share of the weekly limit. Resets are redeemed in
+  Claude under Settings › Usage.
+- **Cursor weekly pool.** On Cursor's unified plans the shared weekly pool is the headline limit
+  and the menu-bar ring, with its weekly reset. Legacy monthly plans are unchanged.
+- **Codex spend.** Fast usage is priced at the Fast rate, and sessions that Codex has compressed
+  (`.jsonl.zst`) are read again, using the bundled zstd decoder (BSD license,
+  `Sources/CZstdDecoder/LICENSE`).
+
+See [the changelog](CHANGELOG.md) and [release verification](docs/MIDAS_RELEASE.md).
+
 ## Midas 0.49.4: your accounts, your labels
 
 Version **0.49.4, build 136** adds a permanent **Settings → Providers → Account labels** editor.
