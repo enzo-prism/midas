@@ -151,6 +151,12 @@ included value before its rate is used; until then the last observed rate
 (`cursor-included-rate-v1.json`, kept 21 days) applies. With no rate at all, days with included usage
 have no dollar value and the total shows as partial. `meteredCostUSD` is the billed amount only.
 
+The daily query accepts at most 31 days and intermittently answers 500 while it computes an uncached
+window, so Midas reads 30-day windows newest first, retries each up to three times, and stops once
+two consecutive windows are empty. If a unified account's daily data still cannot be read, the fetch
+fails (the last good figure is kept as last known) instead of falling back to the usage-events list,
+which would report almost nothing.
+
 The daily rows are per product (`cursor`, `grok-bot`, `bugbot`), not per model: the v2 feed has no
 model dimension. Accounts the v2 feed does not serve (no `weeklyIncludedUsage`) keep the usage-events
 path below. A 401 from the v2 feed is a sign-in failure, as on the other endpoints.

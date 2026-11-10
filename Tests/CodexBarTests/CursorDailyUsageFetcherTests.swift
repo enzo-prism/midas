@@ -5,6 +5,7 @@ import Testing
 struct CursorDailyUsageFetcherTests {
     /// 2026-11-12T12:00:00Z; the week began 2026-11-10T06:00:00Z.
     private static let now = ISO8601DateFormatter().date(from: "2026-11-12T12:00:00Z")!
+    private static let since = ISO8601DateFormatter().date(from: "2026-11-09T00:00:00Z")!
 
     private static let status = """
     {"availability":"available",
@@ -106,14 +107,14 @@ struct CursorDailyUsageFetcherTests {
             transport: Self.transport(status: (200, Self.status)),
             rateCacheRoot: root)
         let first = try #require(try await fetcher.fetchUsage(
-            cookieHeader: "session=test", since: nil, until: Self.now, now: Self.now))
+            cookieHeader: "session=test", since: Self.since, until: Self.now, now: Self.now))
         #expect(abs((first.daily.summary?.totalCostUSD ?? 0) - 33.75) < 1e-9)
 
         // Just after a reset the week has almost no usage, so no rate can be derived from it.
         let quiet = Self.status.replacingOccurrences(of: #""usedCents":1200"#, with: #""usedCents":3"#)
         let later = CursorDailyUsageFetcher(transport: Self.transport(status: (200, quiet)), rateCacheRoot: root)
         let second = try #require(try await later.fetchUsage(
-            cookieHeader: "session=test", since: nil, until: Self.now, now: Self.now))
+            cookieHeader: "session=test", since: Self.since, until: Self.now, now: Self.now))
         #expect(abs((second.daily.summary?.totalCostUSD ?? 0) - 33.75) < 1e-9)
 
         #expect(CursorIncludedRateCache.load(now: Self.now.addingTimeInterval(30 * 86400), cacheRoot: root) == nil)
@@ -127,22 +128,119 @@ struct CursorDailyUsageFetcherTests {
         for status in [(200, legacy), (404, "{}"), (500, "oops"), (200, "not json")] {
             let fetcher = CursorDailyUsageFetcher(transport: Self.transport(status: status), rateCacheRoot: root)
             let result = try await fetcher.fetchUsage(
-                cookieHeader: "session=test", since: nil, until: Self.now, now: Self.now)
+                cookieHeader: "session=test", since: Self.since, until: Self.now, now: Self.now)
             #expect(result == nil)
         }
-        let unavailableDaily = CursorDailyUsageFetcher(
+    }
+
+    @Test
+    func `a failed daily window is retried, and an unreadable one is an error not a fallback`() async throws {
+        let root = try Self.temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let attempts = Counter()
+        let flaky = ProviderHTTPTransportHandler { request in
+            let url = try #require(request.url)
+            let isDaily = url.path.hasSuffix("/v2/query-daily-usage")
+            let failing = isDaily ? await attempts.next() < 3 : false
+            let response = try #require(HTTPURLResponse(
+                url: url, statusCode: failing ? 500 : 200, httpVersion: nil, headerFields: nil))
+            let body = failing ? #"{"code":"internal"}"# : (isDaily ? Self.daily : Self.status)
+            return (Data(body.utf8), response)
+        }
+        var fetcher = CursorDailyUsageFetcher(transport: flaky, rateCacheRoot: root)
+        fetcher.retryDelay = 0
+        let result = try #require(try await fetcher.fetchUsage(
+            cookieHeader: "session=test", since: Self.since, until: Self.now, now: Self.now))
+        #expect(await attempts.value == 3)
+        #expect(abs((result.daily.summary?.totalCostUSD ?? 0) - 33.75) < 1e-9)
+
+        // A unified account never falls back to the usage-events list, which is no longer written to.
+        var broken = CursorDailyUsageFetcher(
             transport: Self.transport(status: (200, Self.status), daily: (500, "{}")),
             rateCacheRoot: root)
-        #expect(try await unavailableDaily.fetchUsage(
-            cookieHeader: "session=test", since: nil, until: Self.now, now: Self.now) == nil)
+        broken.retryDelay = 0
+        await #expect(throws: CursorStatusProbeError.self) {
+            try await broken.fetchUsage(
+                cookieHeader: "session=test", since: Self.since, until: Self.now, now: Self.now)
+        }
+    }
+
+    @Test
+    func `long history is read in windows Cursor accepts and stops at empty ones`() async throws {
+        let root = try Self.temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let windows = WindowLog()
+        let empty = #"{"availability":"available","series":[]}"#
+        let transport = ProviderHTTPTransportHandler { request in
+            let url = try #require(request.url)
+            var body = Self.status
+            if url.path.hasSuffix("/v2/query-daily-usage") {
+                let sent = try #require(request.httpBody)
+                let json = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: Any])
+                let start = try #require(json["startTime"] as? String)
+                let end = try #require(json["endTime"] as? String)
+                await windows.append(start: start, end: end)
+                #expect(json["scope"] as? String == "user")
+                #expect(json["groupBy"] as? [String] == ["product"])
+                // Only the newest window has usage.
+                body = end.hasPrefix("2026-11-13") ? Self.daily : empty
+            }
+            let response = try #require(HTTPURLResponse(
+                url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(body.utf8), response)
+        }
+        let fetcher = CursorDailyUsageFetcher(transport: transport, rateCacheRoot: root)
+        let result = try #require(try await fetcher.fetchUsage(
+            cookieHeader: "session=test", since: nil, until: Self.now, now: Self.now))
+
+        let spans = await windows.spans
+        // Newest first, 30 days each, and no further back once two windows are empty.
+        #expect(spans.map(\.end).first?.hasPrefix("2026-11-13") == true)
+        #expect(spans.count == 3)
+        #expect(spans.allSatisfy { $0.days <= 31 })
+        #expect(result.daily.summary?.totalTokens == 17_500_000)
     }
 
     @Test
     func `a rejected sign-in is reported, not treated as a legacy plan`() async throws {
         let fetcher = CursorDailyUsageFetcher(transport: Self.transport(status: (401, "{}")))
         await #expect(throws: CursorStatusProbeError.self) {
-            try await fetcher.fetchUsage(cookieHeader: "session=test", since: nil, until: Self.now, now: Self.now)
+            try await fetcher.fetchUsage(
+                cookieHeader: "session=test",
+                since: Self.since,
+                until: Self.now,
+                now: Self.now)
         }
+    }
+}
+
+private actor Counter {
+    private(set) var value = 0
+
+    func next() -> Int {
+        self.value += 1
+        return self.value
+    }
+}
+
+private actor WindowLog {
+    struct Span {
+        let start: String
+        let end: String
+
+        var days: Int {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            guard let from = formatter.date(from: self.start),
+                  let to = formatter.date(from: self.end) else { return 999 }
+            return Int((to.timeIntervalSince(from) / 86400).rounded())
+        }
+    }
+
+    private(set) var spans: [Span] = []
+
+    func append(start: String, end: String) {
+        self.spans.append(Span(start: start, end: end))
     }
 }
 

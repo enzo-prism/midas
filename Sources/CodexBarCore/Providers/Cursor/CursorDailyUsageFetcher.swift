@@ -52,6 +52,11 @@ struct CursorDailyUsageResponse: Decodable, Sendable {
 
         let dimensions: Dimensions?
         let points: [Point]?
+
+        init(product: String?, points: [Point]) {
+            self.dimensions = Dimensions(product: product)
+            self.points = points
+        }
     }
 
     struct Point: Decodable, Sendable {
@@ -67,6 +72,13 @@ struct CursorDailyUsageResponse: Decodable, Sendable {
             case includedTokens
         }
 
+        init(dayStartTime: Date?, contractedCost: Double?, tokens: Int?, includedTokens: Int?) {
+            self.dayStartTime = dayStartTime
+            self.contractedCost = contractedCost
+            self.tokens = tokens
+            self.includedTokens = includedTokens
+        }
+
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.dayStartTime = CursorV2Number.date(container, .dayStartTime)
@@ -80,6 +92,30 @@ struct CursorDailyUsageResponse: Decodable, Sendable {
     let series: [Series]?
     /// Products beyond `topN`, already summed by Cursor.
     let other: Series?
+
+    var hasUsage: Bool {
+        ((self.series ?? []) + [self.other].compactMap(\.self))
+            .contains { ($0.points ?? []).contains { ($0.tokens ?? 0) > 0 || ($0.contractedCost ?? 0) > 0 } }
+    }
+
+    /// One response covering several windows; Cursor serves at most 31 days per request.
+    static func merging(_ responses: [CursorDailyUsageResponse]) -> CursorDailyUsageResponse {
+        var byProduct: [String: [Point]] = [:]
+        var order: [String] = []
+        var other: [Point] = []
+        for response in responses {
+            for series in response.series ?? [] {
+                let name = series.dimensions?.product ?? "cursor"
+                if byProduct[name] == nil { order.append(name) }
+                byProduct[name, default: []].append(contentsOf: series.points ?? [])
+            }
+            other.append(contentsOf: response.other?.points ?? [])
+        }
+        return CursorDailyUsageResponse(
+            availability: "available",
+            series: order.map { Series(product: $0, points: byProduct[$0] ?? []) },
+            other: other.isEmpty ? nil : Series(product: nil, points: other))
+    }
 }
 
 /// Lenient decoding: Cursor serializes money as decimal strings and may switch number forms.
@@ -150,6 +186,14 @@ struct CursorDailyUsageFetcher: Sendable {
     var timeout: TimeInterval
     /// Where the fallback rate is kept; nil uses the Midas cache folder.
     var rateCacheRoot: URL?
+    /// Cursor's daily query fails intermittently with a 500 while it computes an uncached window.
+    var attemptsPerWindow = 3
+    var retryDelay: TimeInterval = 2
+
+    /// Cursor rejects windows longer than 31 days.
+    static let windowDays = 30
+    /// Stop reading older history after this many windows with no usage.
+    static let emptyWindowsBeforeStopping = 2
 
     /// A week needs this much included usage before its value per token is trusted.
     static let minimumRateTokens = 1_000_000
@@ -186,9 +230,14 @@ struct CursorDailyUsageFetcher: Sendable {
         let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: until ?? now)) ?? now
         let fallbackStart = calendar.date(byAdding: .day, value: -364, to: end) ?? end
         let start = calendar.startOfDay(for: since ?? fallbackStart)
-        guard let daily = try await self.fetchDaily(cookieHeader: cookieHeader, start: start, end: end),
-              daily.availability == "available"
-        else { return nil }
+        // This account is served by the v2 feed, so its usage-events list is no longer written to.
+        // A failed read must surface as an error (keeping the last good figure) and never fall back
+        // to that list, which would report almost nothing.
+        let daily = try await self.fetchDailyWindows(
+            cookieHeader: cookieHeader,
+            start: start,
+            end: end,
+            calendar: calendar)
 
         let observedRate = Self.includedRateUSDPerToken(status: status, daily: daily, now: now)
         if let observedRate {
@@ -222,6 +271,39 @@ struct CursorDailyUsageFetcher: Sendable {
         let groupBy = ["product"]
         let filters: [String: String] = [:]
         let topN = 20
+    }
+
+    /// Reads `start..<end` newest first in windows Cursor accepts, retrying each window, and stops
+    /// once older windows are empty.
+    private func fetchDailyWindows(
+        cookieHeader: String,
+        start: Date,
+        end: Date,
+        calendar: Calendar) async throws -> CursorDailyUsageResponse
+    {
+        var responses: [CursorDailyUsageResponse] = []
+        var windowEnd = end
+        var emptyWindows = 0
+        while windowEnd > start, emptyWindows < Self.emptyWindowsBeforeStopping {
+            let proposed = calendar.date(byAdding: .day, value: -Self.windowDays, to: windowEnd) ?? start
+            let windowStart = max(start, proposed)
+            var response: CursorDailyUsageResponse?
+            for attempt in 0..<max(1, self.attemptsPerWindow) {
+                if attempt > 0, self.retryDelay > 0 {
+                    try await Task.sleep(nanoseconds: UInt64(self.retryDelay * Double(attempt) * 1_000_000_000))
+                }
+                response = try await self.fetchDaily(cookieHeader: cookieHeader, start: windowStart, end: windowEnd)
+                if response?.availability == "available" { break }
+                response = nil
+            }
+            guard let response else {
+                throw CursorStatusProbeError.networkError("Cursor daily usage is temporarily unavailable")
+            }
+            emptyWindows = response.hasUsage ? 0 : emptyWindows + 1
+            responses.append(response)
+            windowEnd = windowStart
+        }
+        return CursorDailyUsageResponse.merging(responses)
     }
 
     private func fetchDaily(cookieHeader: String, start: Date, end: Date) async throws -> CursorDailyUsageResponse? {
