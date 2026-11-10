@@ -143,8 +143,10 @@ extension CostUsageScanner {
         var total: Double = 0
         var seen = false
         for row in rows {
-            guard let turnID = row.turnID, let priorityMetadata = priorityTurns[turnID] else { continue }
-            let pricedModel = Self.codexPriorityPricingModel(for: row, priorityMetadata: priorityMetadata)
+            let priorityMetadata = row.turnID.flatMap { priorityTurns[$0] }
+            guard priorityMetadata != nil || row.fast == true else { continue }
+            let pricedModel = priorityMetadata.map { Self.codexPriorityPricingModel(for: row, priorityMetadata: $0) }
+                ?? row.model
             guard let baseCost = CostUsagePricing.codexCostUSD(
                 model: pricedModel,
                 inputTokens: row.input,
@@ -152,11 +154,12 @@ extension CostUsageScanner {
                 outputTokens: row.output,
                 modelsDevCatalog: modelsDevCatalog,
                 modelsDevCacheRoot: modelsDevCacheRoot),
-                let priorityCost = CostUsagePricing.codexPriorityCostUSD(
+                let priorityCost = CostUsagePricing.codexFastCostUSD(
                     model: pricedModel,
                     inputTokens: row.input,
                     cachedInputTokens: row.cached,
-                    outputTokens: row.output)
+                    outputTokens: row.output,
+                    baseCost: baseCost)
             else { continue }
             total += max(priorityCost - baseCost, 0)
             seen = true
@@ -222,7 +225,7 @@ extension CostUsageScanner {
         for row in rows {
             let tokenCount = Self.boundedAdd(row.input, row.output)
             let priorityMetadata = row.turnID.flatMap { priorityTurns[$0] }
-            let isPriority = priorityMetadata != nil
+            let isPriority = priorityMetadata != nil || row.fast == true
             if isPriority {
                 breakdown.priorityTokens = Self.boundedAdd(breakdown.priorityTokens, tokenCount)
             } else {
@@ -238,11 +241,12 @@ extension CostUsageScanner {
                 outputTokens: row.output,
                 modelsDevCatalog: modelsDevCatalog,
                 modelsDevCacheRoot: modelsDevCacheRoot)
-            if isPriority, let priorityCost = CostUsagePricing.codexPriorityCostUSD(
+            if isPriority, let priorityCost = CostUsagePricing.codexFastCostUSD(
                 model: pricedModel,
                 inputTokens: row.input,
                 cachedInputTokens: row.cached,
-                outputTokens: row.output)
+                outputTokens: row.output,
+                baseCost: baseCost)
             {
                 breakdown.priorityCostUSD += max(priorityCost, baseCost ?? priorityCost)
                 breakdown.sawPriorityCost = true
@@ -270,6 +274,7 @@ extension CostUsageScanner {
         lastRawTotalsBaseline: CostUsageCodexTotals? = nil,
         hasDivergentTotals: Bool? = nil,
         lastCodexTurnID: String? = nil,
+        lastCodexFast: Bool? = nil,
         sessionId: String? = nil,
         forkedFromId: String? = nil,
         codexCostNanos: [String: [String: Int64]]? = nil,
@@ -295,6 +300,7 @@ extension CostUsageScanner {
             lastRawTotalsBaseline: lastRawTotalsBaseline,
             hasDivergentTotals: hasDivergentTotals,
             lastCodexTurnID: lastCodexTurnID,
+            lastCodexFast: lastCodexFast,
             sessionId: sessionId,
             forkedFromId: forkedFromId,
             codexCostNanos: codexCostNanos,
@@ -445,7 +451,7 @@ extension CostUsageScanner {
         modelsDevCatalog: ModelsDevCatalog?,
         modelsDevCacheRoot: URL?) -> [String: [String: Int64]]?
     {
-        guard !priorityTurns.isEmpty else { return nil }
+        guard !priorityTurns.isEmpty || rows.contains(where: { $0.fast == true }) else { return nil }
         let rowsByDayModel = Self.codexRowsByDayModel(rows: rows, range: range)
         var out: [String: [String: Int64]] = [:]
         for (day, models) in rowsByDayModel {
@@ -486,7 +492,7 @@ extension CostUsageScanner {
             let priorityMetadata = row.turnID.flatMap { priorityTurns[$0] }
             let pricedModel = priorityMetadata.map { Self.codexPriorityPricingModel(for: row, priorityMetadata: $0) }
                 ?? row.model
-            let isPriority = priorityMetadata != nil
+            let isPriority = priorityMetadata != nil || row.fast == true
 
             if isPriority {
                 priorityTokens[row.day, default: [:]][row.model] = Self.boundedAdd(
@@ -504,11 +510,12 @@ extension CostUsageScanner {
                 modelsDevCatalog: modelsDevCatalog,
                 modelsDevCacheRoot: modelsDevCacheRoot)
 
-            if isPriority, let priorityCost = CostUsagePricing.codexPriorityCostUSD(
+            if isPriority, let priorityCost = CostUsagePricing.codexFastCostUSD(
                 model: pricedModel,
                 inputTokens: row.input,
                 cachedInputTokens: row.cached,
-                outputTokens: row.output)
+                outputTokens: row.output,
+                baseCost: baseCost)
             {
                 priorityCostNanos[row.day, default: [:]][row.model] = Self.boundedAddNanos(
                     priorityCostNanos[row.day]?[row.model] ?? 0,
@@ -755,6 +762,7 @@ extension CostUsageScanner {
         state: inout CodexScanState) throws -> Bool
     {
         try context.checkCancellation?()
+        guard !CodexRolloutArchive.isArchive(input.fileURL) else { return false }
         guard let cached = input.cached, cached.sessionId != nil, !context.forceFullScan,
               !context.retainSyncRows || cached.codexSyncRows != nil
         else { return false }
@@ -778,6 +786,7 @@ extension CostUsageScanner {
             initialRawTotalsBaseline: initialRawTotalsBaseline,
             initialHasDivergentTotals: cached.hasDivergentTotals ?? (cached.lastTotals == nil),
             initialCodexTurnID: cached.lastCodexTurnID,
+            initialCodexFast: cached.lastCodexFast,
             checkCancellation: context.checkCancellation)
         if delta.forkedFromId != nil {
             return false
@@ -812,6 +821,7 @@ extension CostUsageScanner {
             lastRawTotalsBaseline: delta.lastRawTotalsBaseline,
             hasDivergentTotals: delta.hasDivergentTotals,
             lastCodexTurnID: delta.lastCodexTurnID,
+            lastCodexFast: delta.lastCodexFast,
             sessionId: sessionId,
             forkedFromId: delta.forkedFromId ?? migratedCached.forkedFromId,
             codexCostNanos: Self.codexMergedCostMap(
@@ -894,6 +904,7 @@ extension CostUsageScanner {
             lastRawTotalsBaseline: parsed.lastRawTotalsBaseline,
             hasDivergentTotals: parsed.hasDivergentTotals,
             lastCodexTurnID: parsed.lastCodexTurnID,
+            lastCodexFast: parsed.lastCodexFast,
             sessionId: sessionId,
             forkedFromId: parsed.forkedFromId,
             codexCostNanos: Self.mergeCostMaps(

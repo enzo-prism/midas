@@ -149,12 +149,26 @@ when it is zero or unknown (old cached snapshots).
   - Native Codex logs:
     - `~/.codex/sessions/YYYY/MM/DD/*.jsonl`
     - `~/.codex/archived_sessions/*.jsonl` (flat; date inferred from filename when present)
+    - Compressed rollouts (`*.jsonl.zst`) in either location. Codex compresses older sessions in place and
+      macOS has no zstd decoder, so `CodexRolloutArchive` uses the bundled reference decoder
+      (`Sources/CZstdDecoder`, facebook/zstd 1.5.7, BSD). An archive is decompressed to a private
+      temporary file only while it is parsed and the copy is deleted afterwards; no plain mirror is kept.
+      When both `X.jsonl` and `X.jsonl.zst` exist the plain file is counted, once. An unreadable archive
+      contributes no usage and is logged.
     - Or `$CODEX_HOME/sessions/...` + `$CODEX_HOME/archived_sessions/...` if `CODEX_HOME` is set.
   - Supported pi sessions:
     - `~/.pi/agent/sessions/**/*.jsonl`
 - Scanner:
   - Native Codex logs parse `event_msg` token_count entries and `turn_context` model markers; when both are present,
     `turn_context` is authoritative for the model bucket.
+  - Fast (priority) usage: each rollout's `thread_settings_applied` events carry
+    `thread_settings.service_tier`. Usage after a `priority` setting is marked Fast until the tier changes,
+    and the tier is carried across incremental scans. Fast rows use the built-in priority rates where a
+    model has them (GPT-5.4, GPT-5.5) and otherwise the standard price times the model's API Fast
+    multiplier (2x for GPT-5.6 Sol/Terra/Luna, GPT-6 Astra, and GPT-6.1 Sol). The older trace-database
+    lookup (`~/.codex/logs_2.sqlite`) still applies when it has data.
+  - Known gap: subagent rollouts share their parent's `session_id`, so they are dropped as an
+    already-seen session and their usage is not counted.
   - pi sessions count assistant-message usage rows and attribute `openai-codex` assistant usage to Codex.
   - pi assistant usage is bucketed by assistant-turn timestamp, so mixed-model pi sessions can contribute to multiple
     days/models correctly.

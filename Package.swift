@@ -44,9 +44,17 @@ let package = Package(
     ],
     targets: {
         var targets: [Target] = [
+            // Reference zstd decoder (BSD, facebook/zstd v1.5.7 single-file build); see its LICENSE.
+            .target(
+                name: "CZstdDecoder",
+                path: "Sources/CZstdDecoder",
+                exclude: ["LICENSE"],
+                sources: ["zstddeclib.c"],
+                publicHeadersPath: "include"),
             .target(
                 name: "CodexBarCore",
                 dependencies: [
+                    "CZstdDecoder",
                     .product(name: "Crypto", package: "swift-crypto"),
                     .product(name: "Logging", package: "swift-log"),
                     .product(name: "SweetCookieKit", package: "SweetCookieKit"),

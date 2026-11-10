@@ -498,6 +498,10 @@ if [[ ! -d "$APP/Contents/Resources/KeyboardShortcuts_KeyboardShortcuts.bundle" 
 fi
 
 # Ship a supported private runtime; release sync must not depend on Codex/Homebrew caches.
+# Third-party notices that must ship with the binary (zstd decoder, BSD).
+mkdir -p "$APP/Contents/Resources/ThirdPartyLicenses"
+cp "$ROOT/Sources/CZstdDecoder/LICENSE" "$APP/Contents/Resources/ThirdPartyLicenses/zstd-LICENSE.txt"
+
 if [[ -n "${MIDAS_HUB_PYTHON_ROOT:-}" ]]; then
   "$ROOT/Scripts/bundle_midas_sync_resources.sh" "$APP" "$MIDAS_HUB_PYTHON_ROOT"
 elif [[ "$LOWER_CONF" == "release" ]]; then

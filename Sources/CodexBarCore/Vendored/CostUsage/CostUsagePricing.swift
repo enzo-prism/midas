@@ -418,6 +418,49 @@ enum CostUsagePricing {
             outputTokens: outputTokens)
     }
 
+    /// API Fast (priority) multipliers for models whose priority rates are not in the built-in
+    /// table, so their standard price can come from models.dev. From OpenAI's pricing page.
+    static func codexAPIFastMultiplier(model: String) -> Double? {
+        switch self.normalizeCodexModel(model) {
+        case "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-sol": 2
+        default: nil
+        }
+    }
+
+    private static func codexAPIFastAllowsLongContext(model: String) -> Bool {
+        switch self.normalizeCodexModel(model) {
+        case "gpt-6-astra", "gpt-6.1-sol": true
+        default: false
+        }
+    }
+
+    /// Cost of a Fast request: the built-in priority rates when the model has them, otherwise the
+    /// standard cost times the model's Fast multiplier. Nil when no Fast price is known, which
+    /// callers price at the standard rate.
+    static func codexFastCostUSD(
+        model: String,
+        inputTokens: Int,
+        cachedInputTokens: Int = 0,
+        outputTokens: Int,
+        baseCost: Double?) -> Double?
+    {
+        if let builtIn = self.codexPriorityCostUSD(
+            model: model,
+            inputTokens: inputTokens,
+            cachedInputTokens: cachedInputTokens,
+            outputTokens: outputTokens)
+        {
+            return builtIn
+        }
+        guard let baseCost, let multiplier = self.codexAPIFastMultiplier(model: model) else { return nil }
+        if max(0, inputTokens) > self.codexPriorityInputTokenLimit,
+           !self.codexAPIFastAllowsLongContext(model: model)
+        {
+            return nil
+        }
+        return baseCost * multiplier
+    }
+
     static func codexPriorityCostUSD(
         model: String,
         inputTokens: Int,

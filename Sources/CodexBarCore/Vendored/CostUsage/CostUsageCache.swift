@@ -180,6 +180,7 @@ struct CostUsageFileUsage: Codable {
     var lastRawTotalsBaseline: CostUsageCodexTotals?
     var hasDivergentTotals: Bool?
     var lastCodexTurnID: String?
+    var lastCodexFast: Bool?
     var sessionId: String?
     var forkedFromId: String?
     var codexCostNanos: [String: [String: Int64]]?

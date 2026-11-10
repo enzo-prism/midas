@@ -110,6 +110,8 @@ enum CostUsageScanner {
         let forkedFromId: String?
         let rows: [CodexUsageRow]
         var excludedSyncRecords = 0
+        /// Whether the last `thread_settings_applied` event selected the Fast tier; nil when none was seen.
+        var lastCodexFast: Bool?
     }
 
     struct CodexUsageRow: Codable, Equatable {
@@ -122,6 +124,9 @@ enum CostUsageScanner {
         /// Exact source timestamp; absent in older caches. Never substitute file modification time.
         var timestamp: String?
         var unsafeNumericSource: Bool?
+        /// The session file recorded the Fast (priority) service tier for this usage. Absent otherwise
+        /// and in older caches.
+        var fast: Bool?
     }
 
     struct CodexScanState {
@@ -335,7 +340,7 @@ enum CostUsageScanner {
 
                 while let fileURL = enumerator.nextObject() as? URL {
                     try self.checkCancellation?()
-                    guard fileURL.pathExtension.lowercased() == "jsonl" else { continue }
+                    guard CodexRolloutArchive.isRollout(fileURL) else { continue }
                     guard !self.filePaths.contains(fileURL.path) else { continue }
                     guard let indexedSessionId = try CostUsageScanner.parseCodexSessionIdentifier(
                         fileURL: fileURL,
@@ -614,7 +619,7 @@ enum CostUsageScanner {
             seen.insert(item.path)
             out.append(item)
         }
-        return out
+        return CodexRolloutArchive.preferringPlainFiles(out)
     }
 
     private static func cachedCodexSessionFiles(
@@ -898,7 +903,7 @@ enum CostUsageScanner {
 
         var out: [URL] = []
         while let fileURL = enumerator.nextObject() as? URL {
-            guard fileURL.pathExtension.lowercased() == "jsonl" else { continue }
+            guard CodexRolloutArchive.isRollout(fileURL) else { continue }
             let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
             guard values?.isRegularFile == true else { continue }
             guard let modifiedAt = values?.contentModificationDate, modifiedAt >= modifiedSince else { continue }
@@ -942,7 +947,7 @@ enum CostUsageScanner {
                 includingPropertiesForKeys: [.isRegularFileKey],
                 options: [.skipsHiddenFiles])
             {
-                for item in items where item.pathExtension.lowercased() == "jsonl" {
+                for item in items where CodexRolloutArchive.isRollout(item) {
                     out.append(item)
                 }
             }
@@ -962,7 +967,7 @@ enum CostUsageScanner {
         else { return [] }
 
         var out: [URL] = []
-        for item in items where item.pathExtension.lowercased() == "jsonl" {
+        for item in items where CodexRolloutArchive.isRollout(item) {
             if let dayKey = Self.dayKeyFromFilename(item.lastPathComponent) {
                 if !CostUsageDayRange.isInRange(dayKey: dayKey, since: scanSinceKey, until: scanUntilKey) {
                     continue
@@ -988,7 +993,7 @@ enum CostUsageScanner {
                 enumerator.skipDescendants()
                 continue
             }
-            guard item.pathExtension.lowercased() == "jsonl" else { continue }
+            guard CodexRolloutArchive.isRollout(item) else { continue }
             out.append(item)
         }
         return out
@@ -1331,6 +1336,14 @@ enum CostUsageScanner {
         fileURL: URL,
         checkCancellation: CancellationCheck? = nil) throws -> CodexSessionMetadata?
     {
+        if CodexRolloutArchive.isArchive(fileURL) {
+            // Session metadata is the first line; a bounded prefix avoids inflating the whole archive.
+            return try? CodexRolloutArchive.withPlainFile(
+                fileURL,
+                maxOutputBytes: 1024 * 1024,
+                checkCancellation: checkCancellation)
+            { try self.parseCodexSessionMetadata(fileURL: $0, checkCancellation: checkCancellation) }
+        }
         let handle: FileHandle
         do {
             handle = try FileHandle(forReadingFrom: fileURL)
@@ -1402,6 +1415,11 @@ enum CostUsageScanner {
         sessionId: String?,
         snapshots: [CodexTimestampedTotals])
     {
+        if CodexRolloutArchive.isArchive(fileURL) {
+            return try CodexRolloutArchive.withPlainFile(fileURL, checkCancellation: checkCancellation) {
+                try self.parseCodexTokenSnapshots(fileURL: $0, checkCancellation: checkCancellation)
+            }
+        }
         var sessionId: String?
         var previousTotals: CostUsageCodexTotals?
         var rawTotalsBaseline: CostUsageCodexTotals?
@@ -1575,6 +1593,7 @@ enum CostUsageScanner {
         initialRawTotalsBaseline: CostUsageCodexTotals? = nil,
         initialHasDivergentTotals: Bool = false,
         initialCodexTurnID: String? = nil,
+        initialCodexFast: Bool? = nil,
         inheritedTotalsResolver: ((String, String) -> CodexForkBaseline)? = nil) -> CodexParseResult
     {
         let throwingResolver: ((String, String) throws -> CodexForkBaseline)? = inheritedTotalsResolver
@@ -1591,6 +1610,7 @@ enum CostUsageScanner {
                 initialRawTotalsBaseline: initialRawTotalsBaseline,
                 initialHasDivergentTotals: initialHasDivergentTotals,
                 initialCodexTurnID: initialCodexTurnID,
+                initialCodexFast: initialCodexFast,
                 inheritedTotalsResolver: throwingResolver,
                 checkCancellation: nil)) ?? CodexParseResult(
             days: [:],
@@ -1603,7 +1623,8 @@ enum CostUsageScanner {
             lastCodexTurnID: initialCodexTurnID,
             sessionId: nil,
             forkedFromId: nil,
-            rows: [])
+            rows: [],
+            lastCodexFast: initialCodexFast)
     }
 
     // swiftlint:disable:next cyclomatic_complexity function_body_length
@@ -1616,9 +1637,38 @@ enum CostUsageScanner {
         initialRawTotalsBaseline: CostUsageCodexTotals? = nil,
         initialHasDivergentTotals: Bool = false,
         initialCodexTurnID: String? = nil,
+        initialCodexFast: Bool? = nil,
         inheritedTotalsResolver: ((String, String) throws -> CodexForkBaseline)? = nil,
         checkCancellation: CancellationCheck? = nil) throws -> CodexParseResult
     {
+        if CodexRolloutArchive.isArchive(fileURL) {
+            // An archive is immutable and always parsed whole; offsets into it mean nothing.
+            do {
+                return try CodexRolloutArchive.withPlainFile(fileURL, checkCancellation: checkCancellation) {
+                    try self.parseCodexFileCancellable(
+                        fileURL: $0,
+                        range: range,
+                        inheritedTotalsResolver: inheritedTotalsResolver,
+                        checkCancellation: checkCancellation)
+                }
+            } catch let error as CodexRolloutArchive.ArchiveError {
+                self.log.warning(
+                    "Codex cost usage could not read a compressed session",
+                    metadata: ["path": fileURL.path, "error": "\(error)"])
+                return CodexParseResult(
+                    days: [:],
+                    parsedBytes: 0,
+                    lastModel: nil,
+                    lastTotals: nil,
+                    lastCountedTotals: nil,
+                    lastRawTotalsBaseline: nil,
+                    hasDivergentTotals: false,
+                    lastCodexTurnID: nil,
+                    sessionId: nil,
+                    forkedFromId: nil,
+                    rows: [])
+            }
+        }
         var currentModel = initialModel
         var previousTotals = initialTotals
         var sessionId: String?
@@ -1629,6 +1679,7 @@ enum CostUsageScanner {
         var hasUnresolvedForkBaseline = false
         var unresolvedForkTotalWatermark: CostUsageCodexTotals?
         var currentTurnID = initialCodexTurnID
+        var currentFast = initialCodexFast
         var rawTotalsBaseline = initialRawTotalsBaseline ?? initialTotals
         var sawDivergentTotals = initialHasDivergentTotals
         var deferredError: Error?
@@ -1873,7 +1924,8 @@ enum CostUsageScanner {
                     cached: cachedClamp,
                     output: deltaOutput,
                     timestamp: record.timestamp,
-                    unsafeNumericSource: record.unsafeNumericSource ? true : nil))
+                    unsafeNumericSource: record.unsafeNumericSource ? true : nil,
+                    fast: currentFast == true ? true : nil))
             }
         }
 
@@ -1925,6 +1977,14 @@ enum CostUsageScanner {
                         // `turn_context` can carry very large prompts, but its model usually appears near the start.
                         if let model = Self.extractCodexTurnContextModel(from: line.bytes) {
                             currentModel = model
+                        }
+                        return
+                    }
+
+                    // The tier applies to the usage that follows until the next settings event.
+                    if line.bytes.containsAscii(#""thread_settings_applied""#) {
+                        if let fast = Self.codexFastTier(threadSettingsLine: line.bytes) {
+                            currentFast = fast
                         }
                         return
                     }
@@ -2221,7 +2281,8 @@ enum CostUsageScanner {
                                 input: deltaInput,
                                 cached: cachedClamp,
                                 output: deltaOutput,
-                                timestamp: tsText))
+                                timestamp: tsText,
+                                fast: currentFast == true ? true : nil))
                         }
                     }
                 })
@@ -2251,7 +2312,16 @@ enum CostUsageScanner {
             sessionId: sessionId,
             forkedFromId: forkedFromId,
             rows: rows,
-            excludedSyncRecords: excludedSyncRecords)
+            excludedSyncRecords: excludedSyncRecords,
+            lastCodexFast: currentFast)
+    }
+
+    /// Reads `thread_settings.service_tier` from a `thread_settings_applied` line: `priority` is
+    /// Fast, any other reported tier is not, and a line without the field leaves the tier unchanged.
+    static func codexFastTier(threadSettingsLine bytes: Data) -> Bool? {
+        if bytes.containsAscii(#""service_tier":"priority""#) { return true }
+        if bytes.containsAscii(#""service_tier":"#) { return false }
+        return nil
     }
 
     private static func codexTurnID(from payload: [String: Any]) -> String? {
