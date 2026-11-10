@@ -7,7 +7,8 @@
   usage feed: exact tokens and billed cost per day, with plan-included usage valued at the current
   week's rate per token (an estimate for earlier days; see `docs/cursor.md`). Legacy plans are unchanged.
 
-Build 139.
+Build 139. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.50.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.50.1-midas.1).
 
 ## Midas 0.50.0 — November 10, 2026
 

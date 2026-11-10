@@ -4,6 +4,38 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.50.1 changes: Cursor spend on unified plans
+
+Cursor stopped writing unified-plan usage to `get-filtered-usage-events` on 2026-10-13, so the
+30-day Cursor figure had fallen to $0.17 (three requests). Midas now reads the dashboard's v2 feed
+(`v2/usage-status`, `v2/query-daily-usage`): tokens and billed cost per day are exact, and
+plan-included usage is valued at the current week's rate per included token, an estimate for
+earlier days. The daily query accepts at most 31 days and intermittently answers 500, so it is read
+in 30-day windows with retries, and a unified account never falls back to the usage-events list.
+See `docs/cursor.md`. Merged as [PR #22](https://github.com/enzo-prism/midas/pull/22).
+
+Before publication the signed build was run on the Mac Studio: its own Cursor snapshot moved from
+$0.17 and 167,681 tokens to $2,693.31 and 7.08B tokens over 26 active days, with $27.41 billed.
+The first candidate (`80952fde`) still showed $0.17 because the unwindowed daily query hit a 500;
+it was never published.
+
+The binary identifies source `9d1851ea`, which `main` was fast-forwarded to. `make check` passed
+with zero violations. The full Swift suite ran 4,672 app tests and 29 collector tests; the only
+failure was the timing-sensitive `StatusItemAnimationSignatureTests`, which passed in an isolated
+rerun. The Cursor and cost-fetcher suites (161 tests) passed on the final commit.
+
+Apple notarization `6025902c-25d1-4f27-a8fc-cb1acfc89be0` was Accepted. The app and dSYM share
+arm64 UUID `9425E168-EA36-3F88-8CA1-255094F8E2F7`. Deep strict signing, stapling, Gatekeeper,
+archive signing, and both signed XML feeds passed. Archive SHA-256:
+`48ef2cea93f19302cf7bcfa7b09a2c1c8ea1fbeb0b3d803ad76ced6166d37da7`.
+
+Downloaded draft assets, anonymous public assets, and both actual `/releases/latest/download/`
+feeds matched the prepared checksums before the website was updated. Published as
+[`v0.50.1-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.50.1-midas.1). The public
+bundle is installed and running at `/Applications/Midas.app` on the Mac Studio; its binary matches
+the public archive. Website source `2fc3f87` reached production on `midas-ai.dev`. All 23 local and
+23 production browser checks passed, and the live download link retrieves the archive above.
+
 ## 0.50.0 changes: Claude limit resets, Cursor weekly pool, Codex spend accuracy
 
 Claude's usage response carries saved limit resets when asked for them (`?cedar_ember=1`). Midas
@@ -191,14 +223,14 @@ a download followed from the live page matches the published SHA-256 above.
 
 ## Current distribution
 
-The release selected in `version.env` is **0.50.0**, build **138**, published as the latest stable release. 0.37.0 (build 109) was the first build with
+The release selected in `version.env` is **0.50.1**, build **139**, published as the latest stable release. 0.37.0 (build 109) was the first build with
 Midas’s own identity: bundle identifier `com.designprism.midas`, `Midas.app` with a `Midas` executable, team
 `L49MKXGVM4`, its own app group, Keychain services, `~/Library/*/Midas` folders, and Sparkle feed.
 Everything is defined once in `Sources/CodexBarCore/MidasIdentity.swift` and mirrored by
 `Scripts/package_app.sh`.
 
-The current **signed, notarized, Sparkle-published** binary is **0.50.0**, build **138**, tagged
-`v0.50.0-midas.1`, superseding 0.49.5 (build 137, `v0.49.5-midas.1`), 0.49.4 (build 136, `v0.49.4-midas.1`), 0.49.3 (build 135, `v0.49.3-midas.1`), 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
+The current **signed, notarized, Sparkle-published** binary is **0.50.1**, build **139**, tagged
+`v0.50.1-midas.1`, superseding 0.50.0 (build 138, `v0.50.0-midas.1`), 0.49.5 (build 137, `v0.49.5-midas.1`), 0.49.4 (build 136, `v0.49.4-midas.1`), 0.49.3 (build 135, `v0.49.3-midas.1`), 0.49.2 (build 134, `v0.49.2-midas.1`), 0.49.1 (build 133, `v0.49.1-midas.1`), 0.49.0 (build 132, `v0.49.0-midas.1`), 0.48.4 (build 130, `v0.48.4-midas.1`), 0.48.3 (build 129, `v0.48.3-midas.1`), 0.48.2 (build 128, `v0.48.2-midas.1`),
 0.48.1 (build 127, `v0.48.1-midas.1`),
 0.48.0 (build 126, `v0.48.0-midas.1`),
 0.47.1 (build 125, `v0.47.1-midas.2`),

@@ -39,6 +39,9 @@ Version **0.50.1, build 139** fixes Cursor spend for accounts on Cursor's unifie
 cost are exact, and plan-included usage is valued at the current week's rate per token, so earlier
 days are approximate. See [docs/cursor.md](docs/cursor.md).
 
+Release: [v0.50.1-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.50.1-midas.1).
+Apple Silicon, macOS 14 or later; Developer ID signed, Apple notarized, with signed Sparkle feeds.
+
 ## Midas 0.50.0: closer to what each vendor reports
 
 Version **0.50.0, build 138** brings the readings in line with what Claude, Cursor, and Codex
