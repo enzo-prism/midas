@@ -1,5 +1,7 @@
 import Foundation
 
+#if os(macOS)
+
 /// Cursor's unified plans (2026-10-12) stopped writing to `get-filtered-usage-events`; the dashboard
 /// reads these v2 endpoints instead:
 ///
@@ -471,3 +473,5 @@ struct CursorDailyUsageFetcher: Sendable {
         return CostUsageLocalDay.key(from: date, calendar: calendar)
     }
 }
+
+#endif
