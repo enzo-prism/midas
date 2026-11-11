@@ -64,7 +64,9 @@ public enum CostUsageCacheMaintenance {
         var names = Set(UsageProvider.allCases.map { CostUsageCacheIO.cacheFileName(provider: $0) })
         names.insert(PiSessionCostCacheIO.cacheFileName())
         names.insert(CursorSpendSnapshotCache.fileName)
+        #if os(macOS)
         names.insert(CursorIncludedRateCache.fileName)
+        #endif
         names.insert(MetaSubscriptionUsageCache.fileName)
         names.insert(ZaiCostUsageCacheStore.cacheFilename)
         return names
