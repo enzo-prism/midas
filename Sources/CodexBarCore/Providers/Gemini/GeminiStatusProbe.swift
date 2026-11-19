@@ -97,13 +97,14 @@ public enum GeminiStatusProbeError: LocalizedError, Sendable, Equatable {
     case parseFailed(String)
     case timedOut
     case apiError(String)
+    case accountMismatch(expected: String?, found: String?)
 
     public var errorDescription: String? {
         switch self {
         case .geminiNotInstalled:
             "Gemini CLI is not installed or not on PATH."
         case .notLoggedIn:
-            "Not logged in to Gemini. Run 'gemini' in Terminal to authenticate."
+            "Not logged in to Gemini. Open Antigravity or sign in with Google in Settings → Gemini."
         case let .unsupportedAuthType(authType):
             "Gemini \(authType) auth not supported. Use Google account (OAuth) instead."
         case let .parseFailed(msg):
@@ -112,6 +113,14 @@ public enum GeminiStatusProbeError: LocalizedError, Sendable, Equatable {
             "Gemini quota API request timed out."
         case let .apiError(msg):
             "Gemini API error: \(msg)"
+        case let .accountMismatch(expected, found):
+            if let expected, let found {
+                "Gemini session is signed in as \(found), not \(expected)."
+            } else if let expected {
+                "Gemini session did not report an account matching \(expected)."
+            } else {
+                "Gemini session belongs to a different Google account."
+            }
         }
     }
 }

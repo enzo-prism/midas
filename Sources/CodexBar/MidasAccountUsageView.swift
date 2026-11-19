@@ -89,6 +89,10 @@ enum MidasAccountQuotaLayout {
         if presentation.provider == .claude {
             return metrics.filter { MidasClaudeLimits.isPinned($0.id) }
         }
+        if presentation.provider == .gemini {
+            let pinned = metrics.filter { MidasGeminiLimits.isPinned($0.id) }
+            return pinned.isEmpty ? Array(metrics.prefix(2)) : pinned
+        }
         if presentation.provider == .meta {
             // Both real plan windows (current + weekly) stay visible in the overview.
             return metrics

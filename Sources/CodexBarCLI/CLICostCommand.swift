@@ -4,7 +4,7 @@ import Foundation
 
 extension CodexBarCLI {
     private static let costSupportedProviders: Set<UsageProvider> = [
-        .claude, .codex, .zai, .meta, .openai, .anthropic, .cursor,
+        .claude, .codex, .zai, .meta, .openai, .anthropic, .cursor, .gemini,
     ]
 
     static func runCost(_ values: ParsedValues) async {
@@ -25,7 +25,8 @@ extension CodexBarCLI {
         guard !providers.isEmpty else {
             Self.exit(
                 code: .failure,
-                message: "Error: cost is only supported for Claude, Codex, z.ai, Meta, OpenAI, Anthropic, and Cursor.",
+                message: "Error: cost is only supported for Claude, Codex, z.ai, Meta, "
+                    + "OpenAI, Anthropic, Cursor, and Gemini.",
                 output: output,
                 kind: .args)
         }

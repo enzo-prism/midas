@@ -210,6 +210,14 @@ enum CLIRenderer {
                 tertiary: "Monthly",
                 showsTertiary: true)
         }
+        if provider == .gemini {
+            let labels = GeminiProviderDescriptor.windowLabels(snapshot: snapshot, metadata: metadata)
+            return RateWindowLabels(
+                primary: labels.primary,
+                secondary: labels.secondary,
+                tertiary: labels.tertiary,
+                showsTertiary: labels.showsTertiary)
+        }
 
         let primaryLabel = provider == .grok
             ? GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel

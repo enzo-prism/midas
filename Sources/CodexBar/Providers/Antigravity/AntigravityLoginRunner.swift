@@ -23,6 +23,7 @@ enum AntigravityLoginRunner {
 
     static func run(
         timeout: TimeInterval = 120,
+        credentialsStore: AntigravityOAuthCredentialsStore = AntigravityOAuthCredentialsStore(),
         onPhaseChange: (@Sendable (Phase) -> Void)? = nil,
         onCredentialsCreated: (@Sendable () -> Void)? = nil) async -> Result
     {
@@ -91,7 +92,7 @@ enum AntigravityLoginRunner {
                 projectID: nil,
                 clientID: oauthClient.clientID,
                 clientSecret: oauthClient.clientSecret)
-            try AntigravityOAuthCredentialsStore().save(credentials)
+            try credentialsStore.save(credentials)
             onCredentialsCreated?()
             return Result(outcome: .success(email))
         } catch is CancellationError {

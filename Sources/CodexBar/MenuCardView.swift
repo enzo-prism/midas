@@ -1345,6 +1345,10 @@ extension UsageMenuCardView.Model {
         if input.provider == .factory, snapshot.tertiary != nil {
             return ("5-hour", L("Weekly"), L("Monthly"), true)
         }
+        if input.provider == .gemini {
+            let labels = GeminiProviderDescriptor.windowLabels(snapshot: snapshot, metadata: input.metadata)
+            return (L(labels.primary), L(labels.secondary), L(labels.tertiary), labels.showsTertiary)
+        }
         // Legacy request-based Cursor plans track a request quota, not the token-based "Total" pool —
         // relabel the primary bar so it reads as a request count instead of a dollar percentage.
         let primaryLabel = if input.provider == .cursor, snapshot.cursorRequests != nil {

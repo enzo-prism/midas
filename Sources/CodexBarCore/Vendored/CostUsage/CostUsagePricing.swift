@@ -581,4 +581,81 @@ enum CostUsagePricing {
             modelID: model,
             cacheRoot: cacheRoot)
     }
+
+    private static let geminiFallbackPricing: [String: ModelsDevPricingInfo] = [
+        "gemini-2.5-pro": ModelsDevPricingInfo(
+            providerID: "google",
+            providerName: "Google",
+            modelID: "gemini-2.5-pro",
+            modelName: "Gemini 2.5 Pro",
+            inputCostPerToken: 1.25e-6,
+            outputCostPerToken: 1.0e-5,
+            cacheReadInputCostPerToken: 1.25e-7,
+            thresholdTokens: 200_000,
+            inputCostPerTokenAboveThreshold: 2.5e-6,
+            outputCostPerTokenAboveThreshold: 1.5e-5,
+            cacheReadInputCostPerTokenAboveThreshold: 2.5e-7),
+        "gemini-2.5-flash": ModelsDevPricingInfo(
+            providerID: "google",
+            providerName: "Google",
+            modelID: "gemini-2.5-flash",
+            modelName: "Gemini 2.5 Flash",
+            inputCostPerToken: 3.0e-7,
+            outputCostPerToken: 2.5e-6,
+            cacheReadInputCostPerToken: 3.0e-8),
+        "gemini-2.5-flash-lite": ModelsDevPricingInfo(
+            providerID: "google",
+            providerName: "Google",
+            modelID: "gemini-2.5-flash-lite",
+            modelName: "Gemini 2.5 Flash-Lite",
+            inputCostPerToken: 1.0e-7,
+            outputCostPerToken: 4.0e-7,
+            cacheReadInputCostPerToken: 1.0e-8),
+    ]
+
+    /// Estimated Gemini API-equivalent cost from uncached input, cache-read, and output tokens.
+    /// Uses live models.dev (`google` then `google-vertex`) pricing with released Gemini 2.5 fallbacks.
+    /// Unknown models return `nil` so callers never fabricate prices.
+    static func geminiCostUSD(
+        model: String,
+        inputTokens: Int,
+        cacheReadTokens: Int,
+        outputTokens: Int,
+        catalog: ModelsDevCatalog? = nil,
+        cacheRoot: URL? = nil) -> Double?
+    {
+        let normalized = GeminiTranscriptLogScanner.normalizeModelIDForPricing(model)
+        let pricing: ModelsDevPricingInfo? = self.modelsDevLookup(
+            providerID: "google",
+            model: normalized,
+            catalog: catalog,
+            cacheRoot: cacheRoot)?.pricing
+            ?? self.modelsDevLookup(
+                providerID: "google-vertex",
+                model: normalized,
+                catalog: catalog,
+                cacheRoot: cacheRoot)?.pricing
+            ?? self.geminiFallbackPricing[normalized]
+        guard let pricing else { return nil }
+
+        let uncached = max(0, inputTokens)
+        let cached = max(0, cacheReadTokens)
+        let output = max(0, outputTokens)
+        let totalPrompt = uncached + cached
+        let usesLongContext = pricing.thresholdTokens.map { totalPrompt > $0 } ?? false
+        let inputRate = usesLongContext
+            ? (pricing.inputCostPerTokenAboveThreshold ?? pricing.inputCostPerToken)
+            : pricing.inputCostPerToken
+        let baseCacheRate = pricing.cacheReadInputCostPerToken ?? pricing.inputCostPerToken
+        let cacheRate = usesLongContext
+            ? (pricing.cacheReadInputCostPerTokenAboveThreshold ?? baseCacheRate)
+            : baseCacheRate
+        let outputRate = usesLongContext
+            ? (pricing.outputCostPerTokenAboveThreshold ?? pricing.outputCostPerToken)
+            : pricing.outputCostPerToken
+
+        return Double(uncached) * inputRate
+            + Double(cached) * cacheRate
+            + Double(output) * outputRate
+    }
 }

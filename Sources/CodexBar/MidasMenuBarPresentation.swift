@@ -233,6 +233,7 @@ struct MidasMenuBarPresentation: Equatable {
         switch provider {
         case .codex: "C"
         case .cursor: "U"
+        case .gemini: "G"
         case .meta: "M"
         default: String((ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue).prefix(2))
         }

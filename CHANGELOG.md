@@ -1,5 +1,21 @@
 # Changelog
 
+## Midas 0.51.0 — November 19, 2026
+
+- Add first-class **Gemini** provider support in Midas with account email pinning (`accountEmail` /
+  `CODEXBAR_GEMINI_ACCOUNT_EMAIL`), multi-source fallback (`Gemini CLI`, Antigravity desktop local
+  probe, Google OAuth remote API, and `agy` CLI), and Gemini-only quota siloing so non-Gemini models
+  never leak into Gemini rows.
+- Show rolling **5-hour limit** and **Weekly limit** bars in the overview, deduplicated per-model
+  Gemini quotas in provider details, a full-color Gemini logo, and Settings › Gemini controls for
+  Google account pinning, usage source selection, and Google OAuth login.
+- Add local Gemini token usage and API-equivalent cost estimation from Antigravity agent
+  transcripts (`~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`), priced via
+  `models.dev` Google Gemini rates (with released Gemini 2.5 fallbacks), surfaced in Midas and
+  `CodexBarCLI cost --provider gemini`.
+
+Build 140.
+
 ## Midas 0.50.1 — November 10, 2026
 
 - Fix Cursor spend on unified plans. Cursor stopped writing these accounts' usage to the request

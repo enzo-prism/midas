@@ -33,6 +33,13 @@ extension TokenAccountSupportCatalog {
             injection: .environment(key: DeepSeekSettingsReader.apiKeyEnvironmentKey),
             requiresManualCookieSource: false,
             cookieName: nil),
+        .gemini: TokenAccountSupport(
+            title: "Google accounts",
+            subtitle: "Store Google OAuth accounts for background Gemini usage refreshes.",
+            placeholder: "Google OAuth credentials JSON",
+            injection: .environment(key: GeminiSettingsReader.oauthCredentialsEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil),
         .antigravity: TokenAccountSupport(
             title: "Google accounts",
             subtitle: "Store multiple Antigravity Google OAuth accounts for quick switching.",

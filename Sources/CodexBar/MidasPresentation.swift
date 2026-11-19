@@ -182,6 +182,9 @@ struct MidasSpendPresentation {
             case .claude:
                 "Claude Code activity on this Mac at Anthropic API rates, including cache writes and reads, "
                     + "fast mode, US-only inference, and web searches; an estimate, not a bill."
+            case .gemini:
+                "Gemini activity on this Mac at Google Gemini API rates, including cached reads; "
+                    + "an estimate, not a bill."
             default:
                 "API-rate value of recorded usage; an estimate, not a bill."
             }
@@ -327,6 +330,9 @@ struct MidasProviderPresentation {
         }
         if provider == .claude {
             quotaMetrics = MidasClaudeLimits.arrange(quotaMetrics, snapshot: snapshot)
+        }
+        if provider == .gemini {
+            quotaMetrics = MidasGeminiLimits.arrange(quotaMetrics, snapshot: snapshot)
         }
         if provider == .cursor {
             quotaMetrics = MidasCursorLimits.arrange(quotaMetrics)
@@ -631,6 +637,35 @@ enum MidasClaudeLimits {
             helpText: explanation)
         result.resetsAt = window?.resetsAt ?? metric.resetsAt
         return result
+    }
+}
+
+/// Gemini's overview shows its primary and secondary quota windows (e.g. 5-hour + weekly pools,
+/// or Pro + Flash daily windows for Gemini CLI); per-model rows stay in provider details.
+enum MidasGeminiLimits {
+    static let fiveHourTitle = "5-hour limit"
+    static let weeklyTitle = "Weekly limit"
+    static let limitIDs: Set<String> = ["primary", "secondary"]
+    private static let fiveHourMinutes = 5 * 60
+    private static let weekMinutes = 7 * 24 * 60
+
+    static func isPinned(_ id: String) -> Bool {
+        self.limitIDs.contains(id)
+    }
+
+    static func arrange(_ metrics: [MidasQuotaMetric], snapshot: UsageSnapshot?) -> [MidasQuotaMetric] {
+        let usesRollingWindows = snapshot?.secondary?.windowMinutes == self.weekMinutes
+            || snapshot?.primary?.windowMinutes == self.fiveHourMinutes
+        guard usesRollingWindows else { return metrics }
+        return metrics.map { metric in
+            if metric.id == "primary", snapshot?.primary?.windowMinutes == self.fiveHourMinutes {
+                return metric.retitled(self.fiveHourTitle)
+            }
+            if metric.id == "secondary", snapshot?.secondary?.windowMinutes == self.weekMinutes {
+                return metric.retitled(self.weeklyTitle)
+            }
+            return metric
+        }
     }
 }
 

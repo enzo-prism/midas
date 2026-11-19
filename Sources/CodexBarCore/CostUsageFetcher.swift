@@ -133,6 +133,7 @@ public struct CostUsageFetcher: Sendable {
     {
         guard provider == .codex || provider == .claude || provider == .vertexai || provider == .bedrock || provider ==
             .zai || provider == .meta || provider == .openai || provider == .anthropic || provider == .cursor
+            || provider == .gemini
         else {
             throw CostUsageError.unsupportedProvider(provider)
         }
@@ -188,6 +189,16 @@ public struct CostUsageFetcher: Sendable {
                 let summary = MuseSessionLogScanner.loadSummary(since: since, until: until, now: now)
                 return Self.metaTokenSnapshot(from: summary, now: now, historyDays: clampedHistoryDays)
             }
+        }
+
+        if provider == .gemini {
+            let pricingCacheRoot = (overrideScannerOptions ?? CostUsageScanner.Options()).cacheRoot
+            return try await Self.loadGeminiTokenSnapshot(
+                since: since,
+                now: now,
+                historyDays: clampedHistoryDays,
+                pricingCacheRoot: pricingCacheRoot,
+                refreshPricingInBackground: refreshPricingInBackground)
         }
 
         var options = overrideScannerOptions ?? CostUsageScanner.Options()
@@ -615,6 +626,30 @@ public struct CostUsageFetcher: Sendable {
             since: since,
             until: until,
             environment: environment)
+    }
+
+    private static func loadGeminiTokenSnapshot(
+        since: Date,
+        now: Date,
+        historyDays: Int,
+        pricingCacheRoot: URL?,
+        refreshPricingInBackground: Bool) async throws -> CostUsageTokenSnapshot
+    {
+        if refreshPricingInBackground {
+            Task.detached(priority: .utility) {
+                await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: pricingCacheRoot)
+            }
+        } else {
+            await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: pricingCacheRoot)
+        }
+        return try await CostUsageScanExecutor.run { _ in
+            GeminiTranscriptLogScanner.loadTokenSnapshot(
+                since: since,
+                until: now,
+                now: now,
+                historyDays: historyDays,
+                pricingCacheRoot: pricingCacheRoot)
+        }
     }
 
     /// Estimated z.ai cost report. z.ai has no spend API, so this pulls per-model token counts from

@@ -32,6 +32,14 @@ Midas 0.37.0 adopts data written by earlier Midas builds (which still used the C
 on first launch, without touching an upstream CodexBar install on the same Mac. See
 [the changelog](CHANGELOG.md) for the one-time manual update step.
 
+## Midas 0.51.0: Gemini provider and local Gemini spend
+
+Version **0.51.0, build 140** adds first-class Gemini support in Midas with account-pinned Google AI
+Pro quota tracking (5-hour and weekly rolling limits, deduplicated per-model details, and full-color
+Gemini branding), multi-source fallback (Gemini CLI, Antigravity desktop, Google OAuth, and `agy`
+CLI), and local Gemini API-equivalent token spend estimates from local transcripts. See
+[docs/gemini.md](docs/gemini.md).
+
 ## Midas 0.50.1: Cursor spend on unified plans
 
 Version **0.50.1, build 139** fixes Cursor spend for accounts on Cursor's unified plans, where the

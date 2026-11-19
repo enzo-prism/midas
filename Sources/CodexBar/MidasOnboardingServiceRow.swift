@@ -10,6 +10,7 @@ struct MidasOnboardingServiceRow: View {
         switch self.provider {
         case .codex: "Codex"
         case .cursor: "Cursor"
+        case .gemini: "Gemini"
         case .meta: "Meta"
         default: self.provider.rawValue
         }
@@ -19,6 +20,7 @@ struct MidasOnboardingServiceRow: View {
         switch self.provider {
         case .codex: "OpenAI accounts across your computers"
         case .cursor: "Usage from your Cursor account"
+        case .gemini: "Google AI Pro and Gemini usage"
         case .meta: "Muse activity on this Mac"
         default: ""
         }

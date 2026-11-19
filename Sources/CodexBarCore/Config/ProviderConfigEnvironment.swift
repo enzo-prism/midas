@@ -21,6 +21,9 @@ public enum ProviderConfigEnvironment {
         if provider == .azureopenai {
             return self.applyAzureOpenAIOverrides(base: base, config: config)
         }
+        if provider == .gemini {
+            return self.applyGeminiOverrides(base: base, config: config)
+        }
         guard let apiKey = config?.sanitizedAPIKey, !apiKey.isEmpty else { return base }
         var env = base
         if let key = self.directAPIKeyEnvironmentKey(for: provider) {
@@ -238,6 +241,20 @@ public enum ProviderConfigEnvironment {
         }
         if let deploymentName = config.sanitizedWorkspaceID {
             env[AzureOpenAISettingsReader.deploymentNameEnvironmentKey] = deploymentName
+        }
+        return env
+    }
+
+    private static func applyGeminiOverrides(
+        base: [String: String],
+        config: ProviderConfig?) -> [String: String]
+    {
+        guard let config else { return base }
+        var env = base
+        if GeminiSettingsReader.pinnedAccountEmail(environment: base) == nil,
+           let accountEmail = config.sanitizedAccountEmail
+        {
+            env[GeminiSettingsReader.accountEmailEnvironmentKey] = accountEmail
         }
         return env
     }

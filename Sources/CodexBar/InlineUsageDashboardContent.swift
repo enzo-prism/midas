@@ -165,7 +165,7 @@ extension UsageMenuCardView.Model {
         {
             return Self.deepseekInlineDashboard(usage)
         }
-        if [.codex, .claude, .vertexai, .bedrock, .zai, .meta, .cursor].contains(input.provider),
+        if [.codex, .claude, .vertexai, .bedrock, .zai, .meta, .cursor, .gemini].contains(input.provider),
            input.tokenCostUsageEnabled,
            let tokenSnapshot = input.tokenSnapshot,
            !tokenSnapshot.daily.isEmpty
