@@ -14,7 +14,8 @@
   `models.dev` Google Gemini rates (with released Gemini 2.5 fallbacks), surfaced in Midas and
   `CodexBarCLI cost --provider gemini`.
 
-Build 140.
+Build 140. Developer ID signed, notarized, and published with signed Sparkle feeds as
+[v0.51.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.51.0-midas.1).
 
 ## Midas 0.50.1 — November 10, 2026
 

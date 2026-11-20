@@ -4,6 +4,33 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.51.0 changes: Gemini provider and local Gemini spend
+
+Midas now supports **Gemini** as a first-class provider with Google account pinning
+(`accountEmail` / `CODEXBAR_GEMINI_ACCOUNT_EMAIL`), multi-source fallback (`Gemini CLI`,
+Antigravity desktop local probe, Google OAuth remote API, and `agy` CLI), Gemini-only quota
+siloing (rolling 5-hour and 7-day weekly limits plus deduplicated per-model rows in details),
+full-color Gemini branding, and local Gemini API-equivalent spend estimates from Antigravity
+conversation transcripts priced via `models.dev` Google Gemini rates (with released Gemini 2.5
+fallbacks). See `docs/gemini.md`.
+
+The binary identifies source `b927572d` on `main`. `make check` passed with zero violations across
+1,303 files, and the focused Gemini, Midas, Cost, and CLI Swift suites (689 tests across 88 suites)
+passed.
+
+Apple notarization `41af681e-cc69-41ec-82df-73df4d69dfc5` was Accepted. The app and dSYM share
+arm64 UUID `08552456-F687-3882-AE74-DF196B5A9412`. Deep strict signing, stapling, Gatekeeper,
+archive signing, and both signed XML feeds passed. Archive SHA-256:
+`db68f43b5c0fad18e4f6e46302eb371dfe9be48b147317bc9fa9028fe8ecdd08`.
+
+Downloaded draft assets, anonymous public assets, and both actual `/releases/latest/download/`
+feeds matched the prepared checksums before the website was updated. Published as
+[`v0.51.0-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.51.0-midas.1). The public
+bundle is installed and running at `/Applications/Midas.app` on the Mac Studio, and stale local
+Midas app copies were removed. Website source `c43e200` reached production on `midas-ai.dev`. All
+25 local and 25 production browser checks passed, and the live download link retrieves the archive
+above.
+
 ## 0.50.1 changes: Cursor spend on unified plans
 
 Cursor stopped writing unified-plan usage to `get-filtered-usage-events` on 2026-10-13, so the

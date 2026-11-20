@@ -40,6 +40,9 @@ Gemini branding), multi-source fallback (Gemini CLI, Antigravity desktop, Google
 CLI), and local Gemini API-equivalent token spend estimates from local transcripts. See
 [docs/gemini.md](docs/gemini.md).
 
+Release: [v0.51.0-midas.1](https://github.com/enzo-prism/midas/releases/tag/v0.51.0-midas.1).
+Apple Silicon, macOS 14 or later; Developer ID signed, Apple notarized, with signed Sparkle feeds.
+
 ## Midas 0.50.1: Cursor spend on unified plans
 
 Version **0.50.1, build 139** fixes Cursor spend for accounts on Cursor's unified plans, where the
