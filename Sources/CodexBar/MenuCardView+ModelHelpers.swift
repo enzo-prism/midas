@@ -36,8 +36,28 @@ extension UsageMenuCardView.Model {
             self.tokenUsage != nil
     }
 
+    /// Providers whose `RateWindow.resetDescription` is a usage count ("470 / 2,500 credits"),
+    /// not reset wording. The count renders as detail and never as "Resets 470 / 2,500 credits".
+    static let countDetailProviders: Set<UsageProvider> = [.elevenlabs, .suno]
+
+    /// For count providers the window description is a count ("470 / 2,500 credits"), not a reset:
+    /// show it as the detail line, and drop the reset line when there is no reset date.
+    static func applyCountDetail(
+        _ provider: UsageProvider,
+        _ window: RateWindow,
+        detail: inout String?,
+        reset: inout String?)
+    {
+        guard self.countDetailProviders.contains(provider),
+              let count = window.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !count.isEmpty
+        else { return }
+        detail = count
+        if window.resetsAt == nil { reset = nil }
+    }
+
     static func progressColor(for provider: UsageProvider) -> Color {
-        if provider == .elevenlabs {
+        if provider == .elevenlabs || provider == .suno {
             return Color(nsColor: .labelColor)
         }
 
@@ -212,10 +232,15 @@ extension UsageMenuCardView.Model {
                 window: namedWindow.window,
                 input: input)
             let usageKnown = namedWindow.usageKnown
-            let resetText = Self.resetText(
-                for: namedWindow.window,
-                style: input.resetTimeDisplayStyle,
-                now: input.now)
+            let countDetail = Self.countDetailProviders.contains(input.provider)
+                ? namedWindow.window.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
+                : nil
+            let resetText = countDetail != nil && namedWindow.window.resetsAt == nil
+                ? nil
+                : Self.resetText(
+                    for: namedWindow.window,
+                    style: input.resetTimeDisplayStyle,
+                    now: input.now)
             let statusText: String? = if usageKnown {
                 nil
             } else if let resetText {
@@ -233,7 +258,7 @@ extension UsageMenuCardView.Model {
                 percentStyle: percentStyle,
                 statusText: statusText,
                 resetText: usageKnown ? resetText : nil,
-                detailText: nil,
+                detailText: usageKnown ? countDetail.flatMap { $0.isEmpty ? nil : $0 } : nil,
                 detailLeftText: usageKnown ? paceDetail?.leftLabel : nil,
                 detailRightText: usageKnown ? paceDetail?.rightLabel : nil,
                 pacePercent: usageKnown ? paceDetail?.pacePercent : nil,

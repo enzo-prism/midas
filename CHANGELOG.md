@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **ElevenLabs works without an API key.** A new **Usage source** setting (Auto, ElevenLabs CLI, API key)
+  lets Midas read usage through the official ElevenLabs CLI after `elevenlabs auth login`. Auto keeps
+  using an API key when one is set. The CLI keeps its own Keychain session, so Midas shows no Keychain
+  prompt. A rejected key now says so instead of a generic HTTP error.
+- **New Suno provider** (off by default). Midas runs `suno credits --json --no-browser --quiet` and shows
+  monthly credits used of the plan allowance, downloads used this period, the renewal date and the plan.
+- Credit counts for ElevenLabs and Suno show as details ("470 / 2,500 credits") rather than reading as
+  "Resets 470 / 2,500 credits".
+
 ## Midas 0.51.0 — November 19, 2026
 
 - Add first-class **Gemini** provider support in Midas with account email pinning (`accountEmail` /

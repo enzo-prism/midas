@@ -32,6 +32,8 @@ public enum SubprocessRunnerError: LocalizedError, Sendable {
 public struct SubprocessResult: Sendable {
     public let stdout: String
     public let stderr: String
+    /// Zero unless the caller accepted a non-zero exit through `acceptedNonZeroExitCodes`.
+    public var exitCode: Int32 = 0
 }
 
 public enum SubprocessRunner {
@@ -160,6 +162,7 @@ public enum SubprocessRunner {
         timeout: TimeInterval,
         standardInput: Any? = nil,
         currentDirectoryURL: URL? = nil,
+        acceptedNonZeroExitCodes: Set<Int32> = [],
         label: String) async throws -> SubprocessResult
     {
         guard FileManager.default.isExecutableFile(atPath: binary) else {
@@ -258,6 +261,20 @@ public enum SubprocessRunner {
             let stderrData = await stderrTask.value
             let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
             let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+
+            // Some CLIs report structured failures (such as a signed-out session) on stdout with a
+            // documented exit code; callers opt in so they can read that output instead of losing it.
+            if exitCode != 0, acceptedNonZeroExitCodes.contains(exitCode) {
+                self.log.debug(
+                    "Subprocess exit accepted",
+                    metadata: [
+                        "label": label,
+                        "binary": binaryName,
+                        "status": "\(exitCode)",
+                        "duration_ms": "\(Int(duration * 1000))",
+                    ])
+                return SubprocessResult(stdout: stdout, stderr: stderr, exitCode: exitCode)
+            }
 
             if exitCode != 0 {
                 let duration = Date().timeIntervalSince(start)

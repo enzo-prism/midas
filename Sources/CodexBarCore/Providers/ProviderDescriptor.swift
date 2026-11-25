@@ -103,6 +103,7 @@ public enum ProviderDescriptorRegistry {
         .groq: GroqProviderDescriptor.descriptor,
         .llmproxy: LLMProxyProviderDescriptor.descriptor,
         .deepgram: DeepgramProviderDescriptor.descriptor,
+        .suno: SunoProviderDescriptor.descriptor,
         .meta: MetaProviderDescriptor.descriptor,
         .localInference: LocalInferenceProviderDescriptor.descriptor,
     ]

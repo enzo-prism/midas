@@ -49,7 +49,8 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | Amp | Local `amp usage` CLI, access-token API, then browser-cookie legacy fallback (`cli`, `api`, `web`). |
 | T3 Chat | Web tRPC customer-data endpoint via browser cookies (`web`). |
 | Warp | API token (config/env) → GraphQL request limits (`api`). |
-| ElevenLabs | API key from config/env → subscription usage API (`api`). |
+| ElevenLabs | API key from config/env → subscription usage API (`api`); auto falls back to the signed-in `elevenlabs` CLI (`cli`). |
+| Suno | `suno credits --json --no-browser --quiet` from the signed-in Suno CLI (`cli`). |
 | Windsurf | Web session bundle from browser localStorage (`web`) → local SQLite cache (`local`). |
 | Ollama | API key verifies Cloud API access (`api`); browser cookies expose Cloud quota windows (`web`). |
 | Synthetic | API key from config/env → quota API (`api`). |
@@ -230,12 +231,19 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Details: `docs/warp.md`.
 
 ## ElevenLabs
-- API key from Settings, token accounts, `ELEVENLABS_API_KEY`, or `XI_API_KEY`.
+- Auto mode uses an API key from Settings, token accounts, `ELEVENLABS_API_KEY`, or `XI_API_KEY`.
+- Without a key it runs `elevenlabs user subscription get --format json` with the CLI's own login.
 - Reads `GET /v1/user/subscription` from `api.elevenlabs.io`.
 - Shows character credit usage, reset timing, and voice slot usage when available.
 - Override the API base URL with `ELEVENLABS_API_URL`.
 - Status: `https://status.elevenlabs.io` (link only, no auto-polling).
 - Details: `docs/elevenlabs.md`.
+
+## Suno
+- Runs `suno credits --json --no-browser --quiet` with the Suno CLI's own login (`suno auth --login`).
+- Shows monthly credits used of the plan allowance, downloads used this period, and the renewal date.
+- Off by default; `SUNO_CLI_PATH` overrides the binary.
+- Details: `docs/suno.md`.
 
 ## Vertex AI
 - OAuth credentials from `gcloud auth application-default login` (ADC).

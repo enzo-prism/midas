@@ -1107,7 +1107,11 @@ extension UsageStore {
                 case .openrouter:
                     return Self.apiKeyDebugLine(openRouterDebugContext)
                 case .elevenlabs:
-                    return Self.apiKeyDebugLine(elevenLabsDebugContext)
+                    let cli = BinaryLocator.resolveElevenLabsBinary() ?? "missing"
+                    return Self.apiKeyDebugLine(elevenLabsDebugContext) + "\nelevenlabs CLI=\(cli)"
+                case .suno:
+                    let cli = BinaryLocator.resolveSunoBinary() ?? "missing"
+                    return "suno CLI=\(cli) (runs `suno credits --json --no-browser --quiet`)"
                 case .warp:
                     let resolution = ProviderTokenResolver.warpResolution()
                     let hasAny = resolution != nil
