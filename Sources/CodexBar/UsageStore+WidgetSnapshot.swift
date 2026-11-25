@@ -66,7 +66,33 @@ extension UsageStore {
         let entries = UsageProvider.allCases.compactMap { provider in
             self.makeWidgetEntry(for: provider)
         }
-        return WidgetSnapshot(entries: entries, enabledProviders: enabledProviders, generatedAt: Date())
+        let now = Date()
+        return WidgetSnapshot(
+            entries: entries,
+            enabledProviders: enabledProviders,
+            generatedAt: now,
+            combinedSpend: self.combinedSpendSources(now: now))
+    }
+
+    private func combinedSpendSources(now: Date) -> [WidgetSnapshot.CombinedSpendSource]? {
+        guard self.midasUsesCombinedTotals,
+              let rolling = MidasSpendPeriod.rolling30Days.range(now: now, timeZone: MidasSpendPeriod.utc),
+              let month = MidasSpendPeriod.currentMonth.range(now: now, timeZone: MidasSpendPeriod.utc)
+        else { return nil }
+        let first = min(rolling.start, month.start)
+        return self.midasProvidersForTotalDisplay().compactMap { provider in
+            guard let snapshot = self.displayTokenSnapshot(for: provider), snapshot.currencyCode == "USD"
+            else { return nil }
+            if provider == .codex, !self.usesSyncedUsage(for: provider), self.settings.midasCloudUsageEnabled {
+                guard self.lastTokenFetchScope[.codex]?.hasPrefix("cloud:") == true,
+                      self.midasCodexEstimate != nil, snapshot.last30DaysCostUSD != nil else { return nil }
+            } else {
+                guard MidasSpendPresentation.make(provider: provider, snapshot: snapshot)?.isEstimate == true
+                else { return nil }
+            }
+            let daily = snapshot.daily.filter { $0.date >= first && $0.date <= rolling.end }
+            return WidgetSnapshot.CombinedSpendSource(provider: provider, daily: daily, updatedAt: snapshot.updatedAt)
+        }
     }
 
     private func makeWidgetEntry(for provider: UsageProvider) -> WidgetSnapshot.ProviderEntry? {

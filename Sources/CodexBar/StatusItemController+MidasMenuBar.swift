@@ -86,6 +86,7 @@ extension StatusItemController {
         let presentation = MidasMenuBarPresentation(
             mode: self.settings.midasMenuBarMode,
             presentations: presentations,
+            totalProviders: Set(self.store.midasProvidersForTotalDisplay()),
             focusProvider: self.settings.midasMenuBarFocusProvider,
             refreshingProviders: visibleActivity,
             hideSpend: self.settings.midasMenuBarHideSpend,

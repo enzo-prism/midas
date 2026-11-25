@@ -59,6 +59,7 @@ struct MidasMenuBarPresentation: Equatable {
     init(
         mode: MidasMenuBarMode,
         presentations: [MidasProviderPresentation],
+        totalProviders: Set<UsageProvider>? = nil,
         focusProvider: UsageProvider,
         refreshingProviders: Set<UsageProvider>,
         hideSpend: Bool,
@@ -96,7 +97,7 @@ struct MidasMenuBarPresentation: Equatable {
                         && metric.remainingPercent <= 10
                 }
         }
-        let total = MidasTotalSpend(presentations: unique)
+        let total = MidasTotalSpend(presentations: unique.filter { totalProviders?.contains($0.provider) ?? true })
         self.isStale = displayed.contains { Self.stale($0, now: now, includeSpend: !hideSpend && mode != .orbit) }
         self.isPartial = (mode == .ledger || mode == .orbit) && !hideSpend && total.includedProviderCount > 0
             && total.hasIncompleteCoverage

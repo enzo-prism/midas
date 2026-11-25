@@ -65,6 +65,19 @@ struct MidasMenuBarPresentationTests {
         #expect(!model.isStale)
     }
 
+    @Test func orbitScopesSpendToPanelProvidersWhileKeepingLocalFavorite() {
+        let model = MidasMenuBarPresentation(
+            mode: .orbit,
+            presentations: [self.item(.cursor, amount: 27), self.item(.gemini, amount: 13)],
+            totalProviders: [.cursor],
+            focusProvider: .gemini,
+            refreshingProviders: [],
+            hideSpend: false)
+        #expect(model.title == "$27")
+        #expect(model.orbitProvider == .gemini)
+        #expect(model.tooltip.contains("1 provider · recorded estimates only"))
+    }
+
     @Test func metaActivityRemainsAccessibleWhenSpendIsHidden() {
         var item = self.item(.meta)
         item.activitySummary = "12,000 tokens recorded"

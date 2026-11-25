@@ -36,9 +36,13 @@ extension UsageStore {
         }
     }
 
-    var midasDisplayTimeZone: TimeZone {
+    var midasUsesCombinedTotals: Bool {
         self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
             && (self.midasUsageSync.hasConnection || !self.midasUsageSync.snapshots.isEmpty)
+    }
+
+    var midasDisplayTimeZone: TimeZone {
+        self.midasUsesCombinedTotals
             ? MidasSpendPeriod.utc : .current
     }
 
@@ -47,8 +51,7 @@ extension UsageStore {
     func usesSyncedUsage(for provider: UsageProvider) -> Bool {
         // Shared session events do not retain a verifiable OpenAI account owner.
         if provider == .codex, self.settings.midasCodexAccountEmailFilter != nil { return false }
-        return self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
-            && (self.midasUsageSync.hasConnection || !self.midasUsageSync.snapshots.isEmpty)
+        return self.midasUsesCombinedTotals
             && Self.midasSyncProviders.contains(provider)
     }
 
@@ -72,12 +75,10 @@ extension UsageStore {
 
     /// Combined totals have one shared source set, independent of each Mac's provider display preferences.
     func midasProvidersForTotalDisplay() -> [UsageProvider] {
-        let combined = self.midasUsageSync.isEnabled && self.midasUsageSync.includesSyncedUsage
-            && (self.midasUsageSync.hasConnection || !self.midasUsageSync.snapshots.isEmpty)
-        return MidasRecordedTokenTotal.providersForTotal(
+        MidasRecordedTokenTotal.providersForTotal(
             local: self.enabledProvidersForDisplay(),
             shared: Array(self.midasUsageSync.snapshots.keys),
-            combined: combined)
+            combined: self.midasUsesCombinedTotals)
     }
 
     func spendReportingTimeZone(for provider: UsageProvider, snapshot: CostUsageTokenSnapshot?) -> TimeZone {

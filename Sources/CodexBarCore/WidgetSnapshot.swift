@@ -134,11 +134,31 @@ public struct WidgetSnapshot: Codable, Sendable {
         }
     }
 
+    /// Priced daily rows used by the combined AI Spend panel, before choosing a date range.
+    public struct CombinedSpendSource: Codable, Equatable, Sendable {
+        public let provider: UsageProvider
+        public let daily: [CostUsageDailyReport.Entry]
+        public let updatedAt: Date
+
+        public init(provider: UsageProvider, daily: [CostUsageDailyReport.Entry], updatedAt: Date) {
+            self.provider = provider
+            self.daily = daily
+            self.updatedAt = updatedAt
+        }
+    }
+
+    public let combinedSpend: [CombinedSpendSource]?
     public let entries: [ProviderEntry]
     public let enabledProviders: [UsageProvider]
     public let generatedAt: Date
 
-    public init(entries: [ProviderEntry], enabledProviders: [UsageProvider]? = nil, generatedAt: Date) {
+    public init(
+        entries: [ProviderEntry],
+        enabledProviders: [UsageProvider]? = nil,
+        generatedAt: Date,
+        combinedSpend: [CombinedSpendSource]? = nil)
+    {
+        self.combinedSpend = combinedSpend
         self.entries = entries
         self.enabledProviders = enabledProviders ?? entries.map(\.provider)
         self.generatedAt = generatedAt
@@ -147,11 +167,13 @@ public struct WidgetSnapshot: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case entries
         case enabledProviders
+        case combinedSpend
         case generatedAt
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.combinedSpend = try container.decodeIfPresent([CombinedSpendSource].self, forKey: .combinedSpend)
         self.entries = try container.decode([ProviderEntry].self, forKey: .entries)
         self.generatedAt = try container.decode(Date.self, forKey: .generatedAt)
         self.enabledProviders = try container.decodeIfPresent([UsageProvider].self, forKey: .enabledProviders)
@@ -160,6 +182,7 @@ public struct WidgetSnapshot: Codable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(self.combinedSpend, forKey: .combinedSpend)
         try container.encode(self.entries, forKey: .entries)
         try container.encode(self.enabledProviders, forKey: .enabledProviders)
         try container.encode(self.generatedAt, forKey: .generatedAt)
@@ -169,7 +192,7 @@ public struct WidgetSnapshot: Codable, Sendable {
     /// Ignores `generatedAt` and per-entry `updatedAt` so unchanged usage data
     /// doesn't force a widget timeline reload on every refresh cycle.
     public func hasSameRenderedContent(as other: WidgetSnapshot) -> Bool {
-        guard self.enabledProviders == other.enabledProviders,
+        guard self.enabledProviders == other.enabledProviders, self.combinedSpend == other.combinedSpend,
               self.entries.count == other.entries.count
         else { return false }
         return zip(self.entries, other.entries).allSatisfy { lhs, rhs in
