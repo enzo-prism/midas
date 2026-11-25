@@ -135,7 +135,7 @@ struct SunoUsageTests {
         """)
         defer { script.remove() }
 
-        let snapshot = try await SunoCLIProbe().fetch(
+        let snapshot = try await SunoCLIProbe(runLock: script.runLock).fetch(
             environment: ["SUNO_CLI_PATH": script.path, "PATH": "/usr/bin:/bin"],
             now: Date(timeIntervalSince1970: 7))
         #expect(snapshot.creditsUsed == 470)

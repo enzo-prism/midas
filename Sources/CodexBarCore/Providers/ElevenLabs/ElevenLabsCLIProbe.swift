@@ -6,10 +6,15 @@ import Foundation
 /// `elevenlabs auth login`). Midas never reads that entry: it runs the CLI, which reads its own
 /// item, so no Keychain prompt appears and no credential passes through Midas.
 public struct ElevenLabsCLIProbe: Sendable {
-    static let commandTimeout: TimeInterval = 30
+    static let commandTimeout: TimeInterval = 60
     static let arguments = ["user", "subscription", "get", "--format", "json"]
 
-    public init() {}
+    /// Serializes runs across Midas, its bundled CLI, and other tools that take the same lock.
+    let runLock: ProviderCLIRunLock
+
+    public init(runLock: ProviderCLIRunLock = .elevenLabs) {
+        self.runLock = runLock
+    }
 
     public func fetch(
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -20,17 +25,23 @@ public struct ElevenLabsCLIProbe: Sendable {
             throw ElevenLabsUsageError.cliNotInstalled
         }
 
+        let commandArguments = Self.arguments
+        let runEnvironment = Self.commandEnvironment(base: environment, loginPATH: loginPATH)
         let result: SubprocessResult
         do {
-            result = try await SubprocessRunner.run(
-                binary: executable,
-                arguments: Self.arguments,
-                environment: Self.commandEnvironment(base: environment, loginPATH: loginPATH),
-                timeout: Self.commandTimeout,
-                standardInput: FileHandle.nullDevice,
-                acceptedNonZeroExitCodes: Set(1...255),
-                label: "elevenlabs-subscription")
+            result = try await self.runLock.run {
+                try await SubprocessRunner.run(
+                    binary: executable,
+                    arguments: commandArguments,
+                    environment: runEnvironment,
+                    timeout: Self.commandTimeout,
+                    standardInput: FileHandle.nullDevice,
+                    acceptedNonZeroExitCodes: Set(1...255),
+                    label: "elevenlabs-subscription")
+            }
         } catch let error as SubprocessRunnerError {
+            throw ElevenLabsUsageError.cliFailed(error.localizedDescription)
+        } catch let error as ProviderCLIRunLockError {
             throw ElevenLabsUsageError.cliFailed(error.localizedDescription)
         }
 

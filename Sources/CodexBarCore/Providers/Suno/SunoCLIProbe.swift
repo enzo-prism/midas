@@ -9,7 +9,12 @@ public struct SunoCLIProbe: Sendable {
     static let commandTimeout: TimeInterval = 30
     static let arguments = ["credits", "--json", "--no-browser", "--quiet"]
 
-    public init() {}
+    /// Serializes runs across Midas, its bundled CLI, and other tools that take the same lock.
+    let runLock: ProviderCLIRunLock
+
+    public init(runLock: ProviderCLIRunLock = .suno) {
+        self.runLock = runLock
+    }
 
     public func fetch(
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -27,17 +32,23 @@ public struct SunoCLIProbe: Sendable {
             env: environment,
             loginPATH: loginPATH)
 
+        let commandArguments = Self.arguments
+        let runEnvironment = commandEnvironment
         let result: SubprocessResult
         do {
-            result = try await SubprocessRunner.run(
-                binary: executable,
-                arguments: Self.arguments,
-                environment: commandEnvironment,
-                timeout: Self.commandTimeout,
-                standardInput: FileHandle.nullDevice,
-                acceptedNonZeroExitCodes: Set(1...255),
-                label: "suno-credits")
+            result = try await self.runLock.run {
+                try await SubprocessRunner.run(
+                    binary: executable,
+                    arguments: commandArguments,
+                    environment: runEnvironment,
+                    timeout: Self.commandTimeout,
+                    standardInput: FileHandle.nullDevice,
+                    acceptedNonZeroExitCodes: Set(1...255),
+                    label: "suno-credits")
+            }
         } catch let error as SubprocessRunnerError {
+            throw SunoUsageError.cliFailed(error.localizedDescription)
+        } catch let error as ProviderCLIRunLockError {
             throw SunoUsageError.cliFailed(error.localizedDescription)
         }
 

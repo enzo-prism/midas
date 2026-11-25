@@ -131,7 +131,7 @@ struct ElevenLabsCLIProbeTests {
         defer { script.remove() }
 
         await #expect(throws: ElevenLabsUsageError.cliSignedOut) {
-            try await ElevenLabsCLIProbe().fetch(environment: [
+            try await ElevenLabsCLIProbe(runLock: script.runLock).fetch(environment: [
                 "ELEVENLABS_CLI_PATH": script.path,
                 "ELEVENLABS_API_KEY": "xi-should-not-pass",
                 "PATH": "/usr/bin:/bin",
@@ -148,7 +148,7 @@ struct ElevenLabsCLIProbeTests {
         """)
         defer { script.remove() }
 
-        let snapshot = try await ElevenLabsCLIProbe().fetch(
+        let snapshot = try await ElevenLabsCLIProbe(runLock: script.runLock).fetch(
             environment: ["ELEVENLABS_CLI_PATH": script.path, "PATH": "/usr/bin:/bin"],
             now: Date(timeIntervalSince1970: 5))
         #expect(snapshot.characterCount == 51500)
@@ -214,6 +214,11 @@ struct ElevenLabsCLIProbeTests {
 struct FakeCLI {
     let directory: URL
     let path: String
+
+    /// A run lock private to this fake, so tests never wait on a live Midas.
+    var runLock: ProviderCLIRunLock {
+        ProviderCLIRunLock(name: "fake-cli", directory: self.directory)
+    }
 
     static func make(name: String, body: String) throws -> FakeCLI {
         let directory = FileManager.default.temporaryDirectory

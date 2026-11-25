@@ -51,6 +51,12 @@ Midas finds `suno` at `SUNO_CLI_PATH`, on the login-shell PATH, or in `~/.local/
 
 Run `suno auth --login` in Terminal, then refresh Midas.
 
+### Several tools read Suno
+
+Midas runs `suno` under the exclusive lock `~/Library/Caches/Midas/locks/suno-cli.lock`, so the app, its bundled
+`codexbar` CLI and any script that takes the same lock never run the CLI at the same time (see
+[ElevenLabs](elevenlabs.md#the-elevenlabs-cli-is-signed-out) for the command).
+
 ### "Suno CLI not found"
 
 Install the `suno` CLI or set `SUNO_CLI_PATH`. The Midas debug log (**Settings -> Debug**) shows which

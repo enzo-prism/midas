@@ -1,5 +1,15 @@
 # Changelog
 
+## Midas 0.52.1 — November 25, 2026
+
+- **ElevenLabs stays signed in.** The ElevenLabs CLI deletes its login when a token refresh fails, and its
+  refresh token works once, so two usage checks refreshing at the same moment signed you out. Midas now
+  runs the ElevenLabs and Suno CLIs under an exclusive lock in `~/Library/Caches/Midas/locks/`, shared by
+  the app, its bundled CLI and any script that takes the same lock, and never stops a CLI partway through
+  because a newer refresh started. The ElevenLabs CLI gets 60 seconds instead of 30.
+
+Build 145.
+
 ## Midas 0.52.0 — November 24, 2026
 
 - **ElevenLabs works without an API key.** A new **Usage source** setting (Auto, ElevenLabs CLI, API key)

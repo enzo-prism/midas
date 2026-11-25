@@ -87,6 +87,17 @@ For tests or self-hosted/proxy setups, override the API base URL with `ELEVENLAB
 
 The CLI's session expired or was never created. Run `elevenlabs auth login` in Terminal, then refresh Midas.
 
+The CLI deletes its saved login whenever a token refresh is rejected, and an ElevenLabs refresh token works
+once. Two copies of the CLI refreshing at the same moment, or a copy stopped between the refresh and the
+Keychain write, therefore sign you out. Midas runs the CLI under an exclusive lock,
+`~/Library/Caches/Midas/locks/elevenlabs-cli.lock`, shared by the app and its bundled `codexbar` CLI, and
+never stops a run early. Other scripts that call `elevenlabs` should take the same lock, for example:
+
+```bash
+perl -e 'use Fcntl qw(:flock); $^F = 255; open(my $l, ">>", shift) or die; flock($l, LOCK_EX) or die; exec { $ARGV[0] } @ARGV' \
+  ~/Library/Caches/Midas/locks/elevenlabs-cli.lock elevenlabs user subscription get --format json
+```
+
 ### "ElevenLabs CLI not found"
 
 Install it with `npm install -g @elevenlabs/cli`, or point `ELEVENLABS_CLI_PATH` at the binary. The Midas
