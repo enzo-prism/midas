@@ -30,7 +30,17 @@ extension UsageStore {
                 result = .saved(path: "test-widget-snapshot-override")
             } else {
                 result = await Task.detached(priority: .utility) {
-                    WidgetSnapshotStore.save(snapshot)
+                    let result = WidgetSnapshotStore.save(snapshot)
+                    if Bundle.main.bundleIdentifier == MidasIdentity.bundleIdentifier {
+                        do {
+                            let directory = AppGroupSupport.localFallbackDirectory()
+                            try MidasCollectorSpendExport(snapshot: snapshot).write(to: directory)
+                        } catch {
+                            CodexBarLog.logger(LogCategories.app).error(
+                                "Combined spend export failed: \(error.localizedDescription)")
+                        }
+                    }
+                    return result
                 }.value
             }
 
@@ -217,5 +227,23 @@ extension UsageStore {
             }
         }
         return rows.filter { $0.percentLeft != nil }
+    }
+}
+
+/// The background collector has no App Group entitlement. Give it only the numeric spend export.
+struct MidasCollectorSpendExport: Encodable {
+    let generatedAt: Date
+    let combinedSpend: [WidgetSnapshot.CombinedSpendSource]?
+
+    init(snapshot: WidgetSnapshot) {
+        self.generatedAt = snapshot.generatedAt
+        self.combinedSpend = snapshot.combinedSpend
+    }
+
+    func write(to directory: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(self)
+        try data.write(to: directory.appendingPathComponent("combined-spend.json"), options: .atomic)
     }
 }
