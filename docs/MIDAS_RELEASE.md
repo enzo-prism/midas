@@ -4,6 +4,39 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.52.1 changes: ElevenLabs stays signed in
+
+The ElevenLabs CLI deletes its Keychain login whenever a token refresh is rejected, and a refresh
+token works once. On the Mac Studio the app, `CodexBarCLI usage --provider all` from the midas-web
+collector, and the collector's own direct `elevenlabs` calls all ran the CLI every few minutes, so
+the session expired into a refresh race and the login disappeared within a day. Midas could also
+cancel a CLI run mid-refresh when a newer refresh replaced it.
+
+ElevenLabs and Suno CLI runs now take an exclusive `flock` on
+`~/Library/Caches/Midas/locks/<cli>.lock` (`ProviderCLIRunLock`) and run in a detached task, so a
+cancelled refresh never kills the CLI; the ElevenLabs CLI timeout is 60 seconds. The midas-web
+collector (`enzo-prism/midas-web` `574bc90`, installed in `~/.config/midas-web`) takes the same
+lock through `perl` for its direct ElevenLabs and Suno calls; a Swift test runs that exact command
+against `ProviderCLIRunLock`.
+
+The binary identifies source `d87f113b` on `main`. `make check` passed with zero violations across
+1,314 files. The full suite ran 4,716 tests at a load average near 160; the only failures were the
+main-thread hang watchdog and a merged-icon animation test, and both suites (12 tests) passed when
+rerun alone.
+
+Apple notarization `ed9422e6-4bbe-4063-a99e-65f214858d77` was Accepted. The app and dSYM share
+arm64 UUID `B89919B1-D8D5-3CE4-B1FB-ACC6D4396F37`. Deep strict signing, stapling, Gatekeeper,
+archive signing, and both signed XML feeds passed. Archive SHA-256:
+`9445505e10c2f278078cc761d543546353036580f387720a6e99680d75259bdf`.
+
+Downloaded draft assets, anonymous public assets, and both actual `/releases/latest/download/`
+feeds matched the prepared checksums before the website was updated. Published as
+[`v0.52.1-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.52.1-midas.1). The public
+bundle is installed and running at `/Applications/Midas.app` on the Mac Studio; 0.52.0 and the
+repo-root package were moved to the Trash. Website source `98ac480` reached production on
+`midas-ai.dev`. All 50 local and 39 production browser checks passed (the analytics spec was
+skipped in production), and the live download link retrieves the archive above.
+
 ## 0.52.0 changes: Suno usage and ElevenLabs without an API key
 
 **ElevenLabs** gains a `CLI` source that reads `elevenlabs user subscription get --format json`
