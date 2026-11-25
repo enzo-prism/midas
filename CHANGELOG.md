@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Midas 0.52.0 — November 24, 2026
 
 - **ElevenLabs works without an API key.** A new **Usage source** setting (Auto, ElevenLabs CLI, API key)
   lets Midas read usage through the official ElevenLabs CLI after `elevenlabs auth login`. Auto keeps
@@ -10,6 +10,12 @@
   monthly credits used of the plan allowance, downloads used this period, the renewal date and the plan.
 - Credit counts for ElevenLabs and Suno show as details ("470 / 2,500 credits") rather than reading as
   "Resets 470 / 2,500 credits".
+- Fix Gemini sign-in with Antigravity 2.34 and later, whose app embeds a second (enterprise) Google
+  OAuth client; Midas now picks the consumer Google-account client and keeps the one that signed in.
+- Gemini's 5-hour and weekly labels and the Orbit ring follow the rolling windows Gemini actually
+  reports, and spend setup gains **Connect Gemini**.
+
+Build 144.
 
 ## Midas 0.51.0 — November 19, 2026
 
