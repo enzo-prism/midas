@@ -156,8 +156,12 @@ public struct ElevenLabsUsageSnapshot: Codable, Sendable, Equatable {
     }
 }
 
-public enum ElevenLabsUsageError: LocalizedError, Sendable {
+public enum ElevenLabsUsageError: LocalizedError, Sendable, Equatable {
     case missingCredentials
+    case invalidAPIKey
+    case cliNotInstalled
+    case cliSignedOut
+    case cliFailed(String)
     case networkError(String)
     case apiError(String)
     case parseFailed(String)
@@ -165,7 +169,16 @@ public enum ElevenLabsUsageError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .missingCredentials:
-            "Missing ElevenLabs API key. Set apiKey in ~/.codexbar/config.json or ELEVENLABS_API_KEY."
+            "Sign in with the ElevenLabs CLI (`elevenlabs auth login`) or add an ElevenLabs API key."
+        case .invalidAPIKey:
+            "ElevenLabs rejected the API key. Check it under Settings -> Providers -> ElevenLabs."
+        case .cliNotInstalled:
+            "ElevenLabs CLI not found. Install it with `npm install -g @elevenlabs/cli` and run "
+                + "`elevenlabs auth login`, or add an ElevenLabs API key."
+        case .cliSignedOut:
+            "The ElevenLabs CLI is signed out. Run `elevenlabs auth login` in Terminal."
+        case let .cliFailed(message):
+            "ElevenLabs CLI error: \(message)"
         case let .networkError(message):
             "ElevenLabs network error: \(message)"
         case let .apiError(message):
@@ -202,7 +215,7 @@ public struct ElevenLabsUsageFetcher: Sendable {
         case 200:
             return try Self.parseSnapshot(data: response.data, updatedAt: Date())
         case 401, 403:
-            throw ElevenLabsUsageError.missingCredentials
+            throw ElevenLabsUsageError.invalidAPIKey
         default:
             Self.log.error("ElevenLabs API returned \(response.statusCode)")
             throw ElevenLabsUsageError.apiError("HTTP \(response.statusCode)")
@@ -213,7 +226,9 @@ public struct ElevenLabsUsageFetcher: Sendable {
         try self.parseSnapshot(data: data, updatedAt: updatedAt)
     }
 
-    private static func parseSnapshot(data: Data, updatedAt: Date) throws -> ElevenLabsUsageSnapshot {
+    /// Parses a `GET /v1/user/subscription` body. The ElevenLabs CLI prints the same body for
+    /// `elevenlabs user subscription get --format json`.
+    static func parseSnapshot(data: Data, updatedAt: Date) throws -> ElevenLabsUsageSnapshot {
         let decoded: ElevenLabsSubscriptionResponse
         do {
             decoded = try JSONDecoder().decode(ElevenLabsSubscriptionResponse.self, from: data)

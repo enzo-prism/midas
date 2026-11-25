@@ -1420,6 +1420,7 @@ extension UsageMenuCardView.Model {
         if [.warp, .kilo, .mimo, .deepseek].contains(input.provider), primary.resetsAt == nil {
             primaryResetText = nil
         }
+        Self.applyCountDetail(input.provider, primary, detail: &primaryDetailText, reset: &primaryResetText)
         // Abacus: show credits as detail, compute pace on the primary monthly window
         var primaryPacePercent: Double?
         var primaryPaceOnTop = true
@@ -1566,6 +1567,7 @@ extension UsageMenuCardView.Model {
         {
             weeklyResetText = detail
         }
+        Self.applyCountDetail(input.provider, weekly, detail: &weeklyDetailText, reset: &weeklyResetText)
         if input.provider == .copilot,
            let detail = weekly.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
            !detail.isEmpty

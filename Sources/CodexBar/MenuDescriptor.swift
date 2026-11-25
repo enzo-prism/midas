@@ -152,7 +152,8 @@ struct MenuDescriptor {
             if let primary = snap.primary {
                 let primaryWindow = if provider == .warp || provider == .kilo || provider == .mimo || provider ==
                     .abacus ||
-                    provider == .deepseek || provider == .azureopenai
+                    provider == .deepseek || provider == .azureopenai ||
+                    UsageMenuCardView.Model.countDetailProviders.contains(provider)
                 {
                     // Some providers use resetDescription for non-reset detail
                     // (e.g., "Unlimited", "X/Y credits"). Avoid rendering it as a "Resets ..." line.
@@ -171,7 +172,8 @@ struct MenuDescriptor {
                     resetStyle: resetStyle,
                     showUsed: settings.usageBarsShowUsed)
                 if provider == .warp || provider == .kilo || provider == .mimo || provider == .abacus || provider ==
-                    .deepseek || provider == .azureopenai,
+                    .deepseek || provider == .azureopenai || UsageMenuCardView.Model.countDetailProviders
+                    .contains(provider),
                     let detail = primary.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
                     !detail.isEmpty
                 {
@@ -196,11 +198,13 @@ struct MenuDescriptor {
             }
             if let weekly = snap.secondary {
                 let weeklyResetOverride: String? = {
-                    guard provider == .warp || provider == .kilo || provider == .perplexity || provider == .crof
+                    let countDetail = UsageMenuCardView.Model.countDetailProviders.contains(provider)
+                    guard provider == .warp || provider == .kilo || provider == .perplexity || provider == .crof ||
+                        countDetail
                     else { return nil }
                     let detail = weekly.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard let detail, !detail.isEmpty else { return nil }
-                    if provider == .kilo, weekly.resetsAt != nil {
+                    if provider == .kilo || countDetail, weekly.resetsAt != nil {
                         return nil
                     }
                     return detail
@@ -212,7 +216,7 @@ struct MenuDescriptor {
                     resetStyle: resetStyle,
                     showUsed: settings.usageBarsShowUsed,
                     resetOverride: weeklyResetOverride)
-                if provider == .kilo,
+                if provider == .kilo || UsageMenuCardView.Model.countDetailProviders.contains(provider),
                    weekly.resetsAt != nil,
                    let detail = weekly.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !detail.isEmpty

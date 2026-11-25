@@ -33,12 +33,27 @@ public enum ElevenLabsProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "ElevenLabs cost history is not available via API yet." }),
             fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .api],
-                pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [ElevenLabsAPIFetchStrategy()] })),
+                sourceModes: [.auto, .api, .cli],
+                pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "elevenlabs",
                 aliases: ["11labs", "eleven"],
                 versionDetector: nil))
+    }
+
+    /// Auto prefers an API key when one is configured (one HTTPS request), then the signed-in
+    /// ElevenLabs CLI, which needs no key in Midas.
+    static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {
+        switch context.sourceMode {
+        case .auto:
+            [ElevenLabsAPIFetchStrategy(), ElevenLabsCLIFetchStrategy()]
+        case .api:
+            [ElevenLabsAPIFetchStrategy()]
+        case .cli:
+            [ElevenLabsCLIFetchStrategy()]
+        case .web, .oauth:
+            []
+        }
     }
 }
 
@@ -47,7 +62,8 @@ struct ElevenLabsAPIFetchStrategy: ProviderFetchStrategy {
     let kind: ProviderFetchKind = .apiToken
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        Self.resolveToken(environment: context.env) != nil
+        // In API mode stay available so a missing key surfaces as setup guidance.
+        context.sourceMode == .api || Self.resolveToken(environment: context.env) != nil
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
@@ -62,11 +78,36 @@ struct ElevenLabsAPIFetchStrategy: ProviderFetchStrategy {
             sourceLabel: "api")
     }
 
-    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
-        false
+    func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
+        // A chosen token account is an explicit identity; never swap in the CLI's account.
+        guard context.sourceMode == .auto, context.selectedTokenAccountID == nil else { return false }
+        guard let error = error as? ElevenLabsUsageError else { return false }
+        return error == .missingCredentials || error == .invalidAPIKey
     }
 
     private static func resolveToken(environment: [String: String]) -> String? {
         ProviderTokenResolver.elevenLabsToken(environment: environment)
+    }
+}
+
+struct ElevenLabsCLIFetchStrategy: ProviderFetchStrategy {
+    let id: String = "elevenlabs.cli"
+    let kind: ProviderFetchKind = .cli
+
+    func isAvailable(_ context: ProviderFetchContext) async -> Bool {
+        _ = context
+        // Stay available so a missing or signed-out CLI surfaces as actionable setup guidance.
+        return true
+    }
+
+    func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        let usage = try await ElevenLabsCLIProbe().fetch(environment: context.env)
+        return self.makeResult(
+            usage: usage.toUsageSnapshot(),
+            sourceLabel: "cli")
+    }
+
+    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        false
     }
 }

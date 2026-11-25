@@ -334,6 +334,9 @@ struct MidasProviderPresentation {
         if provider == .gemini {
             quotaMetrics = MidasGeminiLimits.arrange(quotaMetrics, snapshot: snapshot)
         }
+        if UsageMenuCardView.Model.countDetailProviders.contains(provider) {
+            quotaMetrics = MidasCreditCounts.annotate(quotaMetrics, card: card)
+        }
         if provider == .cursor {
             quotaMetrics = MidasCursorLimits.arrange(quotaMetrics)
         }
@@ -642,6 +645,35 @@ enum MidasClaudeLimits {
 
 /// Gemini's overview shows its primary and secondary quota windows (e.g. 5-hour + weekly pools,
 /// or Pro + Flash daily windows for Gemini CLI); per-model rows stay in provider details.
+/// Credit subscriptions (ElevenLabs, Suno) are judged by exact counts, not only a percentage:
+/// "Resets in 14d · 470 / 2,500 credits". Rows that never reset (voice slots) show the count alone.
+enum MidasCreditCounts {
+    static func annotate(
+        _ metrics: [MidasQuotaMetric],
+        card: UsageMenuCardView.Model?) -> [MidasQuotaMetric]
+    {
+        metrics.map { metric in
+            guard let detail = card?.metrics.first(where: { $0.id == metric.id })?.detailText?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !detail.isEmpty
+            else { return metric }
+            let reset = metric.resetText?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = [reset, detail].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
+            var copy = MidasQuotaMetric(
+                id: metric.id,
+                title: metric.title,
+                remainingPercent: metric.remainingPercent,
+                resetText: text,
+                helpText: metric.helpText)
+            copy.resetsAt = metric.resetsAt
+            copy.statusText = metric.statusText
+            copy.iconAssetName = metric.iconAssetName
+            copy.isLastKnown = metric.isLastKnown
+            return copy
+        }
+    }
+}
+
 enum MidasGeminiLimits {
     static let fiveHourTitle = "5-hour limit"
     static let weeklyTitle = "Weekly limit"

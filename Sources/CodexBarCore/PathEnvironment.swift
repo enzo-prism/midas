@@ -272,6 +272,86 @@ public enum BinaryLocator {
             home: home)
     }
 
+    /// The official ElevenLabs CLI (`@elevenlabs/cli`, a Node script). It keeps its OAuth session in
+    /// its own Keychain entry, so Midas runs it rather than reading that entry.
+    public static func resolveElevenLabsBinary(
+        env: [String: String] = ProcessInfo.processInfo.environment,
+        loginPATH: [String]? = LoginShellPathCache.shared.current,
+        commandV: (String, String?, TimeInterval, FileManager) -> String? = ShellCommandLocator.commandV,
+        aliasResolver: (String, String?, TimeInterval, FileManager, String) -> String? = ShellCommandLocator
+            .resolveAlias,
+        fileManager: FileManager = .default,
+        home: String = NSHomeDirectory()) -> String?
+    {
+        self.resolveBinary(
+            name: "elevenlabs",
+            overrideKey: "ELEVENLABS_CLI_PATH",
+            env: env,
+            loginPATH: loginPATH,
+            commandV: commandV,
+            aliasResolver: aliasResolver,
+            wellKnownPaths: self.elevenLabsWellKnownPaths(home: home),
+            fileManager: fileManager,
+            home: home)
+    }
+
+    static func elevenLabsWellKnownPaths(home: String) -> [String] {
+        [
+            "\(home)/.local/bin/elevenlabs",
+            "\(home)/.npm-global/bin/elevenlabs",
+            "/opt/homebrew/bin/elevenlabs",
+            "/usr/local/bin/elevenlabs",
+        ]
+    }
+
+    /// The Suno CLI (`suno`, a native binary). Its session lives in its own Application Support
+    /// folder; Midas only runs read-only commands with `--no-browser`.
+    public static func resolveSunoBinary(
+        env: [String: String] = ProcessInfo.processInfo.environment,
+        loginPATH: [String]? = LoginShellPathCache.shared.current,
+        commandV: (String, String?, TimeInterval, FileManager) -> String? = ShellCommandLocator.commandV,
+        aliasResolver: (String, String?, TimeInterval, FileManager, String) -> String? = ShellCommandLocator
+            .resolveAlias,
+        fileManager: FileManager = .default,
+        home: String = NSHomeDirectory()) -> String?
+    {
+        self.resolveBinary(
+            name: "suno",
+            overrideKey: "SUNO_CLI_PATH",
+            env: env,
+            loginPATH: loginPATH,
+            commandV: commandV,
+            aliasResolver: aliasResolver,
+            wellKnownPaths: self.sunoWellKnownPaths(home: home),
+            fileManager: fileManager,
+            home: home)
+    }
+
+    static func sunoWellKnownPaths(home: String) -> [String] {
+        [
+            "\(home)/.local/bin/suno",
+            "\(home)/.cargo/bin/suno",
+            "/opt/homebrew/bin/suno",
+            "/usr/local/bin/suno",
+        ]
+    }
+
+    /// Lookup that never starts a shell: override, captured login PATH, current PATH and well-known
+    /// paths only. Safe for main-actor availability checks.
+    public static func noShellCommandV(_: String, _: String?, _: TimeInterval, _: FileManager) -> String? {
+        nil
+    }
+
+    public static func noShellAlias(
+        _: String,
+        _: String?,
+        _: TimeInterval,
+        _: FileManager,
+        _: String) -> String?
+    {
+        nil
+    }
+
     // swiftlint:disable function_parameter_count
     private static func resolveBinary(
         name: String,

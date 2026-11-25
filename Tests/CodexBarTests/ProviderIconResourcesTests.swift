@@ -31,6 +31,7 @@ struct ProviderIconResourcesTests {
             "kimi",
             "bedrock",
             "elevenlabs",
+            "suno",
             "groq",
             "llmproxy",
             "deepgram",

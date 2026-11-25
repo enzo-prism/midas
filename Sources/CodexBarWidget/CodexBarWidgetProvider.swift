@@ -89,6 +89,7 @@ enum ProviderChoice: String, AppEnum {
         case .synthetic: return nil // Synthetic not yet supported in widgets
         case .openrouter: return nil // OpenRouter not yet supported in widgets
         case .elevenlabs: return nil // ElevenLabs not yet supported in widgets
+        case .suno: return nil // Suno not yet supported in widgets
         case .warp: return nil // Warp not yet supported in widgets
         case .windsurf: return nil // Windsurf not yet supported in widgets
         case .perplexity: return nil // Perplexity not yet supported in widgets

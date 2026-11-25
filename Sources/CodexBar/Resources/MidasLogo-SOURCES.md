@@ -17,6 +17,11 @@ Added 2026-10-17:
 
 - https://svgl.app/library/nvidia-icon-light.svg and https://svgl.app/library/nvidia-icon-dark.svg → `MidasLogo-nvidia_light.svg`, `MidasLogo-nvidia_dark.svg`, and `ProviderIcon-nvidia.svg`. NVIDIA eye and wordmark geometry and viewBox are unchanged. Both paths use black or white for the monochrome appearance variants; the menu-bar mark is a template image. The local inference card uses a separate NVIDIA green accent. NVIDIA is a trademark of NVIDIA Corporation; brand reference: https://www.nvidia.com/en-us/about-nvidia/legal-info/logo-brand-usage/.
 
+Added 2026-11-24:
+
+- https://svgl.app/library/suno.svg → `ProviderIcon-suno.svg` (SVGL catalog entry "Suno", linking https://suno.com/). Path geometry and viewBox unchanged; the `class` attribute was dropped and fill set to `currentColor` for the monochrome template image. Suno is a trademark of Suno, Inc.
+- ElevenLabs "11" symbol from the ElevenLabs brand kit (https://elevenlabs.io/brand, black SVG downloaded 2026-11-16 for zTokens) → `ProviderIcon-elevenlabs.svg`, replacing the inherited three-bar stand-in. The two bars keep their original coordinates; only the viewBox was cropped to a centered square with even padding. ElevenLabs is a trademark of Eleven Labs, Inc.
+
 Source catalog: https://svgl.app/ · repository: https://github.com/pheralb/svgl
 Provider marks remain the property of their respective owners. Brand references: https://openai.com/codex/, https://cursor.com/brand, https://claude.ai/, https://about.meta.com/brand/resources/.
 

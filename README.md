@@ -331,7 +331,7 @@ use the fork quick start above; installing the upstream Homebrew cask does not i
 
 <a href="https://codexbar.app"><img src="docs/social.png" alt="CodexBar — every AI coding limit in your menu bar. 40+ providers." width="100%" /></a>
 
-Tiny macOS 14+ menu bar app that keeps **AI coding-provider limits visible** and shows when each window resets. Codex, OpenAI, Claude, Cursor, Gemini, Copilot, Grok, GroqCloud, ElevenLabs, Deepgram, z.ai, MiniMax, Kiro, Vertex AI, Augment, OpenRouter, LLM Proxy, Codebuff, Command Code, AWS Bedrock, and many newer coding providers. One status item per provider, or Merge Icons mode with a provider switcher. No Dock icon, minimal UI, dynamic bar icons.
+Tiny macOS 14+ menu bar app that keeps **AI coding-provider limits visible** and shows when each window resets. Codex, OpenAI, Claude, Cursor, Gemini, Copilot, Grok, GroqCloud, ElevenLabs, Suno, Deepgram, z.ai, MiniMax, Kiro, Vertex AI, Augment, OpenRouter, LLM Proxy, Codebuff, Command Code, AWS Bedrock, and many newer coding providers. One status item per provider, or Merge Icons mode with a provider switcher. No Dock icon, minimal UI, dynamic bar icons.
 
 <img src="codexbar.png" alt="CodexBar menu popover with provider tiles, usage bars, and reset countdowns" width="520" />
 
@@ -421,7 +421,8 @@ See [CLI configuration](docs/cli-configuration.md) for the full flow.
 - [Ollama](docs/ollama.md) — API key access plus browser cookies for Ollama Cloud usage windows.
 - [JetBrains AI](docs/jetbrains.md) — Local XML-based quota from JetBrains IDE configuration; monthly credits tracking.
 - [Warp](docs/warp.md) — API token for GraphQL request limits and monthly credits.
-- [ElevenLabs](docs/elevenlabs.md) — API key for character credits and voice slot usage.
+- [ElevenLabs](docs/elevenlabs.md) — Signed-in ElevenLabs CLI or API key for character credits and voice slot usage.
+- [Suno](docs/suno.md) — Signed-in Suno CLI for monthly credits, downloads and renewal date.
 - [OpenRouter](docs/openrouter.md) — API token for credit-based usage tracking across multiple AI providers.
 - [Windsurf](docs/windsurf.md) — Browser localStorage session import or local SQLite cache for plan usage.
 - Perplexity — Account usage credits from Perplexity usage data.
