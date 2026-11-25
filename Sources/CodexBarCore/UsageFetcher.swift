@@ -453,7 +453,9 @@ public struct UsageSnapshot: Codable, Sendable {
     }
 
     public func backfillingResetTimes(from cached: UsageSnapshot?, now: Date = .init()) -> UsageSnapshot {
-        guard let cached else { return self }
+        // Gemini can switch between shared Antigravity pools and daily CLI model limits.
+        // Only a reset returned alongside the current measurement describes its quota.
+        guard self.identity?.providerID != .gemini, let cached else { return self }
         guard Self.identitiesMatch(self.identity, cached.identity) else { return self }
         let primary = self.primary?.backfillingResetTime(from: cached.primary, now: now)
         let secondary = self.secondary?.backfillingResetTime(from: cached.secondary, now: now)

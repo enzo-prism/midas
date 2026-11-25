@@ -42,7 +42,7 @@ struct GeminiProviderImplementation: ProviderImplementation {
             ProviderSettingsPickerDescriptor(
                 id: "gemini-usage-source",
                 title: "Usage source",
-                subtitle: "Auto checks Gemini CLI, Antigravity desktop, Google OAuth, and agy CLI.",
+                subtitle: "Auto checks Antigravity desktop first for shared five-hour and weekly Gemini limits.",
                 binding: usageBinding,
                 options: usageOptions,
                 isVisible: nil,

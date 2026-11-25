@@ -654,14 +654,15 @@ enum MidasGeminiLimits {
     }
 
     static func arrange(_ metrics: [MidasQuotaMetric], snapshot: UsageSnapshot?) -> [MidasQuotaMetric] {
-        let usesRollingWindows = snapshot?.secondary?.windowMinutes == self.weekMinutes
-            || snapshot?.primary?.windowMinutes == self.fiveHourMinutes
+        let hasFiveHourPrimary = snapshot?.primary?.windowMinutes == self.fiveHourMinutes
+        let hasWeeklySecondary = snapshot?.secondary?.windowMinutes == self.weekMinutes
+        let usesRollingWindows = hasWeeklySecondary || (hasFiveHourPrimary && snapshot?.secondary == nil)
         guard usesRollingWindows else { return metrics }
         return metrics.map { metric in
-            if metric.id == "primary", snapshot?.primary?.windowMinutes == self.fiveHourMinutes {
+            if metric.id == "primary", hasFiveHourPrimary {
                 return metric.retitled(self.fiveHourTitle)
             }
-            if metric.id == "secondary", snapshot?.secondary?.windowMinutes == self.weekMinutes {
+            if metric.id == "secondary", hasWeeklySecondary {
                 return metric.retitled(self.weeklyTitle)
             }
             return metric
@@ -717,6 +718,14 @@ enum MidasOrbitQuota {
                }) ?? true
             {
                 selected = ("primary", total)
+            } else {
+                selected = nil
+            }
+        case .gemini:
+            if let weekly = snapshot.secondary,
+               weekly.windowMinutes == self.weekMinutes
+            {
+                selected = ("secondary", weekly)
             } else {
                 selected = nil
             }

@@ -78,10 +78,12 @@ enum AntigravityLoginRunner {
                 return Result(outcome: .failed("Google login did not return an authorization code."))
             }
 
-            let tokenResponse = try await Self.exchangeCodeForTokens(
+            let exchange = try await Self.exchangeCodeForTokens(
                 code: code,
                 redirectURL: callbackURL,
                 oauthClient: oauthClient)
+            let tokenResponse = exchange.tokenResponse
+            let resolvedClient = exchange.client
             let email = try await Self.fetchUserEmail(accessToken: tokenResponse.accessToken)
             let credentials = AntigravityOAuthCredentials(
                 accessToken: tokenResponse.accessToken,
@@ -90,8 +92,8 @@ enum AntigravityLoginRunner {
                 idToken: tokenResponse.idToken,
                 email: email,
                 projectID: nil,
-                clientID: oauthClient.clientID,
-                clientSecret: oauthClient.clientSecret)
+                clientID: resolvedClient.clientID,
+                clientSecret: resolvedClient.clientSecret)
             try credentialsStore.save(credentials)
             onCredentialsCreated?()
             return Result(outcome: .success(email))
@@ -133,37 +135,59 @@ enum AntigravityLoginRunner {
         return url
     }
 
+    private struct TokenExchangeResult {
+        let tokenResponse: TokenResponse
+        let client: AntigravityOAuthClient
+    }
+
     private static func exchangeCodeForTokens(
         code: String,
         redirectURL: URL,
-        oauthClient: AntigravityOAuthClient) async throws -> TokenResponse
+        oauthClient: AntigravityOAuthClient) async throws -> TokenExchangeResult
     {
-        var request = URLRequest(url: AntigravityOAuthConfig.tokenURL)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.formBody([
-            "code": code,
-            "client_id": oauthClient.clientID,
-            "client_secret": oauthClient.clientSecret,
-            "redirect_uri": redirectURL.absoluteString,
-            "grant_type": "authorization_code",
-        ])
+        let candidateSecrets = AntigravityOAuthConfig.candidateClientSecrets(
+            for: oauthClient.clientID,
+            preferredSecret: oauthClient.clientSecret)
+        var lastError: Error?
 
-        let (data, response) = try await ProviderHTTPClient.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AntigravityLoginError.failed("Invalid token response.")
-        }
-        guard httpResponse.statusCode == 200 else {
+        for (index, secret) in candidateSecrets.enumerated() {
+            let candidate = AntigravityOAuthClient(clientID: oauthClient.clientID, clientSecret: secret)
+            var request = URLRequest(url: AntigravityOAuthConfig.tokenURL)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 30
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.httpBody = Self.formBody([
+                "code": code,
+                "client_id": candidate.clientID,
+                "client_secret": candidate.clientSecret,
+                "redirect_uri": redirectURL.absoluteString,
+                "grant_type": "authorization_code",
+            ])
+
+            let (data, response) = try await ProviderHTTPClient.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw AntigravityLoginError.failed("Invalid token response.")
+            }
+            if httpResponse.statusCode == 200 {
+                do {
+                    let decoded = try JSONDecoder().decode(TokenResponse.self, from: data)
+                    return TokenExchangeResult(tokenResponse: decoded, client: candidate)
+                } catch {
+                    throw AntigravityLoginError.failed("Could not decode token response.")
+                }
+            }
+
             let message = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? "HTTP \(httpResponse.statusCode)"
-            throw AntigravityLoginError.failed(message)
+            lastError = AntigravityLoginError.failed(message)
+            let isInvalidClient = httpResponse.statusCode == 401
+                || message.lowercased().contains("invalid_client")
+            guard isInvalidClient, index + 1 < candidateSecrets.count else {
+                throw lastError!
+            }
         }
-        do {
-            return try JSONDecoder().decode(TokenResponse.self, from: data)
-        } catch {
-            throw AntigravityLoginError.failed("Could not decode token response.")
-        }
+
+        throw lastError ?? AntigravityLoginError.failed("Invalid token response.")
     }
 
     private static func fetchUserEmail(accessToken: String) async throws -> String? {

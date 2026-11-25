@@ -34,9 +34,12 @@ struct ConfigValidationTests {
             accounts: [ProviderTokenAccount(id: UUID(), label: "a", token: "t", addedAt: 0, lastUsed: nil)],
             activeIndex: 0)
         var config = CodexBarConfig.makeDefault()
-        config.setProviderConfig(ProviderConfig(id: .gemini, tokenAccounts: accounts))
+        config.setProviderConfig(ProviderConfig(id: .jetbrains, tokenAccounts: accounts))
         let issues = CodexBarConfigValidator.validate(config)
         #expect(issues.contains(where: { $0.code == "token_accounts_unused" }))
+        var geminiConfig = CodexBarConfig.makeDefault()
+        geminiConfig.setProviderConfig(ProviderConfig(id: .gemini, tokenAccounts: accounts))
+        #expect(!CodexBarConfigValidator.validate(geminiConfig).contains { $0.code == "token_accounts_unused" })
     }
 
     @Test

@@ -25,6 +25,18 @@ public enum GeminiTranscriptLogScanner: Sendable {
             .appendingPathComponent("brain", isDirectory: true)
     }
 
+    public static func defaultBrainRoots(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
+        let geminiRoot = home.appendingPathComponent(".gemini", isDirectory: true)
+        return [
+            geminiRoot
+                .appendingPathComponent("antigravity", isDirectory: true)
+                .appendingPathComponent("brain", isDirectory: true),
+            geminiRoot
+                .appendingPathComponent("antigravity-cli", isDirectory: true)
+                .appendingPathComponent("brain", isDirectory: true),
+        ]
+    }
+
     public static func loadTokenSnapshot(
         brainRoot: URL? = nil,
         since: Date,
@@ -34,8 +46,18 @@ public enum GeminiTranscriptLogScanner: Sendable {
         pricingCacheRoot: URL? = nil,
         calendar: Calendar = .current) -> CostUsageTokenSnapshot
     {
-        let root = brainRoot ?? self.defaultBrainRoot()
-        let files = self.listTranscriptFiles(root: root, since: since)
+        let roots = brainRoot.map { [$0] } ?? self.defaultBrainRoots()
+        var files: [URL] = []
+        var seenPaths = Set<String>()
+        for root in roots {
+            for fileURL in self.listTranscriptFiles(root: root, since: since) {
+                let path = fileURL.standardizedFileURL.path
+                guard seenPaths.insert(path).inserted else { continue }
+                files.append(fileURL)
+                if files.count >= self.maxFilesPerScan { break }
+            }
+            if files.count >= self.maxFilesPerScan { break }
+        }
         var steps: [GeminiTranscriptStep] = []
         steps.reserveCapacity(512)
         for fileURL in files {
@@ -86,7 +108,7 @@ public enum GeminiTranscriptLogScanner: Sendable {
         if let slash = value.lastIndex(of: "/") {
             value = String(value[value.index(after: slash)...])
         }
-        let suffixes = ["-xhigh", "-high", "-medium", "-low", "-minimal", "-tiered", "-thinking"]
+        let suffixes = ["-xhigh", "-high", "-medium", "-low", "-minimal", "-tiered", "-thinking", "-max"]
         var changed = true
         while changed {
             changed = false

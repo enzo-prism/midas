@@ -9,7 +9,7 @@ struct GeminiAntigravityIntegrationTests {
         let fiveHourReset = now.addingTimeInterval(4.5 * 3600)
         let weeklyReset = now.addingTimeInterval(7 * 24 * 3600)
 
-        let antigravitySnapshot = AntigravityStatusSnapshot(
+        var antigravitySnapshot = AntigravityStatusSnapshot(
             modelQuotas: [
                 AntigravityModelQuota(
                     label: "Claude Sonnet 4.5 (High)",
@@ -58,6 +58,16 @@ struct GeminiAntigravityIntegrationTests {
             accountPlan: "Google AI Pro",
             source: .local)
 
+        antigravitySnapshot.geminiQuotaSummary = try JSONDecoder().decode(
+            GeminiQuotaSummary.Envelope.self,
+            from: Data("""
+            {"response":{"groups":[{"buckets":[
+              {"bucketId":"3p-weekly","remainingFraction":0.01},
+              {"bucketId":"gemini-weekly","remainingFraction":0.63,"resetTime":"2025-10-10T10:00:00Z"},
+              {"bucketId":"gemini-5h","remainingFraction":0.82,"resetTime":"2025-10-10T11:00:00Z"}
+            ]}]}}
+            """.utf8)).response
+
         let usage = try GeminiAntigravityQuotaMapper.toUsageSnapshot(from: antigravitySnapshot, now: now)
 
         #expect(usage.identity?.providerID == .gemini)
@@ -66,19 +76,217 @@ struct GeminiAntigravityIntegrationTests {
 
         // Claude/GPT lower remaining fractions (20%, 10%) must never leak into Gemini.
         let primary = try #require(usage.primary)
-        #expect(abs(primary.usedPercent - 10.0) < 0.01)
+        #expect(abs(primary.usedPercent - 18.0) < 0.01)
         #expect(primary.windowMinutes == 300)
-        #expect(primary.resetsAt == fiveHourReset)
+        #expect(primary.resetsAt == ISO8601DateFormatter().date(from: "2025-10-10T11:00:00Z"))
 
         let secondary = try #require(usage.secondary)
-        #expect(abs(secondary.usedPercent - 25.0) < 0.01)
+        #expect(abs(secondary.usedPercent - 37.0) < 0.01)
         #expect(secondary.windowMinutes == 10080)
-        #expect(secondary.resetsAt == weeklyReset)
+        #expect(secondary.resetsAt == ISO8601DateFormatter().date(from: "2025-10-10T10:00:00Z"))
 
         let extras = try #require(usage.extraRateWindows)
         #expect(extras.count == 3)
-        #expect(extras.map(\.title) == ["Gemini 2.5 Flash", "Gemini 2.5 Pro", "Gemini Experimental Preview"])
-        #expect(extras[2].usageKnown == false)
+        #expect(extras.map(\.title) == ["Gemini 2.5 Pro", "Gemini Experimental Preview", "Gemini 2.5 Flash"])
+        #expect(extras[1].usageKnown == false)
+    }
+
+    @Test func quotaMapperFiltersRemoteCatalogNoiseAndSortsDeterministically() throws {
+        let now = Date(timeIntervalSince1970: 1_760_000_000)
+        let fiveHourReset = now.addingTimeInterval(4 * 3600)
+
+        let antigravitySnapshot = AntigravityStatusSnapshot(
+            modelQuotas: [
+                AntigravityModelQuota(
+                    label: "Gemini 2.5 Image",
+                    modelId: "gemini-2.5-image",
+                    remainingFraction: 1.0,
+                    resetTime: fiveHourReset,
+                    resetDescription: nil),
+                AntigravityModelQuota(
+                    label: "Gemini 2.5 Flash (Max)",
+                    modelId: "gemini-2.5-flash-max",
+                    remainingFraction: 0.90,
+                    resetTime: fiveHourReset,
+                    resetDescription: nil),
+                AntigravityModelQuota(
+                    label: "Gemini 2.5 Pro (High)",
+                    modelId: "gemini-2.5-pro-high",
+                    remainingFraction: 0.70,
+                    resetTime: fiveHourReset,
+                    resetDescription: nil),
+                AntigravityModelQuota(
+                    label: "Gemini Tab Autocomplete",
+                    modelId: "tab_gemini_autocomplete",
+                    remainingFraction: 1.0,
+                    resetTime: fiveHourReset,
+                    resetDescription: nil),
+            ],
+            accountEmail: "personal@example.com",
+            accountPlan: "Paid",
+            source: .remote)
+
+        let usage = try GeminiAntigravityQuotaMapper.toUsageSnapshot(from: antigravitySnapshot, now: now)
+        let extras = try #require(usage.extraRateWindows)
+        #expect(extras.map(\.title) == ["Gemini 2.5 Pro", "Gemini 2.5 Flash"])
+
+        #expect(usage.primary == nil)
+        #expect(usage.secondary == nil)
+        #expect(MidasOrbitQuota.make(provider: .gemini, snapshot: usage) == nil)
+        #expect(extras.allSatisfy { $0.window.windowMinutes == nil })
+    }
+
+    @Test func summaryKeepsRealZeroAndFullAndOmitsUnreportedLimits() throws {
+        for fraction in [0, 1] {
+            let summary = try JSONDecoder().decode(GeminiQuotaSummary.self, from: Data("""
+            {"buckets":[{"bucketId":"gemini-5h","remainingFraction":\(fraction)},
+                        {"bucketId":"gemini-weekly","remainingAmount":500},
+                        {"bucketId":"3p-weekly","remainingFraction":1}]}
+            """.utf8))
+            #expect(summary.fiveHour?.remainingPercent == Double(fraction * 100))
+            #expect(summary.fiveHour?.resetsAt == nil)
+            #expect(summary.weekly == nil)
+        }
+    }
+
+    @Test func geminiAutoPipelinePrefersDesktopGroupLimits() async {
+        struct StubClaudeFetcher: ClaudeUsageFetching {
+            func loadLatestUsage(model _: String) async throws -> ClaudeUsageSnapshot {
+                throw ClaudeUsageError.parseFailed("stub")
+            }
+
+            func debugRawProbe(model _: String) async -> String {
+                "stub"
+            }
+
+            func detectVersion() -> String? {
+                nil
+            }
+        }
+
+        let descriptor = ProviderDescriptorRegistry.descriptor(for: .gemini)
+        let context = ProviderFetchContext(
+            runtime: .app,
+            sourceMode: .auto,
+            includeCredits: false,
+            webTimeout: 10,
+            webDebugDumpHTML: false,
+            verbose: false,
+            env: [:],
+            settings: nil,
+            fetcher: UsageFetcher(),
+            claudeFetcher: StubClaudeFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0))
+        let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
+        #expect(strategies.map(\.id) == [
+            "gemini.antigravity-local",
+            "gemini.antigravity-oauth",
+            "gemini.api",
+            "gemini.antigravity-cli",
+        ])
+    }
+
+    @Test func midasOrbitSelectsGeminiWeeklyPool() throws {
+        let now = Date(timeIntervalSince1970: 1_760_000_000)
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 20,
+                windowMinutes: 5 * 60,
+                resetsAt: now.addingTimeInterval(3 * 3600),
+                resetDescription: nil),
+            secondary: RateWindow(
+                usedPercent: 35,
+                windowMinutes: 7 * 24 * 60,
+                resetsAt: now.addingTimeInterval(5 * 24 * 3600),
+                resetDescription: nil),
+            tertiary: nil,
+            updatedAt: now)
+
+        let orbit = try #require(MidasOrbitQuota.make(provider: .gemini, snapshot: snapshot))
+        #expect(orbit.id == "secondary")
+        #expect(orbit.title == "Weekly limit")
+        #expect(abs(orbit.remainingPercent - 65) < 0.01)
+    }
+
+    @Test func remoteUsageFetcherFallsBackToDailyCloudCodeEndpointWhenProductionReturnsEmpty() async throws {
+        let env = try GeminiTestEnvironment()
+        defer { env.cleanup() }
+        let credentials = AntigravityOAuthCredentials(
+            accessToken: "test-access-token",
+            refreshToken: nil,
+            expiryDate: Date().addingTimeInterval(3600),
+            idToken: GeminiAPITestHelpers.makeIDToken(email: "personal@example.com"),
+            email: "personal@example.com")
+        let token = try AntigravityOAuthCredentialsStore.tokenAccountValue(for: credentials)
+
+        let dataLoader = GeminiAPITestHelpers.dataLoader { request in
+            guard let url = request.url, let host = url.host else {
+                throw URLError(.badURL)
+            }
+            if host == "cloudcode-pa.googleapis.com" {
+                if url.path == "/v1internal:loadCodeAssist" {
+                    return GeminiAPITestHelpers.response(
+                        url: url.absoluteString,
+                        status: 200,
+                        body: GeminiAPITestHelpers.jsonData([
+                            "currentTier": ["id": "standard-tier", "name": "Paid"],
+                            "cloudaicompanionProject": "proj-1",
+                        ]))
+                }
+                return GeminiAPITestHelpers.response(
+                    url: url.absoluteString,
+                    status: 200,
+                    body: GeminiAPITestHelpers.jsonData(["models": [:]]))
+            }
+            if host == "daily-cloudcode-pa.googleapis.com" {
+                if url.path == "/v1internal:loadCodeAssist" {
+                    return GeminiAPITestHelpers.response(
+                        url: url.absoluteString,
+                        status: 200,
+                        body: GeminiAPITestHelpers.jsonData([
+                            "currentTier": ["id": "standard-tier", "name": "Paid"],
+                            "cloudaicompanionProject": "proj-1",
+                        ]))
+                }
+                if url.path == "/v1internal:retrieveUserQuotaSummary" {
+                    return GeminiAPITestHelpers.response(
+                        url: url.absoluteString,
+                        status: 200,
+                        body: Data(#"{"groups":[{"buckets":[{"bucketId":"gemini-weekly","remainingFraction":0.45}]}]}"#
+                            .utf8))
+                }
+                if url.path == "/v1internal:fetchAvailableModels" {
+                    return GeminiAPITestHelpers.response(
+                        url: url.absoluteString,
+                        status: 200,
+                        body: GeminiAPITestHelpers.jsonData([
+                            "models": [
+                                "gemini-2.5-pro": [
+                                    "displayName": "Gemini 2.5 Pro",
+                                    "quotaInfo": [
+                                        "remainingFraction": 0.8,
+                                        "resetTime": "2026-11-24T20:00:00Z",
+                                    ],
+                                ],
+                            ],
+                        ]))
+                }
+            }
+            return GeminiAPITestHelpers.response(url: url.absoluteString, status: 404, body: Data())
+        }
+
+        let fetcher = AntigravityRemoteUsageFetcher(
+            timeout: 1,
+            homeDirectory: env.homeURL.path,
+            environment: [AntigravityOAuthCredentialsStore.environmentCredentialsKey: token],
+            dataLoader: dataLoader)
+        let snapshot = try await fetcher.fetch(includeGeminiSummary: true)
+        let usage = try GeminiAntigravityQuotaMapper.toUsageSnapshot(from: snapshot)
+        #expect(usage.primary == nil)
+        #expect(usage.secondary?.remainingPercent == 45)
+        #expect(snapshot.accountEmail == "personal@example.com")
+        #expect(snapshot.modelQuotas.count == 1)
+        #expect(snapshot.modelQuotas[0].modelId == "gemini-2.5-pro")
     }
 
     @Test func accountMatcherRejectsMismatchedGoogleAccountAndAcceptsCaseInsensitiveMatch() throws {

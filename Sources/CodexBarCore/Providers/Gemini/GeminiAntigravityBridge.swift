@@ -22,12 +22,6 @@ public enum GeminiOAuthCredentialsStore {
 /// Projects Gemini-only quotas from an Antigravity / Cloud Code PA snapshot into a
 /// siloed Gemini `UsageSnapshot`. Non-Gemini models (such as Claude or GPT) are excluded.
 public enum GeminiAntigravityQuotaMapper {
-    private static let weeklyThresholdSeconds: TimeInterval = 36 * 60 * 60
-    private static let sessionThresholdSeconds: TimeInterval = 8 * 60 * 60
-    private static let fiveHourWindowMinutes = 5 * 60
-    private static let dailyWindowMinutes = 24 * 60
-    private static let weeklyWindowMinutes = 7 * 24 * 60
-
     public static func isGeminiModel(_ quota: AntigravityModelQuota) -> Bool {
         let modelID = quota.modelId.lowercased()
         let label = quota.label.lowercased()
@@ -43,48 +37,26 @@ public enum GeminiAntigravityQuotaMapper {
         from snapshot: AntigravityStatusSnapshot,
         now: Date = Date()) throws -> UsageSnapshot
     {
-        let geminiQuotas = snapshot.modelQuotas.filter(Self.isGeminiModel)
-        guard !geminiQuotas.isEmpty else {
-            throw GeminiStatusProbeError.parseFailed("No Gemini model quotas available.")
+        let rawGeminiQuotas = snapshot.modelQuotas.filter(Self.isGeminiModel)
+        let filteredQuotas: [AntigravityModelQuota] = switch snapshot.source {
+        case .local:
+            rawGeminiQuotas
+        case .remote:
+            {
+                let preferred = rawGeminiQuotas.filter { quota in
+                    !Self.isRemoteCatalogNoise(quota) || (quota.remainingFraction ?? 1.0) < 0.999
+                }
+                return preferred.isEmpty ? rawGeminiQuotas : preferred
+            }()
         }
 
-        let knownQuotas = geminiQuotas.filter { $0.remainingFraction != nil }
-        let weeklyQuotas = knownQuotas.filter { Self.isWeeklyQuota($0, now: now) }
-        let shortQuotas = knownQuotas.filter { !Self.isWeeklyQuota($0, now: now) }
-
-        let primary: RateWindow?
-        let secondary: RateWindow?
-        if !shortQuotas.isEmpty, !weeklyQuotas.isEmpty {
-            let shortRep = Self.mostConstrained(in: shortQuotas)
-            let weeklyRep = Self.mostConstrained(in: weeklyQuotas)
-            primary = shortRep.map { Self.rateWindow(for: $0, now: now, forceWeekly: false) }
-            secondary = weeklyRep.map { Self.rateWindow(for: $0, now: now, forceWeekly: true) }
-        } else if !weeklyQuotas.isEmpty {
-            primary = nil
-            secondary = Self.mostConstrained(in: weeklyQuotas).map {
-                Self.rateWindow(for: $0, now: now, forceWeekly: true)
-            }
-        } else if !shortQuotas.isEmpty {
-            let proOrStandard = shortQuotas.filter { !Self.isFlashQuota($0) }
-            let flash = shortQuotas.filter(Self.isFlashQuota)
-            if !proOrStandard.isEmpty, !flash.isEmpty {
-                primary = Self.mostConstrained(in: proOrStandard).map {
-                    Self.rateWindow(for: $0, now: now, forceWeekly: false)
-                }
-                secondary = Self.mostConstrained(in: flash).map {
-                    Self.rateWindow(for: $0, now: now, forceWeekly: false)
-                }
-            } else {
-                primary = Self.mostConstrained(in: shortQuotas).map {
-                    Self.rateWindow(for: $0, now: now, forceWeekly: false)
-                }
-                secondary = nil
-            }
-        } else {
+        let geminiQuotas = Self.sortedQuotas(filteredQuotas)
+        let summary = snapshot.geminiQuotaSummary
+        guard summary?.hasReading == true || !geminiQuotas.isEmpty else {
             throw GeminiStatusProbeError.parseFailed("Gemini quota values are currently unavailable.")
         }
 
-        let extraWindows = Self.deduplicatedExtraWindows(from: geminiQuotas, now: now)
+        let extraWindows = Self.deduplicatedExtraWindows(from: geminiQuotas)
         let identity = ProviderIdentitySnapshot(
             providerID: .gemini,
             accountEmail: snapshot.accountEmail,
@@ -92,75 +64,26 @@ public enum GeminiAntigravityQuotaMapper {
             loginMethod: snapshot.accountPlan)
 
         return UsageSnapshot(
-            primary: primary,
-            secondary: secondary,
+            primary: summary?.fiveHour,
+            secondary: summary?.weekly,
             tertiary: nil,
             extraRateWindows: extraWindows.isEmpty ? nil : extraWindows,
             updatedAt: now,
             identity: identity)
     }
 
-    private static func isWeeklyQuota(_ quota: AntigravityModelQuota, now: Date) -> Bool {
-        guard let resetTime = quota.resetTime else { return false }
-        return resetTime.timeIntervalSince(now) > self.weeklyThresholdSeconds
-    }
-
-    private static func isFlashQuota(_ quota: AntigravityModelQuota) -> Bool {
-        let combined = "\(quota.modelId) \(quota.label)".lowercased()
-        return combined.contains("flash")
-    }
-
-    private static func windowMinutes(for quota: AntigravityModelQuota, now: Date, forceWeekly: Bool) -> Int? {
-        if forceWeekly { return self.weeklyWindowMinutes }
-        guard let resetTime = quota.resetTime else { return nil }
-        let delta = resetTime.timeIntervalSince(now)
-        if delta > self.weeklyThresholdSeconds {
-            return self.weeklyWindowMinutes
-        }
-        if delta > self.sessionThresholdSeconds {
-            return self.dailyWindowMinutes
-        }
-        if delta >= -60 {
-            return self.fiveHourWindowMinutes
-        }
-        return nil
-    }
-
-    private static func rateWindow(
-        for quota: AntigravityModelQuota,
-        now: Date,
-        forceWeekly: Bool) -> RateWindow
-    {
+    private static func rateWindow(for quota: AntigravityModelQuota) -> RateWindow {
         RateWindow(
             usedPercent: 100 - quota.remainingPercent,
-            windowMinutes: self.windowMinutes(for: quota, now: now, forceWeekly: forceWeekly),
+            windowMinutes: nil,
             resetsAt: quota.resetTime,
             resetDescription: quota.resetDescription)
-    }
-
-    private static func mostConstrained(in quotas: [AntigravityModelQuota]) -> AntigravityModelQuota? {
-        quotas.min { lhs, rhs in
-            if lhs.remainingPercent != rhs.remainingPercent {
-                return lhs.remainingPercent < rhs.remainingPercent
-            }
-            switch (lhs.resetTime, rhs.resetTime) {
-            case let (.some(left), .some(right)) where left != right:
-                return left < right
-            case (.some, .none):
-                return true
-            case (.none, .some):
-                return false
-            default:
-                return lhs.label.localizedCaseInsensitiveCompare(rhs.label) == .orderedAscending
-            }
-        }
     }
 
     /// Collapses effort-tier variants (`(High)`, `(Medium)`, `(Low)`, `(XHigh)`) of the same
     /// Gemini model when they share the same remaining quota and reset window.
     private static func deduplicatedExtraWindows(
-        from quotas: [AntigravityModelQuota],
-        now: Date) -> [NamedRateWindow]
+        from quotas: [AntigravityModelQuota]) -> [NamedRateWindow]
     {
         var grouped: [String: [AntigravityModelQuota]] = [:]
         var order: [String] = []
@@ -178,19 +101,17 @@ public enum GeminiAntigravityQuotaMapper {
             guard let items = grouped[key], !items.isEmpty else { continue }
             let baseLabel = Self.baseModelLabel(items[0].label)
             if Self.allShareQuota(items), let rep = items.first {
-                let isWeekly = Self.isWeeklyQuota(rep, now: now)
                 windows.append(NamedRateWindow(
                     id: "gemini-model-\(Self.slug(baseLabel))",
                     title: baseLabel,
-                    window: Self.rateWindow(for: rep, now: now, forceWeekly: isWeekly),
+                    window: Self.rateWindow(for: rep),
                     usageKnown: rep.remainingFraction != nil))
             } else {
                 for item in items {
-                    let isWeekly = Self.isWeeklyQuota(item, now: now)
                     windows.append(NamedRateWindow(
                         id: "gemini-model-\(Self.slug(item.modelId))",
                         title: item.label,
-                        window: Self.rateWindow(for: item, now: now, forceWeekly: isWeekly),
+                        window: Self.rateWindow(for: item),
                         usageKnown: item.remainingFraction != nil))
                 }
             }
@@ -215,10 +136,90 @@ public enum GeminiAntigravityQuotaMapper {
         }
     }
 
+    private static func isRemoteCatalogNoise(_ quota: AntigravityModelQuota) -> Bool {
+        let modelID = quota.modelId.lowercased()
+        let label = quota.label.lowercased()
+        let combined = "\(modelID) \(label)"
+        return combined.contains("image")
+            || combined.contains("autocomplete")
+            || modelID.hasPrefix("tab_")
+            || combined.contains("tts")
+            || combined.contains("live-translate")
+            || combined.contains("embedding")
+    }
+
+    private static func sortedQuotas(_ quotas: [AntigravityModelQuota]) -> [AntigravityModelQuota] {
+        quotas.sorted { lhs, rhs in
+            let lhsRank = Self.modelSortRank(lhs)
+            let rhsRank = Self.modelSortRank(rhs)
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+
+            let lhsVersion = Self.parseVersion(from: lhs.label) ?? Self.parseVersion(from: lhs.modelId)
+            let rhsVersion = Self.parseVersion(from: rhs.label) ?? Self.parseVersion(from: rhs.modelId)
+            if lhsVersion != rhsVersion {
+                switch (lhsVersion, rhsVersion) {
+                case let (.some(lv), .some(rv)):
+                    return lv > rv
+                case (.some, .none):
+                    return true
+                case (.none, .some):
+                    return false
+                case (.none, .none):
+                    break
+                }
+            }
+
+            let baseCompare = Self.baseModelLabel(lhs.label)
+                .localizedCaseInsensitiveCompare(Self.baseModelLabel(rhs.label))
+            if baseCompare != .orderedSame {
+                return baseCompare == .orderedAscending
+            }
+            return lhs.label.localizedCaseInsensitiveCompare(rhs.label) == .orderedAscending
+        }
+    }
+
+    private static func modelSortRank(_ quota: AntigravityModelQuota) -> Int {
+        let combined = "\(quota.modelId) \(quota.label)".lowercased()
+        if combined.contains("orchestrator") { return 2 }
+        if combined.contains("flash-lite") || combined.contains("flash lite") { return 3 }
+        if combined.contains("flash") { return 1 }
+        return 0
+    }
+
+    private struct ModelVersion: Comparable {
+        let major: Int
+        let minor: Int
+
+        static func < (lhs: Self, rhs: Self) -> Bool {
+            if lhs.major != rhs.major { return lhs.major < rhs.major }
+            return lhs.minor < rhs.minor
+        }
+    }
+
+    private static func parseVersion(from text: String) -> ModelVersion? {
+        guard let regex = try? NSRegularExpression(pattern: #"(\d+)(?:[.\-](\d+))?"#) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let majorRange = Range(match.range(at: 1), in: text),
+              let major = Int(text[majorRange])
+        else {
+            return nil
+        }
+        let minor: Int = if match.range(at: 2).location != NSNotFound,
+                            let minorRange = Range(match.range(at: 2), in: text),
+                            let parsed = Int(text[minorRange])
+        {
+            parsed
+        } else {
+            0
+        }
+        return ModelVersion(major: major, minor: minor)
+    }
+
     static func baseModelLabel(_ label: String) -> String {
         let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let regex = try? NSRegularExpression(
-            pattern: #"\s*\((?:x?high|medium|low|minimal|thinking)\)\s*$"#,
+            pattern: #"\s*\((?:x?high|medium|low|minimal|thinking|max)\)\s*$"#,
             options: [.caseInsensitive])
         else {
             return trimmed

@@ -33,15 +33,26 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
 
     private static let log = CodexBarLog.logger(LogCategories.antigravity)
     private static let userAgent = "antigravity"
-    private static let baseURL = "https://cloudcode-pa.googleapis.com"
-    private static let loadCodeAssistEndpoint = "\(baseURL)/v1internal:loadCodeAssist"
-    private static let onboardUserEndpoint = "\(baseURL)/v1internal:onboardUser"
-    private static let fetchAvailableModelsEndpoint = "\(baseURL)/v1internal:fetchAvailableModels"
-    private static let retrieveUserQuotaEndpoint = "\(baseURL)/v1internal:retrieveUserQuota"
+    public static let cloudCodeEndpointEnvironmentKey = "ANTIGRAVITY_CLOUD_CODE_ENDPOINT"
+    private static let productionBaseURL = "https://cloudcode-pa.googleapis.com"
+    private static let dailyBaseURL = "https://daily-cloudcode-pa.googleapis.com"
     private static let refreshSafetyWindow: TimeInterval = 60
+
+    private static func endpointURL(baseURL: String, path: String) -> String {
+        let trimmed = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+        return "\(trimmed)\(path)"
+    }
+
+    private func resolvedBaseURLs() -> [String] {
+        if let override = self.environment[Self.cloudCodeEndpointEnvironmentKey]?.trimmedNonEmpty {
+            return [override]
+        }
+        return [Self.productionBaseURL, Self.dailyBaseURL]
+    }
 
     private struct FetchContext {
         let timeout: TimeInterval
+        let includeGeminiSummary: Bool
         let store: AntigravityOAuthCredentialsStore?
         let dataLoader: @Sendable (URLRequest) async throws -> (Data, URLResponse)
         let oauthClientResolver: @Sendable () -> AntigravityOAuthClient?
@@ -76,19 +87,21 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
         self.credentialsUpdateHandler = credentialsUpdateHandler
     }
 
-    public func fetch() async throws -> AntigravityStatusSnapshot {
+    public func fetch(includeGeminiSummary: Bool = false) async throws -> AntigravityStatusSnapshot {
         let source = try Self.resolveCredentialSource(homeDirectory: self.homeDirectory, environment: self.environment)
         guard let credentials = source.credentials else {
             throw AntigravityRemoteFetchError.notLoggedIn
         }
         return try await self.fetchSnapshot(
             using: credentials,
-            store: source.store)
+            store: source.store,
+            includeGeminiSummary: includeGeminiSummary)
     }
 
     private func fetchSnapshot(
         using initialCredentials: AntigravityOAuthCredentials,
-        store: AntigravityOAuthCredentialsStore?) async throws
+        store: AntigravityOAuthCredentialsStore?,
+        includeGeminiSummary: Bool) async throws
         -> AntigravityStatusSnapshot
     {
         guard let storedAccessToken = initialCredentials.accessToken?.trimmedNonEmpty else {
@@ -99,6 +112,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
         var accessToken = storedAccessToken
         let context = FetchContext(
             timeout: self.timeout,
+            includeGeminiSummary: includeGeminiSummary,
             store: store,
             dataLoader: self.dataLoader,
             oauthClientResolver: self.oauthClientResolver,
@@ -120,11 +134,87 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
         }
 
         let claims = Self.extractClaims(from: credentials)
+        let baseURLs = self.resolvedBaseURLs()
+        var firstError: Error?
+        var fallbackCandidate: AntigravityStatusSnapshot?
+
+        for (index, baseURL) in baseURLs.enumerated() {
+            do {
+                let result = try await self.fetchFromBaseURL(
+                    baseURL: baseURL,
+                    accessToken: accessToken,
+                    credentials: &credentials,
+                    claims: claims,
+                    context: context)
+                if result.geminiQuotaSummary?.hasReading == true { return result }
+                let hasResetWindows = result.modelQuotas.contains { $0.resetTime != nil }
+                if (!includeGeminiSummary && hasResetWindows) || index == baseURLs.count - 1 {
+                    if let previous = fallbackCandidate,
+                       !hasResetWindows,
+                       result.modelQuotas.count <= previous.modelQuotas.count
+                    {
+                        return previous
+                    }
+                    return result
+                }
+                if fallbackCandidate == nil || result.modelQuotas.count > (fallbackCandidate?.modelQuotas.count ?? 0) {
+                    fallbackCandidate = result
+                }
+                Self.log.info("Antigravity remote endpoint lacked reset windows; trying fallback endpoint", metadata: [
+                    "baseURL": baseURL,
+                    "modelCount": "\(result.modelQuotas.count)",
+                ])
+            } catch let error as AntigravityRemoteFetchError {
+                if case .notLoggedIn = error {
+                    throw error
+                }
+                if firstError == nil {
+                    firstError = error
+                }
+                guard index + 1 < baseURLs.count else {
+                    if let fallbackCandidate {
+                        return fallbackCandidate
+                    }
+                    throw firstError ?? error
+                }
+                Self.log.info("Antigravity remote endpoint failed; trying fallback endpoint", metadata: [
+                    "baseURL": baseURL,
+                    "error": error.localizedDescription,
+                ])
+            } catch {
+                if firstError == nil {
+                    firstError = error
+                }
+                guard index + 1 < baseURLs.count else {
+                    if let fallbackCandidate {
+                        return fallbackCandidate
+                    }
+                    throw firstError ?? error
+                }
+            }
+        }
+
+        if let fallbackCandidate {
+            return fallbackCandidate
+        }
+        throw firstError ?? AntigravityRemoteFetchError.apiError("No Antigravity remote endpoint available")
+    }
+
+    private func fetchFromBaseURL(
+        baseURL: String,
+        accessToken: String,
+        credentials: inout AntigravityOAuthCredentials,
+        claims: TokenClaims,
+        context: FetchContext) async throws
+        -> AntigravityStatusSnapshot
+    {
         let codeAssist = try await Self.loadCodeAssist(
+            baseURL: baseURL,
             accessToken: accessToken,
             timeout: self.timeout,
             dataLoader: self.dataLoader)
         let projectId = try await Self.resolveProjectID(
+            baseURL: baseURL,
             accessToken: accessToken,
             storedProjectID: credentials.projectID?.trimmedNonEmpty,
             initialResponse: codeAssist,
@@ -137,17 +227,36 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
                 Self.log.warning("Could not persist Antigravity project ID: \(error.localizedDescription)")
             }
         }
-        let models = try await Self.fetchModelQuotas(
-            accessToken: accessToken,
-            projectId: projectId,
-            timeout: self.timeout,
-            dataLoader: self.dataLoader)
+        let summary: GeminiQuotaSummary? = if context.includeGeminiSummary {
+            try? await Self.sendRequest(
+                endpoint: Self.endpointURL(baseURL: baseURL, path: "/v1internal:retrieveUserQuotaSummary"),
+                accessToken: accessToken,
+                body: projectId.map { ["project": $0] } ?? [:],
+                timeout: self.timeout,
+                dataLoader: self.dataLoader)
+        } else {
+            nil
+        }
 
-        return AntigravityStatusSnapshot(
+        let models: [AntigravityModelQuota]
+        do {
+            models = try await Self.fetchModelQuotas(
+                baseURL: baseURL,
+                accessToken: accessToken,
+                projectId: projectId,
+                timeout: self.timeout,
+                dataLoader: self.dataLoader)
+        } catch {
+            guard summary?.hasReading == true else { throw error }
+            models = []
+        }
+        var snapshot = AntigravityStatusSnapshot(
             modelQuotas: models,
             accountEmail: claims.email,
             accountPlan: Self.resolvePlan(response: codeAssist, claims: claims),
             source: .remote)
+        snapshot.geminiQuotaSummary = summary
+        return snapshot
     }
 
     private static func shouldRefresh(expiryDate: Date?, now: Date) -> Bool {
@@ -156,6 +265,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     }
 
     private static func loadCodeAssist(
+        baseURL: String,
         accessToken: String,
         timeout: TimeInterval,
         dataLoader: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse)) async throws
@@ -169,7 +279,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             ],
         ]
         return try await Self.sendRequest(
-            endpoint: Self.loadCodeAssistEndpoint,
+            endpoint: Self.endpointURL(baseURL: baseURL, path: "/v1internal:loadCodeAssist"),
             accessToken: accessToken,
             body: body,
             timeout: timeout,
@@ -177,6 +287,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     }
 
     private static func fetchAvailableModels(
+        baseURL: String,
         accessToken: String,
         projectId: String?,
         timeout: TimeInterval,
@@ -189,7 +300,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             [:]
         }
         return try await Self.sendRequest(
-            endpoint: Self.fetchAvailableModelsEndpoint,
+            endpoint: Self.endpointURL(baseURL: baseURL, path: "/v1internal:fetchAvailableModels"),
             accessToken: accessToken,
             body: body,
             timeout: timeout,
@@ -197,6 +308,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     }
 
     private static func fetchModelQuotas(
+        baseURL: String,
         accessToken: String,
         projectId: String?,
         timeout: TimeInterval,
@@ -205,6 +317,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     {
         do {
             let response = try await Self.fetchAvailableModels(
+                baseURL: baseURL,
                 accessToken: accessToken,
                 projectId: projectId,
                 timeout: timeout,
@@ -212,6 +325,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             let modelQuotas = try Self.parseModelQuotas(response)
             if Self.shouldVerifyFullRemoteQuotas(modelQuotas),
                let quotaBuckets = try? await Self.fetchQuotaBucketsIfPermitted(
+                   baseURL: baseURL,
                    accessToken: accessToken,
                    projectId: projectId,
                    timeout: timeout,
@@ -227,6 +341,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             }
             Self.log.info("Falling back to retrieveUserQuota for Antigravity remote usage")
             return try await Self.fetchQuotaBucketsIfPermitted(
+                baseURL: baseURL,
                 accessToken: accessToken,
                 projectId: projectId,
                 timeout: timeout,
@@ -281,6 +396,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     }
 
     private static func fetchQuotaBucketsIfPermitted(
+        baseURL: String,
         accessToken: String,
         projectId: String?,
         timeout: TimeInterval,
@@ -289,6 +405,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     {
         do {
             let response = try await Self.retrieveUserQuota(
+                baseURL: baseURL,
                 accessToken: accessToken,
                 projectId: projectId,
                 timeout: timeout,
@@ -304,6 +421,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     }
 
     private static func retrieveUserQuota(
+        baseURL: String,
         accessToken: String,
         projectId: String?,
         timeout: TimeInterval,
@@ -316,7 +434,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             [:]
         }
         return try await Self.sendRequest(
-            endpoint: Self.retrieveUserQuotaEndpoint,
+            endpoint: Self.endpointURL(baseURL: baseURL, path: "/v1internal:retrieveUserQuota"),
             accessToken: accessToken,
             body: body,
             timeout: timeout,
@@ -324,6 +442,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
     }
 
     private static func resolveProjectID(
+        baseURL: String,
         accessToken: String,
         storedProjectID: String?,
         initialResponse: CodeAssistResponse,
@@ -353,7 +472,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
 
         do {
             let onboardResponse: OnboardResponse = try await Self.sendRequest(
-                endpoint: Self.onboardUserEndpoint,
+                endpoint: Self.endpointURL(baseURL: baseURL, path: "/v1internal:onboardUser"),
                 accessToken: accessToken,
                 body: onboardBody,
                 timeout: context.timeout,
@@ -370,6 +489,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
         for _ in 0..<5 {
             try? await Task.sleep(for: .milliseconds(2000))
             let refreshed = try await Self.loadCodeAssist(
+                baseURL: baseURL,
                 accessToken: accessToken,
                 timeout: context.timeout,
                 dataLoader: context.dataLoader)

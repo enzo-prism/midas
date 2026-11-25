@@ -378,7 +378,9 @@ struct MidasOrbitQuotaTests {
         #expect(self.item(
             .ollama,
             secondary: self.window(28)).orbitQuota?.remainingPercent == 72)
-        for provider in [UsageProvider.antigravity, .gemini, .factory, .meta] {
+        #expect(self.item(.gemini, secondary: self.window(28)).orbitQuota?.remainingPercent == 72)
+        #expect(self.item(.gemini, secondary: self.window(28, minutes: 1440)).orbitQuota == nil)
+        for provider in [UsageProvider.antigravity, .factory, .meta] {
             #expect(self.item(
                 provider,
                 primary: self.window(100),

@@ -349,6 +349,35 @@ public enum AntigravityOAuthConfig {
         return self.unique(values)
     }
 
+    public static func candidateClientSecrets(
+        for clientID: String,
+        preferredSecret: String,
+        applicationRoots: [URL]? = nil,
+        fileManager: FileManager = .default) -> [String]
+    {
+        var secrets = [preferredSecret]
+        for url in self.candidateOAuthClientArtifactURLs(
+            applicationRoots: applicationRoots,
+            fileManager: fileManager)
+            where fileManager.fileExists(atPath: url.path)
+        {
+            guard let data = try? Data(contentsOf: url) else { continue }
+            if let content = String(data: data, encoding: .utf8),
+               let parsed = Self.parseClient(fromInstalledArtifactText: content),
+               parsed.clientID == clientID
+            {
+                secrets.append(parsed.clientSecret)
+                continue
+            }
+            let ids = Self.clientIDs(in: data)
+            guard ids.contains(clientID) else { continue }
+            secrets.append(contentsOf: Self.clientSecrets(in: data))
+        }
+        return self.unique(secrets)
+    }
+
+    private static let consumerAntigravityClientIDPrefix = "1071006060591-"
+
     private static func preferredBinaryClient(
         clientIDs: [String],
         clientSecrets: [String]) -> AntigravityOAuthClient?
@@ -363,14 +392,22 @@ public enum AntigravityOAuthConfig {
             return AntigravityOAuthClient(clientID: clientIDs[clientIDs.count - 1], clientSecret: clientSecrets[0])
         }
 
-        let clientSecret: String = if clientSecrets.count == clientIDs.count, clientSecrets.count > 1 {
-            // Antigravity 2's language_server binary stores the secret table before the client id table.
-            clientSecrets[clientSecrets.count - 1]
-        } else {
-            clientSecrets[0]
+        if clientSecrets.count == 2, clientIDs.count == 2 {
+            // Antigravity 2.0's two-entry language_server binary stored the secret table reversed.
+            return AntigravityOAuthClient(clientID: clientIDs[0], clientSecret: clientSecrets[1])
         }
 
-        return AntigravityOAuthClient(clientID: clientIDs[0], clientSecret: clientSecret)
+        if clientSecrets.count == clientIDs.count,
+           let consumerIndex = clientIDs.firstIndex(where: { $0.hasPrefix(Self.consumerAntigravityClientIDPrefix) })
+        {
+            // Antigravity 2.34+ embeds an enterprise GCP-only client first and the consumer
+            // Google-account client (1071006060591-...) alongside it in matching index order.
+            return AntigravityOAuthClient(
+                clientID: clientIDs[consumerIndex],
+                clientSecret: clientSecrets[consumerIndex])
+        }
+
+        return AntigravityOAuthClient(clientID: clientIDs[0], clientSecret: clientSecrets[0])
     }
 
     private static func isOAuthClientIDPrefixByte(_ byte: UInt8) -> Bool {

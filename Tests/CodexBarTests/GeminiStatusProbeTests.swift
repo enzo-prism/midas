@@ -15,6 +15,12 @@ struct GeminiStatusProbeTests {
 
     // MARK: - Legacy CLI parsing tests (kept for fallback support)
 
+    @Test func flashOnlyResponseDoesNotInventFullProQuota() throws {
+        let snapshot = try GeminiStatusProbe.parse(text: "gemini-2.5-flash 10 75.0% (Resets in 6h)")
+        #expect(snapshot.toUsageSnapshot().primary == nil)
+        #expect(snapshot.toUsageSnapshot().secondary?.remainingPercent == 75)
+    }
+
     @Test
     func `parses minimum percent from multiple models`() throws {
         let snap = try GeminiStatusProbe.parse(text: Self.sampleStatsOutput)

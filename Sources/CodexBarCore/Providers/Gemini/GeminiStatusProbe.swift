@@ -43,11 +43,13 @@ public struct GeminiStatusSnapshot: Sendable {
         let flashMin = flashQuotas.min(by: { $0.percentLeft < $1.percentLeft })
         let proMin = proQuotas.min(by: { $0.percentLeft < $1.percentLeft })
 
-        let primary = RateWindow(
-            usedPercent: proMin.map { 100 - $0.percentLeft } ?? 0,
-            windowMinutes: 1440,
-            resetsAt: proMin?.resetTime,
-            resetDescription: proMin?.resetDescription)
+        let primary = proMin.map {
+            RateWindow(
+                usedPercent: 100 - $0.percentLeft,
+                windowMinutes: 1440,
+                resetsAt: $0.resetTime,
+                resetDescription: $0.resetDescription)
+        }
 
         let secondary: RateWindow? = flashMin.map {
             RateWindow(
@@ -73,6 +75,18 @@ public struct GeminiStatusSnapshot: Sendable {
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
+            extraRateWindows: lower.compactMap { id, quota in
+                guard !Self.isProModel(id: id), !Self.isFlashModel(id: id), !Self.isFlashLiteModel(id: id)
+                else { return nil }
+                return NamedRateWindow(
+                    id: "gemini-model-\(id)",
+                    title: quota.modelId,
+                    window: RateWindow(
+                        usedPercent: 100 - quota.percentLeft,
+                        windowMinutes: nil,
+                        resetsAt: quota.resetTime,
+                        resetDescription: quota.resetDescription))
+            },
             updatedAt: Date(),
             identity: identity)
     }
@@ -1014,7 +1028,8 @@ public struct GeminiStatusProbe: Sendable {
         var modelQuotaMap: [String: (fraction: Double, resetString: String?)] = [:]
 
         for bucket in buckets {
-            guard let modelId = bucket.modelId, let fraction = bucket.remainingFraction else { continue }
+            guard let modelId = bucket.modelId, let fraction = bucket.remainingFraction,
+                  (0...1).contains(fraction) else { continue }
 
             if let existing = modelQuotaMap[modelId] {
                 if fraction < existing.fraction {
@@ -1037,6 +1052,9 @@ public struct GeminiStatusProbe: Sendable {
                     resetDescription: info.resetString.flatMap { Self.formatResetTime($0) })
             }
 
+        guard !quotas.isEmpty else {
+            throw GeminiStatusProbeError.parseFailed("No measured quota values in response")
+        }
         let rawText = String(data: data, encoding: .utf8) ?? ""
 
         return GeminiStatusSnapshot(

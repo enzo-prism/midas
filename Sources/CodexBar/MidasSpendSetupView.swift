@@ -229,6 +229,20 @@ struct MidasSpendSetupView: View {
                             ? "Cursor usage is available." : "Usage is still pending. You can continue."
                     }
                 }.disabled(self.isWorking)
+            } else if provider == .gemini {
+                Button(self.hasUsage(provider) ? "Reconnect Gemini" : "Connect Gemini") {
+                    Task {
+                        self.isWorking = true
+                        self.message = "Finish signing in with Google in your browser."
+                        defer { self.isWorking = false }
+                        await self.runProviderLoginFlow(.gemini)
+                        self.store.scheduleTokenRefresh(force: true)
+                        self.message = self.hasUsage(.gemini)
+                            ? "Gemini usage is available." : "Usage is still pending. You can continue."
+                    }
+                }.disabled(self.isWorking)
+                Text("Sign in with Google for background Gemini quota refreshes.")
+                    .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text("Reads Muse activity on this Mac. Other Macs are not included.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -239,6 +253,7 @@ struct MidasSpendSetupView: View {
                     ? "Add each account in Claude settings and name it Personal or Business. "
                     + "Each gets its own usage bars."
                     : provider == .cursor ? "Connect the Cursor account whose usage you want to track."
+                    : provider == .gemini ? "Sign in with Google to track Gemini quota for your pinned account."
                     : "Use Muse on this Mac, then refresh Midas.")
                 Button("Open provider settings") { self.openProvider(provider) }.disabled(self.isWorking)
             }.font(.caption)

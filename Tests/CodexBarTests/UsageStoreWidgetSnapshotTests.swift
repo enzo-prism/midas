@@ -5,6 +5,22 @@ import Testing
 
 @MainActor
 struct UsageStoreWidgetSnapshotTests {
+    @Test func geminiWidgetLabelsMatchSharedLimits() async throws {
+        let (store, _) = try Self.makeStore(suite: "UsageStoreWidgetSnapshotTests-gemini")
+        let usage = UsageSnapshot(
+            primary: .init(usedPercent: 34, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondary: .init(usedPercent: 8, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date())
+        store._setSnapshotForTesting(usage, provider: .gemini)
+        var saved: WidgetSnapshot?
+        store._test_widgetSnapshotSaveOverride = { saved = $0 }
+        store.persistWidgetSnapshot(reason: "gemini-limits")
+        await store.widgetSnapshotPersistTask?.value
+        let rows = try #require(saved?.entries.first { $0.provider == .gemini }?.usageRows)
+        #expect(rows.map(\.title) == ["5-hour", "Weekly"])
+        #expect(rows.compactMap(\.percentLeft) == [66, 92])
+    }
+
     @Test
     func `widget snapshot includes antigravity tertiary usage row`() async throws {
         let suite = "UsageStoreWidgetSnapshotTests-antigravity-tertiary"

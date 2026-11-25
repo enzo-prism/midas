@@ -123,6 +123,70 @@ struct AntigravityOAuthCredentialsStoreTests {
                 applicationRoots: [root]) == standaloneClient)
     }
 
+    @Test
+    func `oauth client discovery prefers consumer antigravity client in three-entry binary`() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let enterpriseClient = AntigravityOAuthClient(
+            clientID: self.googleClientID("enterprise"),
+            clientSecret: self.googleClientSecret(repeating: "a"))
+        let consumerClient = AntigravityOAuthClient(
+            clientID: "1071006060591-consumer.apps.googleusercontent.com",
+            clientSecret: self.googleClientSecret(repeating: "b"))
+        let webClient = AntigravityOAuthClient(
+            clientID: self.googleClientID("web"),
+            clientSecret: self.googleClientSecret(repeating: "c"))
+        var artifactData = Data([0xFF])
+        artifactData.append(Data(
+            """
+            \u{0}\(enterpriseClient.clientSecret)\u{0}\(consumerClient.clientSecret)\u{0}\(webClient.clientSecret)\
+            \u{0}oauth_data\(enterpriseClient.clientID)\u{0}\(consumerClient.clientID)\u{0}\(webClient.clientID)\u{0}
+            """.utf8))
+        try self.writeAntigravityApp(
+            named: "Antigravity.app",
+            under: root,
+            artifactRelativePath: "Contents/Resources/bin/language_server",
+            artifactData: artifactData)
+
+        #expect(
+            AntigravityOAuthConfig.discoverClientFromInstalledApp(
+                applicationRoots: [root]) == consumerClient)
+    }
+
+    @Test
+    func `oauth client discovery pairs three-entry antigravity binary in order`() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let primaryClient = AntigravityOAuthClient(
+            clientID: self.googleClientID("primary"),
+            clientSecret: self.googleClientSecret(repeating: "a"))
+        let secondaryClient = AntigravityOAuthClient(
+            clientID: self.googleClientID("secondary"),
+            clientSecret: self.googleClientSecret(repeating: "b"))
+        let tertiaryClient = AntigravityOAuthClient(
+            clientID: self.googleClientID("tertiary"),
+            clientSecret: self.googleClientSecret(repeating: "c"))
+        var artifactData = Data([0xFF])
+        artifactData.append(Data(
+            """
+            \u{0}\(primaryClient.clientSecret)\u{0}\(secondaryClient.clientSecret)\u{0}\(tertiaryClient.clientSecret)\
+            \u{0}oauth_data\(primaryClient.clientID)\u{0}\(secondaryClient.clientID)\u{0}\(tertiaryClient.clientID)\u{0}
+            """.utf8))
+        try self.writeAntigravityApp(
+            named: "Antigravity.app",
+            under: root,
+            artifactRelativePath: "Contents/Resources/bin/language_server",
+            artifactData: artifactData)
+
+        #expect(
+            AntigravityOAuthConfig.discoverClientFromInstalledApp(
+                applicationRoots: [root]) == primaryClient)
+    }
+
     private func writeAntigravityApp(
         named name: String,
         under root: URL,

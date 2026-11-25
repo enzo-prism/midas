@@ -67,6 +67,7 @@ public struct AntigravityStatusSnapshot: Sendable {
     public let modelQuotas: [AntigravityModelQuota]
     public let accountEmail: String?
     public let accountPlan: String?
+    var geminiQuotaSummary: GeminiQuotaSummary?
     public let source: AntigravityModelQuotaSource
 
     public init(
@@ -506,7 +507,11 @@ public struct AntigravityStatusProbe: Sendable {
     /// The ``agy`` CLI exposes the same ``GetUserStatus`` gRPC-web endpoint on
     /// its HTTPS port as the desktop ``language_server``. Unlike the desktop
     /// endpoint, it does not require a CSRF token header.
-    public func fetchFromPorts(_ ports: [Int], deadline: Date? = nil) async throws -> AntigravityStatusSnapshot {
+    public func fetchFromPorts(
+        _ ports: [Int],
+        deadline: Date? = nil,
+        includeGeminiSummary: Bool = false) async throws -> AntigravityStatusSnapshot
+    {
         guard !ports.isEmpty else {
             throw AntigravityStatusProbeError.portDetectionFailed("no listening ports found")
         }
@@ -518,7 +523,7 @@ public struct AntigravityStatusProbe: Sendable {
                 source: .cliHTTPS)
         }
         let context = RequestContext(endpoints: endpoints, timeout: self.timeout, deadline: deadline)
-        return try await Self.fetchSnapshot(context: context)
+        return try await Self.fetchSnapshot(context: context, includeGeminiSummary: includeGeminiSummary)
     }
 
     // MARK: - Parsing
@@ -592,11 +597,14 @@ public struct AntigravityStatusProbe: Sendable {
         return "\(code.rawValue)"
     }
 
-    private static func parseDate(_ value: String) -> Date? {
+    static func parseDate(_ value: String) -> Date? {
         if let date = ISO8601DateFormatter().date(from: value) {
             return date
         }
-        if let seconds = Double(value) {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) { return date }
+        if let seconds = Double(value), seconds.isFinite {
             return Date(timeIntervalSince1970: seconds)
         }
         return nil
@@ -1068,17 +1076,27 @@ public struct AntigravityStatusProbe: Sendable {
 
     static func fetchSnapshot(
         context: RequestContext,
+        includeGeminiSummary: Bool = false,
         send: @escaping @Sendable (RequestPayload, AntigravityConnectionEndpoint, TimeInterval) async throws -> Data =
             sendRequest) async throws -> AntigravityStatusSnapshot
     {
         do {
-            return try await self.makeParsedRequest(
+            var status = try await self.makeParsedRequest(
                 payload: RequestPayload(
                     path: self.getUserStatusPath,
                     body: self.defaultRequestBody()),
                 context: context,
                 send: send,
                 parse: self.parseUserStatusResponse)
+            if includeGeminiSummary {
+                let path = "/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary"
+                status.geminiQuotaSummary = try? await self.makeParsedRequest(
+                    payload: RequestPayload(path: path, body: self.defaultRequestBody()),
+                    context: context,
+                    send: send,
+                    parse: { try JSONDecoder().decode(GeminiQuotaSummary.Envelope.self, from: $0).response })
+            }
+            return status
         } catch {
             return try await self.makeParsedRequest(
                 payload: RequestPayload(

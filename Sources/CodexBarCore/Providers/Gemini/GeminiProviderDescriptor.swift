@@ -45,10 +45,20 @@ public enum GeminiProviderDescriptor {
         metadata: ProviderMetadata = Self.descriptor.metadata)
         -> (primary: String, secondary: String, tertiary: String, showsTertiary: Bool)
     {
-        let usesRollingWindows = snapshot.secondary?.windowMinutes == 7 * 24 * 60
-            || snapshot.primary?.windowMinutes == 5 * 60
-        if usesRollingWindows {
-            return ("5-hour", "Weekly", metadata.opusLabel ?? "Flash Lite", false)
+        let hasFiveHourPrimary = snapshot.primary?.windowMinutes == 5 * 60
+        let hasWeeklySecondary = snapshot.secondary?.windowMinutes == 7 * 24 * 60
+        if hasWeeklySecondary {
+            return (
+                hasFiveHourPrimary ? "5-hour" : metadata.sessionLabel,
+                "Weekly",
+                metadata.opusLabel ?? "Flash Lite",
+                false)
+        }
+        if hasFiveHourPrimary {
+            if snapshot.secondary == nil {
+                return ("5-hour", metadata.weeklyLabel, metadata.opusLabel ?? "Flash Lite", false)
+            }
+            return (metadata.sessionLabel, metadata.weeklyLabel, metadata.opusLabel ?? "Flash Lite", false)
         }
         return (
             metadata.sessionLabel,
@@ -70,7 +80,7 @@ public enum GeminiProviderDescriptor {
         case .oauth:
             return [antigravityOAuth]
         case .auto:
-            return [cliOAuth, antigravityLocal, antigravityOAuth, antigravityCLI]
+            return [antigravityLocal, antigravityOAuth, cliOAuth, antigravityCLI]
         case .web:
             return []
         }
@@ -117,8 +127,14 @@ struct GeminiAntigravityLocalFetchStrategy: ProviderFetchStrategy {
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
         let probe = AntigravityStatusProbe(processScope: .ideOnly)
-        let snap = try await probe.fetch()
         let expectedEmail = GeminiSettingsReader.expectedAccountEmail(environment: context.env)
+        let snap: AntigravityStatusSnapshot = if let registered = try await probe
+            .registeredDesktopSnapshot(expectedEmail: expectedEmail)
+        {
+            registered
+        } else {
+            try await probe.fetch()
+        }
         try GeminiAccountMatcher.validate(reportedEmail: snap.accountEmail, expectedEmail: expectedEmail)
         let usage = try GeminiAntigravityQuotaMapper.toUsageSnapshot(from: snap)
         return self.makeResult(
@@ -169,7 +185,7 @@ struct GeminiAntigravityOAuthFetchStrategy: ProviderFetchStrategy {
                     try? GeminiOAuthCredentialsStore.store().save(updated)
                 }
             })
-        let snap = try await fetcher.fetch()
+        let snap = try await fetcher.fetch(includeGeminiSummary: true)
         try GeminiAccountMatcher.validate(reportedEmail: snap.accountEmail, expectedEmail: expectedEmail)
         let usage = try GeminiAntigravityQuotaMapper.toUsageSnapshot(from: snap)
         return self.makeResult(
@@ -244,7 +260,7 @@ struct GeminiAntigravityCLIFetchStrategy: ProviderFetchStrategy {
                     fetchSnapshot: { ports in
                         let timeout = min(2.0, max(0.2, deadline.timeIntervalSinceNow))
                         return try await AntigravityStatusProbe(timeout: timeout)
-                            .fetchFromPorts(ports, deadline: deadline)
+                            .fetchFromPorts(ports, deadline: deadline, includeGeminiSummary: true)
                     }))
             await session.finishProbe(success: true, resetAfterFetch: resetAfterFetch)
         } catch {
@@ -253,6 +269,9 @@ struct GeminiAntigravityCLIFetchStrategy: ProviderFetchStrategy {
                 success: false,
                 resetAfterFetch: resetAfterFetch || authRequired,
                 forceTerminate: authRequired)
+            if Self.requiresGoogleOAuthSignIn(error) {
+                throw GeminiStatusProbeError.notLoggedIn
+            }
             throw error
         }
 
@@ -262,6 +281,21 @@ struct GeminiAntigravityCLIFetchStrategy: ProviderFetchStrategy {
         return self.makeResult(
             usage: usage,
             sourceLabel: Self.sourceLabel)
+    }
+
+    private static func requiresGoogleOAuthSignIn(_ error: Error) -> Bool {
+        if let probeError = error as? AntigravityStatusProbeError {
+            switch probeError {
+            case .authenticationRequired, .missingCSRFToken:
+                return true
+            case let .apiError(message):
+                let lower = message.lowercased()
+                return lower.contains("http 401") || lower.contains("csrf") || lower.contains("unauthenticated")
+            default:
+                return false
+            }
+        }
+        return false
     }
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {

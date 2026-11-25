@@ -158,7 +158,9 @@ extension UsageStore {
             }
         }
 
+        let geminiLabels = provider == .gemini ? GeminiProviderDescriptor.windowLabels(snapshot: snapshot) : nil
         let primaryTitle: String = {
+            if let geminiLabels { return geminiLabels.primary }
             if provider == .grok,
                let dyn = GrokProviderDescriptor.primaryLabel(window: snapshot.primary)
             {
@@ -174,7 +176,7 @@ extension UsageStore {
                 percentLeft: snapshot.primary?.remainingPercent),
             WidgetSnapshot.WidgetUsageRowSnapshot(
                 id: "secondary",
-                title: metadata?.weeklyLabel ?? "Weekly",
+                title: geminiLabels?.secondary ?? metadata?.weeklyLabel ?? "Weekly",
                 percentLeft: snapshot.secondary?.remainingPercent),
         ]
         if metadata?.supportsOpus == true {
@@ -182,6 +184,11 @@ extension UsageStore {
                 id: "tertiary",
                 title: metadata?.opusLabel ?? "Opus",
                 percentLeft: snapshot.tertiary?.remainingPercent))
+        }
+        if provider == .gemini {
+            for model in snapshot.extraRateWindows ?? [] where model.usageKnown {
+                rows.append(.init(id: model.id, title: model.title, percentLeft: model.window.remainingPercent))
+            }
         }
         return rows.filter { $0.percentLeft != nil }
     }
