@@ -4,6 +4,40 @@ Midas releases belong exclusively to [enzo-prism/midas](https://github.com/enzo-
 The inherited `.mac-release.env`, `Scripts/release.sh`, and `Scripts/sign-and-notarize.sh` target
 upstream CodexBar and must not be used unchanged to publish this fork.
 
+## 0.52.0 changes: Suno usage and ElevenLabs without an API key
+
+**ElevenLabs** gains a `CLI` source that reads `elevenlabs user subscription get --format json`
+from the signed-in official ElevenLabs CLI, so no API key is needed. `Auto` tries a saved key first
+and falls back to the CLI when there is none or it is rejected. The CLI runs with API-key variables
+removed; an expired OAuth session (exit 2, 401 JSON) shows as signed out. See `docs/elevenlabs.md`.
+
+**Suno** is a new provider (off by default) that reads `suno credits --json --no-browser --quiet`:
+monthly credits with the renewal date, downloads used, plan, and top-up credits. See `docs/suno.md`.
+Credit-count providers now show "used / limit credits" beside the reset time.
+
+The release also carries the Gemini fixes first shipped privately as 0.51.1 (build 143): Gemini
+sign-in on Antigravity 2.34+ and Gemini rolling limits (`c46880fe`).
+
+The binary identifies source `f38797b7` on `main` (merge `672d4fab`). `make check` passed. The new
+ElevenLabs CLI, Suno, and count-detail menu tests passed; the full suite ran while the Mac Studio
+load average was 57–116, and the only failures were timing-sensitive tests (path builder,
+subprocess runner, Codex login, Antigravity, status menu, Claude OAuth security CLI, hang
+watchdog) that all passed when rerun in isolation.
+
+Apple notarization `e1b7c7fa-2b26-4147-a433-be5e8da45dd1` was Accepted. The app and dSYM share
+arm64 UUID `5AD6EF3B-DDA3-3F02-8D51-2CCAA5A226EF`. Deep strict signing, stapling, Gatekeeper,
+archive signing, and both signed XML feeds passed. Archive SHA-256:
+`9a78fb0850aca0e2696e66bd2c6d0b628bdb57fd75ddc465b91b2d7f4ebba564`.
+
+Downloaded draft assets, anonymous public assets, and both actual `/releases/latest/download/`
+feeds matched the prepared checksums before the website was updated. Published as
+[`v0.52.0-midas.1`](https://github.com/enzo-prism/midas/releases/tag/v0.52.0-midas.1). The public
+bundle is installed and running at `/Applications/Midas.app` on the Mac Studio with ElevenLabs and
+Suno enabled, and the 0.51.1 builds 142 and 143 plus the repo-root package were moved to the Trash.
+Website source `7b1d23d` reached production on `midas-ai.dev`. All 43 local and 39 production
+browser checks passed (the analytics spec was skipped in production), and the live download link
+retrieves the archive above.
+
 ## 0.51.0 changes: Gemini provider and local Gemini spend
 
 Midas now supports **Gemini** as a first-class provider with Google account pinning
