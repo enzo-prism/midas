@@ -443,4 +443,162 @@ struct GeminiAntigravityIntegrationTests {
         #expect(MidasProviderLogoLoader.resourceName(for: .gemini, dark: false) == "MidasLogo-gemini")
         #expect(MidasProviderLogoLoader.resourceName(for: .gemini, dark: true) == "MidasLogo-gemini")
     }
+
+    @Test func registeredDesktopLanguageServerMatchesRenamedAntigravityBinaries() {
+        #expect(AntigravityStatusProbe.isRegisteredDesktopLanguageServer(
+            "/Applications/Antigravity.app/Contents/Resources/bin/language_server"))
+        let legacyArmPath = "/Applications/Antigravity.app/Contents/Resources/app/extensions/"
+            + "antigravity/bin/language_server_macos_arm"
+        #expect(AntigravityStatusProbe.isRegisteredDesktopLanguageServer(legacyArmPath))
+        #expect(!AntigravityStatusProbe.isRegisteredDesktopLanguageServer("/usr/local/bin/language_server"))
+        #expect(!AntigravityStatusProbe.isRegisteredDesktopLanguageServer(
+            "/Applications/Antigravity.app/Contents/MacOS/Antigravity"))
+    }
+
+    @Test func remoteUsageFetcherFailsFastOnLegacyNonConsumerOAuthClient() async throws {
+        let env = try GeminiTestEnvironment()
+        defer { env.cleanup() }
+        let credentials = AntigravityOAuthCredentials(
+            accessToken: "test-access-token",
+            refreshToken: nil,
+            expiryDate: Date().addingTimeInterval(3600),
+            idToken: GeminiAPITestHelpers.makeIDToken(email: "personal@example.com"),
+            email: "personal@example.com",
+            projectID: nil,
+            clientID: "884354919052-legacy.apps.googleusercontent.com",
+            clientSecret: "GOCSPX-legacy")
+        let token = try AntigravityOAuthCredentialsStore.tokenAccountValue(for: credentials)
+
+        let dataLoader = GeminiAPITestHelpers.dataLoader { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/v1internal:loadCodeAssist" {
+                return GeminiAPITestHelpers.response(
+                    url: url.absoluteString,
+                    status: 200,
+                    body: GeminiAPITestHelpers.jsonData([
+                        "allowedTiers": [["id": "free-tier", "isDefault": true]],
+                    ]))
+            }
+            return GeminiAPITestHelpers.response(url: url.absoluteString, status: 403, body: Data())
+        }
+
+        let started = Date()
+        let fetcher = AntigravityRemoteUsageFetcher(
+            timeout: 2,
+            homeDirectory: env.homeURL.path,
+            environment: [AntigravityOAuthCredentialsStore.environmentCredentialsKey: token],
+            dataLoader: dataLoader)
+        do {
+            _ = try await fetcher.fetch(includeGeminiSummary: true)
+            Issue.record("Expected permissionDenied for legacy non-consumer OAuth client without project ID")
+        } catch let error as AntigravityRemoteFetchError {
+            guard case let .permissionDenied(message) = error else {
+                Issue.record("Unexpected error: \(error)")
+                return
+            }
+            #expect(message.contains("Reconnect Google OAuth"))
+        }
+        #expect(Date().timeIntervalSince(started) < 2.0)
+    }
+
+    @Test func usageSyncExportsValidatesAndAggregatesGeminiTranscripts() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("midas-gemini-sync-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transcriptURL = root
+            .appendingPathComponent("convo-1", isDirectory: true)
+            .appendingPathComponent(".system_generated", isDirectory: true)
+            .appendingPathComponent("logs", isDirectory: true)
+            .appendingPathComponent("transcript.jsonl")
+        try FileManager.default.createDirectory(
+            at: transcriptURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        let lines = [
+            """
+            {"step_index":1,"type":"PLANNER_RESPONSE","created_at":"2026-11-19T19:01:00Z",\
+            "model":"gemini-2.5-flash-high","input_tokens":100000,"cache_read_tokens":500000,"output_tokens":10000}
+            """,
+            """
+            {"step_index":2,"type":"PLANNER_RESPONSE","created_at":"2026-11-19T19:05:00Z",\
+            "model":"gemini-2.5-pro-tiered-xhigh","input_tokens":150000,"cache_read_tokens":100000,"output_tokens":2000}
+            """,
+        ].joined(separator: "\n")
+        try Data(lines.utf8).write(to: transcriptURL)
+
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-11-19T20:00:00Z"))
+        let workspace = MidasUsageSyncWorkspace(createdAt: now)
+        let cacheRoot = root.appendingPathComponent("empty-cache", isDirectory: true)
+        let options = MidasUsageSyncExporter.Options(
+            geminiBrainRoots: [root],
+            cacheRoot: cacheRoot,
+            historyDays: 30)
+        let exported = try await MidasUsageSyncExporter.export(
+            workspace: workspace,
+            providers: [.gemini],
+            now: now,
+            options: options)
+
+        #expect(exported.events.count == 2)
+        #expect(exported.events.allSatisfy { $0.provider == .gemini })
+        #expect(Set(exported.events.compactMap(\.values.model)) == ["gemini-2.5-flash", "gemini-2.5-pro"])
+
+        let publication = MidasUsageSyncPublication(
+            workspaceID: workspace.id,
+            deviceID: UUID(),
+            deviceName: "Test Mac",
+            publishedAt: now,
+            events: exported.events)
+        try publication.validate(workspaceID: workspace.id, now: now)
+
+        let ledger = try MidasUsageSyncLedger(publications: [publication], workspaceID: workspace.id, now: now)
+        let snapshot = try #require(ledger.snapshots[.gemini])
+        #expect(snapshot.last30DaysTokens == 862_000)
+        #expect(abs((snapshot.last30DaysCostUSD ?? 0) - 0.50) < 0.0001)
+        #expect(snapshot.daily.first?.date == "2026-11-19")
+    }
+
+    @Test @MainActor func planUtilizationHistorySupportsGeminiRollingWindows() async throws {
+        let suite = "GeminiPlanUtilizationTest-\(UUID().uuidString)"
+        let defaults = try #require(TestUserDefaults.suite(suite))
+        defer { defaults.removePersistentDomain(forName: TestUserDefaults.domain(suite)) }
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: testConfigStore(suiteName: suite),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        settings.statusChecksEnabled = false
+        let historyDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gemini-plan-history-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: historyDir) }
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            planUtilizationHistoryStore: PlanUtilizationHistoryStore(directoryURL: historyDir))
+
+        #expect(store.supportsPlanUtilizationHistory(for: .gemini))
+        let now = Date(timeIntervalSince1970: 1_760_000_000)
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 25,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(3600),
+                resetDescription: nil),
+            secondary: RateWindow(
+                usedPercent: 12,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(7 * 86400),
+                resetDescription: nil),
+            updatedAt: now,
+            identity: ProviderIdentitySnapshot(
+                providerID: .gemini,
+                accountEmail: "personal@example.com",
+                accountOrganization: nil,
+                loginMethod: "Google AI Pro"))
+        await store.recordPlanUtilizationHistorySample(provider: .gemini, snapshot: snapshot, now: now)
+        let histories = store.planUtilizationHistory(for: .gemini)
+        #expect(histories.map(\.name) == [.session, .weekly])
+        #expect(histories.first?.entries.last?.usedPercent == 25)
+        #expect(histories.last?.entries.last?.usedPercent == 12)
+    }
 }

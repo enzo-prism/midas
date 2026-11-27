@@ -13,7 +13,7 @@ extension UsageStore {
 
     func supportsPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
         switch provider {
-        case .codex, .claude:
+        case .codex, .claude, .gemini:
             true
         default:
             false
@@ -382,6 +382,9 @@ extension UsageStore {
             appendWindow(snapshot.primary, name: .session)
             appendWindow(snapshot.secondary, name: .weekly)
             appendWindow(snapshot.tertiary, name: .opus)
+        case .gemini:
+            appendWindow(snapshot.primary, name: .session)
+            appendWindow(snapshot.secondary, name: .weekly)
         default:
             for window in [snapshot.primary, snapshot.secondary, snapshot.tertiary] {
                 guard let window, window.windowMinutes == Self.weeklyWindowMinutes else { continue }

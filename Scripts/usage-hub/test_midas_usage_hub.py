@@ -319,6 +319,15 @@ class HTTPTests(HubTests):
         self.assertEqual(failures, [])
         self.assertEqual(len(self.exchange(self.one, None)["publications"]), len(configs))
 
+    def test_gemini_events_and_public_model_names_are_accepted(self):
+        publication = self.publication(self.one, tokens=500, event_id="b" * 64)
+        publication["events"][0]["provider"] = "gemini"
+        publication["events"][0]["values"]["model"] = "gemini-2.5-pro"
+        result = self.exchange(self.one, publication)
+        self.assertTrue(result["publicationSucceeded"])
+        self.assertEqual(result["publications"][0]["events"][0]["provider"], "gemini")
+        self.assertEqual(result["publications"][0]["events"][0]["values"]["model"], "gemini-2.5-pro")
+
 
 if __name__ == "__main__":
     unittest.main()

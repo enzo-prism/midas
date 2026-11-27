@@ -273,7 +273,8 @@ public struct MidasUsageSyncPublication: Codable, Sendable, Equatable {
             dayStarts[row.day] = start
         }
         for event in self.events {
-            guard [.codex, .claude, .meta, .localInference].contains(event.provider), Self.isOpaqueID(event.id),
+            guard [.codex, .claude, .meta, .gemini, .localInference].contains(event.provider),
+                  Self.isOpaqueID(event.id),
                   Self.validObservation(event.observedAt, publishedAt: self.publishedAt),
                   let start = dayStarts[event.day],
                   event.observedAt.timeIntervalSince1970 >= start,

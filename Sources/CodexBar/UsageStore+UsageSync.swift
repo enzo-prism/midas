@@ -46,7 +46,7 @@ extension UsageStore {
             ? MidasSpendPeriod.utc : .current
     }
 
-    static let midasSyncProviders: Set<UsageProvider> = [.codex, .claude, .cursor, .meta, .localInference]
+    static let midasSyncProviders: Set<UsageProvider> = [.codex, .claude, .cursor, .meta, .gemini, .localInference]
 
     func usesSyncedUsage(for provider: UsageProvider) -> Bool {
         // Shared session events do not retain a verifiable OpenAI account owner.
@@ -113,7 +113,7 @@ extension UsageStore {
             preservesCanonicalEvents: self.midasUsageSync.transport == .tailscaleHub)
         let exported = try await MidasUsageSyncExporter.export(
             workspace: workspace,
-            providers: [.codex, .claude, .meta],
+            providers: [.codex, .claude, .meta, .gemini],
             now: now,
             options: options)
         let accountDays = enabled.contains(.cursor) ? self.midasCursorSyncDays(workspace: workspace) : []

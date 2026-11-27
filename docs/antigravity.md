@@ -42,8 +42,9 @@ The local and CLI paths both prefer Antigravity's internal `GetUserStatus` quota
 
 When the Antigravity desktop app is running:
 
-1. **Process detection**
-   - Command: `ps -ax -o pid=,command=`.
+1. **Desktop hub & process detection**
+   - Preferred fast path: per-user desktop hub registrations under `~/.gemini/antigravity/daemon/hub_*.json` (`AntigravityStatusProbe+DesktopHub.swift`), verified against `/bin/ps` (`language_server*` inside `/Antigravity*.app/Contents/Resources/`) and `lsof` listening ports before sending the session CSRF header.
+   - Fallback process detection command: `ps -ax -o pid=,command=`.
    - The desktop local strategy scopes detection to **IDE** language servers only
      (`AntigravityStatusProbe(processScope: .ideOnly)`). It deliberately does **not**
      attach to an `agy` CLI process: a stale or still-initializing `agy` accepts the

@@ -133,7 +133,7 @@ struct GeminiAntigravityLocalFetchStrategy: ProviderFetchStrategy {
         {
             registered
         } else {
-            try await probe.fetch()
+            try await probe.fetch(includeGeminiSummary: true)
         }
         try GeminiAccountMatcher.validate(reportedEmail: snap.accountEmail, expectedEmail: expectedEmail)
         let usage = try GeminiAntigravityQuotaMapper.toUsageSnapshot(from: snap)

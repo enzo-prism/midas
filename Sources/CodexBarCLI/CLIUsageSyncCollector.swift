@@ -75,10 +75,15 @@ struct MidasUsageCollector: Sendable {
     }
 
     static func parseProviders(_ value: String?) throws -> [UsageProvider] {
-        guard let value else { return [.codex, .claude, .meta] }
+        guard let value else { return [.codex, .claude, .meta, .gemini] }
         let names = value.split(separator: ",", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        let supported: [String: UsageProvider] = ["codex": .codex, "claude": .claude, "meta": .meta]
+        let supported: [String: UsageProvider] = [
+            "codex": .codex,
+            "claude": .claude,
+            "meta": .meta,
+            "gemini": .gemini,
+        ]
         guard !names.isEmpty, names.allSatisfy({ supported[$0] != nil }) else {
             throw CollectorError.invalidProviders
         }

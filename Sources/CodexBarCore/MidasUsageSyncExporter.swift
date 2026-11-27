@@ -11,6 +11,7 @@ public enum MidasUsageSyncExporter {
         public var codexAdditionalSessionsRoots: [URL]
         public var claudeProjectsRoots: [URL]?
         public var metaSessionsRoot: URL?
+        public var geminiBrainRoots: [URL]?
         public var cacheRoot: URL?
         public var codexTraceDatabaseURL: URL?
         public var historyDays: Int
@@ -29,6 +30,7 @@ public enum MidasUsageSyncExporter {
             codexAdditionalSessionsRoots: [URL] = [],
             claudeProjectsRoots: [URL]? = nil,
             metaSessionsRoot: URL? = nil,
+            geminiBrainRoots: [URL]? = nil,
             cacheRoot: URL? = nil,
             codexTraceDatabaseURL: URL? = nil,
             historyDays: Int = 365,
@@ -41,6 +43,7 @@ public enum MidasUsageSyncExporter {
             self.codexAdditionalSessionsRoots = codexAdditionalSessionsRoots
             self.claudeProjectsRoots = claudeProjectsRoots
             self.metaSessionsRoot = metaSessionsRoot
+            self.geminiBrainRoots = geminiBrainRoots
             self.cacheRoot = cacheRoot
             self.codexTraceDatabaseURL = codexTraceDatabaseURL
             self.historyDays = historyDays
@@ -66,7 +69,9 @@ public enum MidasUsageSyncExporter {
     {
         try workspace.validate()
         let resolvedOptions = self.resolvingCacheRoot(options)
-        if options.cacheRoot == nil, providers.contains(.codex) || providers.contains(.claude) {
+        if options.cacheRoot == nil,
+           providers.contains(.codex) || providers.contains(.claude) || providers.contains(.gemini)
+        {
             // Only live default exports refresh the public catalog. Explicit fixture and CLI roots stay isolated.
             await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: resolvedOptions.cacheRoot)
             try Task.checkCancellation()
@@ -249,6 +254,15 @@ public enum MidasUsageSyncExporter {
                         window: Window(
                             since: since,
                             until: now),
+                        checkCancellation: checkCancellation,
+                        output: &output)
+                case .gemini:
+                    try self.appendGemini(
+                        workspace: workspace,
+                        window: Window(
+                            since: since,
+                            until: now),
+                        options: options,
                         checkCancellation: checkCancellation,
                         output: &output)
                 default:
@@ -504,6 +518,60 @@ public enum MidasUsageSyncExporter {
             estimatedRequests: cost == nil ? 0 : usage.requests)
     }
 
+    private static func appendGemini(
+        workspace: MidasUsageSyncWorkspace,
+        window: Window,
+        options: Options,
+        checkCancellation: @escaping @Sendable () throws -> Void,
+        output: inout Accumulator) throws
+    {
+        let roots = options.geminiBrainRoots ?? GeminiTranscriptLogScanner.defaultBrainRoots()
+        let catalog = CostUsagePricing.modelsDevCatalog(
+            now: window.until,
+            cacheRoot: options.cacheRoot)
+        let records = try GeminiTranscriptLogScanner.loadSyncRecords(
+            brainRoots: roots,
+            since: window.since,
+            checkCancellation: checkCancellation)
+        for record in records {
+            let step = record.step
+            guard step.timestamp >= window.since, step.timestamp <= window.until else { continue }
+            guard let conversationID = self.nonempty(record.conversationID),
+                  let stepIndex = record.stepIndex
+            else {
+                output.excludedRecords += 1
+                continue
+            }
+            let normalizedModel = GeminiTranscriptLogScanner.normalizeModelIDForPricing(step.model)
+            let cost = CostUsagePricing.geminiCostUSD(
+                model: normalizedModel,
+                inputTokens: step.inputTokens,
+                cacheReadTokens: step.cacheReadTokens,
+                outputTokens: step.outputTokens,
+                catalog: catalog,
+                cacheRoot: options.cacheRoot)
+            output.add(MidasUsageSyncEvent(
+                id: workspace.opaqueID(
+                    provider: .gemini,
+                    components: [conversationID, String(stepIndex), record.createdAtRaw]),
+                provider: .gemini,
+                day: MidasUsageSyncPublication.day(step.timestamp),
+                observedAt: step.timestamp,
+                values: MidasUsageSyncValues(
+                    tokens: self.sum([step.inputTokens, step.cacheReadTokens, step.outputTokens]),
+                    requests: 1,
+                    costUSD: cost,
+                    tokenMix: CostUsageTokenMix(
+                        inputTokens: step.inputTokens,
+                        outputTokens: step.outputTokens,
+                        cacheReadTokens: step.cacheReadTokens),
+                    provenance: cost == nil ? .unknown : .listPriceEstimate,
+                    model: self.publicModel(normalizedModel),
+                    unpricedRequests: cost == nil ? 1 : 0,
+                    estimatedRequests: cost == nil ? 0 : 1)))
+        }
+    }
+
     private static func nonempty(_ value: String?) -> String? {
         guard let value, value.unicodeScalars.contains(where: {
             !CharacterSet.whitespacesAndNewlines.contains($0)
@@ -513,7 +581,7 @@ public enum MidasUsageSyncExporter {
 
     private static let publicModelExpression = try? NSRegularExpression(
         pattern: #"^(gpt-[0-9][a-z0-9.\-]*|o[1-9][a-z0-9.\-]*|"#
-            + #"claude-[a-z0-9.\-]+|muse-spark-[0-9.]+(?:-contributor)?)$"#)
+            + #"claude-[a-z0-9.\-]+|gemini-[0-9][a-z0-9.\-]*|muse-spark-[0-9.]+(?:-contributor)?)$"#)
 
     /// Unrecognized model text is omitted instead of transmitting arbitrary local strings.
     private static func publicModel(_ value: String?) -> String? {

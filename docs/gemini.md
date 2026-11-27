@@ -14,25 +14,27 @@ Gemini supports Gemini CLI OAuth credentials, Antigravity local/CLI quota probin
 
 In `auto` mode, strategies run in order (each validating the pinned Google account email when `accountEmail` / `CODEXBAR_GEMINI_ACCOUNT_EMAIL` is configured):
 
-1) **Gemini CLI OAuth API (`oauth-api`)**
+1) **Antigravity desktop local probe (`antigravity-local`)**
+   - Probes the running Antigravity IDE language server (`GetUserStatus` + `RetrieveUserQuotaSummary`, via the desktop hub registration or process discovery) and extracts Gemini-only model quotas (excluding non-Gemini models such as Claude or GPT).
+   - Maps rolling 5-hour and 7-day weekly pools into `primary` and `secondary`, and deduplicates effort-tier variants in `extraRateWindows`.
+
+2) **Google OAuth remote API (`oauth`)**
+   - Uses Gemini-scoped Google OAuth credentials (`GEMINI_OAUTH_CREDENTIALS_JSON`, `~/.codexbar/gemini/oauth_creds.json`, or a matching `~/.codexbar/antigravity/oauth_creds.json`) against `cloudcode-pa.googleapis.com` / `daily-cloudcode-pa.googleapis.com` so refreshes continue when Antigravity is closed.
+   - Fails fast with a reconnect prompt if stored credentials use a legacy non-consumer OAuth client without a Cloud Code project ID, instead of stalling on onboarding retries.
+
+3) **Gemini CLI OAuth API (`oauth-api`)**
    - Reads auth type from `~/.gemini/settings.json` and OAuth credentials from `~/.gemini/oauth_creds.json`.
    - Supported: `oauth-personal` (or unknown → try OAuth creds).
    - Unsupported: `api-key`, `vertex-ai` (hard error).
    - Skipped in `auto` mode when `~/.gemini/oauth_creds.json` does not exist.
 
-2) **Antigravity desktop local probe (`antigravity-local`)**
-   - Probes the running Antigravity IDE language server (`GetUserStatus`) and extracts Gemini-only model quotas (excluding non-Gemini models such as Claude or GPT).
-   - Maps rolling 5-hour and 7-day weekly pools into `primary` and `secondary`, and deduplicates effort-tier variants in `extraRateWindows`.
-
-3) **Google OAuth remote API (`oauth`)**
-   - Uses Gemini-scoped Google OAuth credentials (`GEMINI_OAUTH_CREDENTIALS_JSON`, `~/.codexbar/gemini/oauth_creds.json`, or a matching `~/.codexbar/antigravity/oauth_creds.json`) against `cloudcode-pa.googleapis.com` so refreshes continue when Antigravity is closed.
-
 4) **Antigravity `agy` CLI local HTTPS (`antigravity-cli`)**
    - Final fallback when signed into the matching Google account.
 
-5) **Local token usage & API-rate cost estimate**
-   - Scans `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl` for Gemini `PLANNER_RESPONSE` token counts (`input_tokens`, `cache_read_tokens`, `output_tokens`).
+5) **Local token usage, API-rate cost estimate, usage sync, and utilization history**
+   - Scans `~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl` and `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl` for Gemini `PLANNER_RESPONSE` token counts (`input_tokens`, `cache_read_tokens`, `output_tokens`).
    - Prices normalized Gemini model IDs via `models.dev` (`google` / `google-vertex`) with released Gemini 2.5 fallbacks; unknown models stay unpriced.
+   - Participates in `MidasUsageSync` (UTC daily events, public Gemini model names, combined spend export) and hourly `PlanUtilizationHistoryStore` (`history/gemini.json`) for 5-hour and weekly rolling windows.
 
 ## OAuth credentials
 - File: `~/.gemini/oauth_creds.json`.

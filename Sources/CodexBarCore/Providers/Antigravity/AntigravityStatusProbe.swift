@@ -442,7 +442,7 @@ public struct AntigravityStatusProbe: Sendable {
         self.processScope = processScope
     }
 
-    public func fetch() async throws -> AntigravityStatusSnapshot {
+    public func fetch(includeGeminiSummary: Bool = false) async throws -> AntigravityStatusSnapshot {
         let processInfo = try await Self.detectProcessInfo(timeout: self.timeout, scope: self.processScope)
         let ports = try await Self.listeningPorts(pid: processInfo.pid, timeout: self.timeout)
         let endpoint = try await Self.resolveWorkingEndpoint(
@@ -461,7 +461,7 @@ public struct AntigravityStatusProbe: Sendable {
                 extensionServerCSRFToken: processInfo.extensionServerCSRFToken),
             timeout: self.timeout)
 
-        return try await Self.fetchSnapshot(context: context)
+        return try await Self.fetchSnapshot(context: context, includeGeminiSummary: includeGeminiSummary)
     }
 
     public func fetchPlanInfoSummary() async throws -> AntigravityPlanInfoSummary? {

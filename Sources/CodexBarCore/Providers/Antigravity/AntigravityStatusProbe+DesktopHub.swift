@@ -17,10 +17,10 @@ extension AntigravityStatusProbe {
                       environment: ProcessInfo.processInfo.environment,
                       timeout: self.timeout,
                       label: "antigravity-hub"),
-                  process.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-                      .hasSuffix("/Antigravity.app/Contents/Resources/bin/language_server"),
-                      let ports = try? await Self.listeningPorts(pid: hub.pid, timeout: self.timeout),
-                      ports.contains(hub.httpsPort)
+                  Self.isRegisteredDesktopLanguageServer(
+                      process.stdout.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  let ports = try? await Self.listeningPorts(pid: hub.pid, timeout: self.timeout),
+                  ports.contains(hub.httpsPort)
             else { continue }
             let endpoint = AntigravityConnectionEndpoint(
                 scheme: "https", port: hub.httpsPort, csrfToken: hub.csrfToken, source: .languageServer)
@@ -35,6 +35,13 @@ extension AntigravityStatusProbe {
         }
         try Task.checkCancellation()
         return nil
+    }
+
+    static func isRegisteredDesktopLanguageServer(_ commandPath: String) -> Bool {
+        let lower = commandPath.lowercased()
+        let isAntigravityApp = lower.contains("/antigravity") && lower.contains(".app/contents/resources/")
+        let binaryName = URL(fileURLWithPath: commandPath).lastPathComponent.lowercased()
+        return isAntigravityApp && binaryName.hasPrefix("language_server")
     }
 
     private struct DesktopHub: Decodable {

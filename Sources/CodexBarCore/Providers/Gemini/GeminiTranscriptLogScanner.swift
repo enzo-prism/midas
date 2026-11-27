@@ -12,6 +12,13 @@ public struct GeminiTranscriptStep: Sendable, Equatable {
     }
 }
 
+public struct GeminiTranscriptSyncRecord: Sendable, Equatable {
+    public let conversationID: String
+    public let stepIndex: Int?
+    public let createdAtRaw: String
+    public let step: GeminiTranscriptStep
+}
+
 /// Scans Antigravity local agent transcripts (`~/.gemini/antigravity/brain/*/.system_generated/logs/transcript.jsonl`)
 /// for Gemini `PLANNER_RESPONSE` token usage and estimates API-equivalent value using public Google Gemini rates.
 public enum GeminiTranscriptLogScanner: Sendable {
@@ -74,6 +81,40 @@ public enum GeminiTranscriptLogScanner: Sendable {
                 historyDays: historyDays,
                 pricingCacheRoot: pricingCacheRoot,
                 calendar: calendar))
+    }
+
+    public static func loadSyncRecords(
+        brainRoots: [URL]? = nil,
+        since: Date,
+        checkCancellation: @escaping @Sendable () throws -> Void = {}) throws -> [GeminiTranscriptSyncRecord]
+    {
+        let roots = brainRoots ?? self.defaultBrainRoots()
+        var files: [(conversationID: String, url: URL)] = []
+        var seenPaths = Set<String>()
+        for root in roots {
+            try checkCancellation()
+            for fileURL in self.listTranscriptFiles(root: root, since: since).sorted(by: { $0.path < $1.path }) {
+                let path = fileURL.standardizedFileURL.path
+                guard seenPaths.insert(path).inserted else { continue }
+                let conversationID = fileURL
+                    .deletingLastPathComponent()
+                    .deletingLastPathComponent()
+                    .deletingLastPathComponent()
+                    .lastPathComponent
+                files.append((conversationID: conversationID, url: fileURL))
+                if files.count >= self.maxFilesPerScan { break }
+            }
+            if files.count >= self.maxFilesPerScan { break }
+        }
+        var records: [GeminiTranscriptSyncRecord] = []
+        records.reserveCapacity(512)
+        for item in files {
+            try checkCancellation()
+            autoreleasepool {
+                self.appendSyncRecords(from: item.url, conversationID: item.conversationID, into: &records)
+            }
+        }
+        return records
     }
 
     public static func _parseStepForTesting(fromLine line: String) -> GeminiTranscriptStep? {
@@ -314,7 +355,53 @@ public enum GeminiTranscriptLogScanner: Sendable {
         }
     }
 
+    private static func appendSyncRecords(
+        from fileURL: URL,
+        conversationID: String,
+        into records: inout [GeminiTranscriptSyncRecord])
+    {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return }
+        defer { try? handle.close() }
+
+        let chunkSize = 64 * 1024
+        var buffer = Data()
+        var skippingOversizedLine = false
+        let newline = UInt8(ascii: "\n")
+
+        while true {
+            let chunk = (try? handle.read(upToCount: chunkSize)) ?? Data()
+            if chunk.isEmpty { break }
+            buffer.append(chunk)
+            while let nlIndex = buffer.firstIndex(of: newline) {
+                let lineData = buffer[..<nlIndex]
+                if !skippingOversizedLine, !lineData.isEmpty, lineData.count <= self.maxLineBytes,
+                   let record = Self.parseSyncRecord(from: Data(lineData), conversationID: conversationID)
+                {
+                    records.append(record)
+                }
+                buffer.removeSubrange(...nlIndex)
+                skippingOversizedLine = false
+            }
+            if buffer.count > self.maxLineBytes {
+                buffer.removeAll(keepingCapacity: true)
+                skippingOversizedLine = true
+            }
+        }
+        if !skippingOversizedLine, !buffer.isEmpty, buffer.count <= self.maxLineBytes,
+           let record = Self.parseSyncRecord(from: buffer, conversationID: conversationID)
+        {
+            records.append(record)
+        }
+    }
+
     private static func parseStep(from data: Data) -> GeminiTranscriptStep? {
+        self.parseSyncRecord(from: data, conversationID: "")?.step
+    }
+
+    private static func parseSyncRecord(
+        from data: Data,
+        conversationID: String) -> GeminiTranscriptSyncRecord?
+    {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
@@ -340,12 +427,25 @@ public enum GeminiTranscriptLogScanner: Sendable {
             return nil
         }
 
-        return GeminiTranscriptStep(
+        let stepIndex: Int? = if let idx = json["step_index"] as? Int {
+            idx
+        } else if let num = json["step_index"] as? NSNumber {
+            num.intValue
+        } else {
+            nil
+        }
+
+        let step = GeminiTranscriptStep(
             timestamp: timestamp,
             model: model,
             inputTokens: inputTokens,
             cacheReadTokens: cacheReadTokens,
             outputTokens: outputTokens)
+        return GeminiTranscriptSyncRecord(
+            conversationID: conversationID,
+            stepIndex: stepIndex,
+            createdAtRaw: createdAt,
+            step: step)
     }
 
     private static func nonNegativeInt(_ value: Any?) -> Int {

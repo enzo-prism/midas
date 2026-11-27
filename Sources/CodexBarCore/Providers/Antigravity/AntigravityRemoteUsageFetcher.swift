@@ -216,7 +216,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
         let projectId = try await Self.resolveProjectID(
             baseURL: baseURL,
             accessToken: accessToken,
-            storedProjectID: credentials.projectID?.trimmedNonEmpty,
+            credentials: credentials,
             initialResponse: codeAssist,
             context: context)
         if let projectId, credentials.projectID?.trimmedNonEmpty != projectId {
@@ -441,20 +441,32 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             dataLoader: dataLoader)
     }
 
+    private static let consumerClientIDPrefix = "1071006060591-"
+
+    private static func isLegacyNonConsumerClient(_ clientID: String?) -> Bool {
+        guard let clientID = clientID?.trimmedNonEmpty else { return false }
+        return !clientID.hasPrefix(Self.consumerClientIDPrefix)
+    }
+
     private static func resolveProjectID(
         baseURL: String,
         accessToken: String,
-        storedProjectID: String?,
+        credentials: AntigravityOAuthCredentials,
         initialResponse: CodeAssistResponse,
         context: FetchContext) async throws
         -> String?
     {
-        if let storedProjectID {
+        if let storedProjectID = credentials.projectID?.trimmedNonEmpty {
             return storedProjectID
         }
 
         if let projectID = initialResponse.projectID {
             return projectID
+        }
+
+        if Self.isLegacyNonConsumerClient(credentials.clientID) {
+            throw AntigravityRemoteFetchError.permissionDenied(
+                "Saved Google OAuth uses an older client ID. Reconnect Google OAuth in Settings → Gemini.")
         }
 
         guard let tierID = Self.pickOnboardTier(from: initialResponse) else {
@@ -470,6 +482,7 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             ],
         ]
 
+        let onboardSucceeded: Bool
         do {
             let onboardResponse: OnboardResponse = try await Self.sendRequest(
                 endpoint: Self.endpointURL(baseURL: baseURL, path: "/v1internal:onboardUser"),
@@ -480,14 +493,22 @@ public struct AntigravityRemoteUsageFetcher: Sendable {
             if let projectID = onboardResponse.projectID {
                 return projectID
             }
+            onboardSucceeded = true
         } catch {
             Self.log.warning("Antigravity onboarding request failed", metadata: [
                 "error": "\(error.localizedDescription)",
             ])
+            onboardSucceeded = false
         }
 
-        for _ in 0..<5 {
-            try? await Task.sleep(for: .milliseconds(2000))
+        // Only poll loadCodeAssist when onboardUser succeeded asynchronously; otherwise fail fast
+        // instead of burning 10+ seconds per endpoint on rejected or unsupported accounts.
+        guard onboardSucceeded else {
+            return nil
+        }
+
+        for _ in 0..<2 {
+            try? await Task.sleep(for: .milliseconds(1000))
             let refreshed = try await Self.loadCodeAssist(
                 baseURL: baseURL,
                 accessToken: accessToken,

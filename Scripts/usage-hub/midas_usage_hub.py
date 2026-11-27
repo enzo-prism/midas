@@ -49,7 +49,7 @@ V2_STORAGE_BYTES = 8 * 1024 * 1024 * 1024
 OPAQUE_ID = re.compile(r"[0-9a-f]{64}\Z")
 PUBLIC_MODEL = re.compile(
     r"(?:gpt-[0-9][a-z0-9.\-]*|o[1-9][a-z0-9.\-]*|claude-[a-z0-9.\-]+|"
-    r"muse-spark-[0-9.]+(?:-contributor)?|Qwen/Qwen3\.8-Flash-Next)\Z"
+    r"gemini-[0-9][a-z0-9.\-]*|muse-spark-[0-9.]+(?:-contributor)?|Qwen/Qwen3\.8-Flash-Next)\Z"
 )
 PROVENANCES = {"listPriceEstimate", "vendorMetered", "mixed", "vendorBilled", "unknown"}
 
@@ -185,7 +185,7 @@ def validate_publication(value, workspace_id: str, device_id: str | None = None,
     for row in events:
         fields(row, {"id", "provider", "day", "observedAt", "values"})
         require(type(row["id"]) is str and OPAQUE_ID.fullmatch(row["id"]) is not None)
-        require(row["provider"] in ("codex", "claude", "meta", "localInference"))
+        require(row["provider"] in ("codex", "claude", "meta", "gemini", "localInference"))
         date(row["observedAt"], published + 300)
         require(day(row["day"]) == day_for(row["observedAt"]))
         identity = (row["provider"], row["id"])
